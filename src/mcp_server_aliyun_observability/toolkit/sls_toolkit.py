@@ -11,7 +11,19 @@ from alibabacloud_sls20201230.models import (CallAiToolsRequest,
                                              ListLogStoresRequest,
                                              ListLogStoresResponse,
                                              ListProjectRequest,
-                                             ListProjectResponse)
+                                             ListProjectResponse,
+                                             ListETLsRequest,
+                                             ListETLsResponse,
+                                             ListMaxComputeExportsRequest,
+                                             ListMaxComputeExportsResponse,
+                                             ListOSSExportsRequest,
+                                             ListOSSExportsResponse,
+                                             ListOSSHDFSExportsRequest,
+                                             ListOSSHDFSExportsResponse,
+                                             ListScheduledSQLsRequest,
+                                             ListScheduledSQLsResponse,
+                                             ListOSSIngestionsRequest,
+                                             ListOSSIngestionsResponse)
 from alibabacloud_tea_util import models as util_models
 from mcp.server.fastmcp import Context, FastMCP
 from mcp.server.fastmcp.prompts import base
@@ -520,3 +532,544 @@ class SLSToolkit:
             except Exception as e:
                 logger.error(f"调用SLS AI工具失败: {str(e)}")
                 raise
+
+        @self.server.tool()
+        @retry(
+            stop=stop_after_attempt(2),
+            wait=wait_fixed(1),
+            retry=retry_if_exception_type(Exception),
+            reraise=True,
+        )
+        @handle_tea_exception
+        def sls_list_etls(
+                ctx: Context,
+                project: str = Field(...,
+                                     description="sls project name,must exact match,should not contain chinese characters"),
+                logstore: str = Field('', description="log store name,must exact match,should not contain chinese characters"),
+                size: int = Field(10, description="size, max is 200", ge=1, le=200),
+                regionId: str = Field(default=..., description="aliyun region id"),
+        ) -> dict:
+            """列出SLS项目中的加工作业、任务。
+
+            ## 功能概述
+
+            - 当未指定logstore或着logstore参数为空时，则该工具可以列出指定SLS项目中的所有加工作业，按照分页方式获取加工作业
+            - 当指定logstore，则该工具可以列出指定SLS项目中的指定的logstore下所有加工作业，按照分页方式获取加工作业
+
+            ## 使用场景
+
+            - logstore参数设置为空则查找特定项目下的所有加工作业/任务数量
+            - logstore参数设置为空则查找特定项目下的所有加工作业/任务列表
+            - 当需要查找特定项目下及特定logstore（日志库/时序库）下的所有加工作业数量时
+            - 当需要查找特定项目下及特定logstore（日志库/时序库）下的所有加工作业及配置列表时
+            - 如果从上下文未指定 project参数，除非用户说了遍历或者说了所有项目或者说了所有project，则可使用 sls_list_projects 工具获取项目列表
+            - 加工作业的id是etl.name, 显示名称是etl.displayName, 一般用id + 显示名称表示一个加工任务
+            - 加工作业的配置包括加工的数据源和目标(可以多个目标）
+            - 数据源：project: 用当前project, logstore: 用etl.configuration.logstore, regionId: 用当前regionId
+            - 目标：用etl.configuration.sinks表示多个目标
+            - 每个目标包括: region：可以通过etl.configuration.sinks元素中的endpoint推导出来, endpoint要去掉share，intranet等后缀, project: 是sink中的project字段, logstore: 是sink中的logstore字段
+            - 加工语句使用etl.configuration.script字段表示，加工语句类型用etl.configuration.lang表示，目前支持SPL(表示新版加工)，空：表示旧版加工
+            - 注意：加工的工作流/workflow表示方法： 数据源 和 目标 都是节点, 每个节点内容格式都要是 类型：内容，注意中间冒号是中文冒号：，如：xxx：xxxxx；边线可以用加工任务id描述；如果节点中描述文本内容需要用括号包裹则必须使用中文括号包裹坚决不能使用英文的括号；方向是源到目标；
+            - 再次注意：流程图中类型和内容中间要用中文冒号：分隔
+            - 如果需要画流程图、工作流、workflow 默认可以用mermaid的状态图用文本表示
+
+            ## 查询示例
+
+            - "我想查询 project 下有多少加工作业/任务"
+            - "我想查询 project 为xxx，logstore为xxxxx，下的所有多少加工作业/任务"
+            - "我想查询 所有project下的所有加工作业/任务"
+            - "遍历所有project并查询每个project下的所有加工作业/任务"
+            - "我想查询 project 下有叫 xxxx 的加工作业/任务"
+            - "某个 project 有哪些 加工作业，名字是什么"
+
+            Args:
+                ctx: MCP上下文，用于访问SLS客户端
+                project: SLS项目名称，必须精确匹配
+                logstore: 存储库名称，必须精确匹配，值为空则表示所有存储库下
+                size: 拉取的数量, 范围1-200，默认10
+                regionId: 阿里云区域ID,region id format like "xx-xxx",like "cn-hangzhou"
+
+            Returns:
+                加工作业的当前页配置列表，包括总页数
+            """
+
+            if project == "":
+                return {
+                    "total": 0,
+                    "etls": [],
+                    "message": "Please specify the project name,if you want to list all projects,please use sls_list_projects tool",
+                }
+            sls_client: Client = ctx.request_context.lifespan_context[
+                "sls_client"
+            ].with_region(regionId)
+            request: ListETLsRequest = ListETLsRequest(
+                logstore=logstore,
+                offset=0,
+                size=size,
+            )
+            response: ListETLsResponse = sls_client.list_etls(
+                project=project,
+                request=request
+            )
+            etl_count = response.body.total
+            etl_list = response.body.results
+            return {
+                "total": etl_count,
+                "etls": etl_list,
+                "message": (
+                    "Sorry not found etls,please make sure your project and region is correct, if you want to find metric store,please check is_metric_store parameter"
+                    if etl_count == 0
+                    else f"当前最多支持查询个日志库，未防止返回数据过长，如果需要查询更多日志库，您可以提供 logstore 的关键词来模糊查询"
+                ),
+            }
+
+        @self.server.tool()
+        @retry(
+            stop=stop_after_attempt(2),
+            wait=wait_fixed(1),
+            retry=retry_if_exception_type(Exception),
+            reraise=True,
+        )
+        @handle_tea_exception
+        def sls_list_maxcompute_exports(
+                ctx: Context,
+                project: str = Field(...,
+                                     description="sls project name,must exact match,should not contain chinese characters"),
+                logstore: str = Field('', description="log store name,must exact match,should not contain chinese characters"),
+                size: int = Field(10, description="size, max is 200", ge=1, le=200),
+                regionId: str = Field(default=..., description="aliyun region id"),
+        ) -> dict:
+            """列出SLS项目中的maxcompute投递作业、任务。
+
+            ## 功能概述
+
+            - 当未指定logstore或着logstore参数为空时，则该工具可以列出指定SLS项目中的所有maxcompute投递作业，按照分页方式获取maxcompute投递作业
+            - 当指定logstore，则该工具可以列出指定SLS项目中的指定的logstore下所有maxcompute投递作业，按照分页方式获取maxcompute投递作业
+
+            ## 使用场景
+
+            - logstore参数设置为空则查找特定项目下所有的maxcompute投递作业/任务数量
+            - logstore参数设置为空则查找特定项目下所有的maxcompute投递作业/任务配置
+            - 当需要查找特定项目下及特定logstore（日志库/时序库）下的所有的maxcompute投递作业数量时
+            - 当需要查找特定项目下及特定logstore（日志库/时序库）下的所有的maxcompute投递作业配置时
+            - 如果从上下文未指定 project参数，除非用户说了遍历或者说了所有项目或者说了所有project，则可使用 sls_list_projects 工具获取项目列表
+            - maxcompute投递作业的id是export.name, 显示名称是export.displayName, 一般用id + 显示名称表示一个maxcompute投递任务
+            - maxcompute投递作业的配置包括投递的maxcompute项目名称、maxcompute表名称、maxcompute写角色、maxcompute时间分区格式、maxcompute Endpoint/TunnelEndpoint、普通字段、分区字段、时区
+            - 数据源：project：用当前project, logstore：用export.configuration.logstore, regionId： 用当前regionId
+            - 目标：odpsProject：用export.configuration.sink.odpsProject；odpsTable：用export.configuration.sink.odpsTable；Endpoint：用export.configuration.sink.odpsEndpoint；
+            - 投递配置：用export.configuration.sink表示投递配置信息
+            - 投递配置包括：odpsProject：是maxcompute项目名称, odpsTable：是maxcompute表名称, odpsRolearn：maxcompute写角色, odpsEndpoint：是云产品互联Endpoint, odpsTunnelEndpoint：云产品互联Tunnel Endpoint, fields：是源日志字段，值会映射到对应到表普通列下, partitionColumn：是源日志字段，值会映射到对应到表分区列下, partitionTimeFormat：maxcompute时间分区格式, 仅当分区列字段配置为__partition_time__/__receive_time__生效, timeZone：时区
+            - 注意：maxcompute投递的工作流/workflow表示方法： 数据源 和 目标 都是节点, 每个节点内容格式都要是 类型：内容，注意中间冒号是中文冒号：，如：xxx：xxxxx；边线可以用maxcompute投递任务id描述；方向是源到目标；如果节点中描述文本内容需要用括号包裹则必须使用中文括号包裹坚决不能使用英文的括号；
+            - 再次注意：流程图中类型和内容中间要用中文冒号：分隔
+            - 如果需要画流程图、工作流、workflow 默认可以用mermaid的状态图用文本表示
+
+            ## 查询示例
+
+            - "我想查询 project 下有多少maxcompute投递作业/任务"
+            - "我想查询 project 为xxx，logstore为xxxxx，下的所有maxcompute投递作业/任务"
+            - "我想查询 所有project下的所有maxcompute投递作业/任务"
+            - "遍历所有project并查询每个project下的所有maxcompute投递作业/任务"
+            - "我想查询 project 下有叫 xxxx 的maxcompute投递作业/任务吗"
+            - "某个 project 有哪些 maxcompute投递作业，名字是什么"
+
+            Args:
+                ctx: MCP上下文，用于访问SLS客户端
+                project: SLS项目名称，必须精确匹配
+                logstore: 存储库名称，必须精确匹配，若值为空则表示所有存储库下
+                size: 拉取的数量, 范围1-200，默认10
+                regionId: 阿里云区域ID,region id format like "xx-xxx",like "cn-hangzhou"
+
+            Returns:
+                maxcompute投递作业的当前页配置列表，包括总页数
+            """
+
+            if project == "":
+                return {
+                    "total": 0,
+                    "exports": [],
+                    "message": "Please specify the project name,if you want to list all projects,please use sls_list_projects tool",
+                }
+            sls_client: Client = ctx.request_context.lifespan_context[
+                "sls_client"
+            ].with_region(regionId)
+            request: ListMaxComputeExportsRequest = ListMaxComputeExportsRequest(
+                logstore=logstore,
+                offset=0,
+                size=size,
+            )
+            response: ListMaxComputeExportsResponse = sls_client.list_max_compute_exports(
+                project=project,
+                request=request
+            )
+            export_count = response.body.total
+            export_list = response.body.results
+            return {
+                "total": export_count,
+                "exports": export_list,
+                "message": (
+                    "Sorry not found maxcompute export,please make sure your project and region is correct, if you want to find metric store,please check is_metric_store parameter"
+                    if export_count == 0
+                    else f"当前最多支持查询个日志库，未防止返回数据过长，如果需要查询更多日志库，您可以提供 logstore 的关键词来模糊查询"
+                ),
+            }
+
+        @self.server.tool()
+        @retry(
+            stop=stop_after_attempt(2),
+            wait=wait_fixed(1),
+            retry=retry_if_exception_type(Exception),
+            reraise=True,
+        )
+        @handle_tea_exception
+        def sls_list_oss_exports(
+                ctx: Context,
+                project: str = Field(...,
+                                     description="sls project name,must exact match,should not contain chinese characters"),
+                logstore: str = Field('', description="log store name,must exact match,should not contain chinese characters"),
+                size: int = Field(10, description="size, max is 200", ge=1, le=200),
+                regionId: str = Field(default=..., description="aliyun region id"),
+        ) -> dict:
+            """列出SLS项目中的oss投递作业、任务。
+
+            ## 功能概述
+
+            - 当未指定logstore或着logstore参数为空时，则该工具可以列出指定SLS项目中的所有oss投递作业，按照分页方式获取oss投递作业
+            - 当指定logstore，则该工具可以列出指定SLS项目中的指定的logstore下所有oss投递作业，按照分页方式获取oss投递作业
+
+            ## 使用场景
+
+            - logstore参数设置为空则查找特定项目下所有的oss投递作业/任务数量
+            - logstore参数设置为空则查找特定项目下所有的oss投递作业/任务配置
+            - 当需要查找特定项目下及特定logstore（日志库/时序库）下的所有oss投递作业数量时
+            - 当需要查找特定项目下及特定logstore（日志库/时序库）下的所有oss投递作业及配置列表时
+            - 如果从上下文未指定 project参数，除非用户说了遍历或者说了所有项目或者说了所有project，则可使用 sls_list_projects 工具获取项目列表
+            - oss投递作业的id是export.name, 显示名称是export.displayName, 一般用id + 显示名称表示一个oss投递任务
+            - oss投递作业的配置包括oss Bucket、文件投递目录、文件后缀、分区格式、写OSS RAM角色、存储格式、压缩类型、攒批大小、攒批时间、延迟投递、时区、OSS Endpoint
+            - 数据源：project：用当前project, logstore：用export.configuration.logstore, regionId：用当前regionId
+            - 目标：bucket：用export.configuration.sink.bucket；Endpoint：用export.configuration.sink.endpoint；
+            - 投递配置：用export.configuration.sink表示投递配置信息
+            - 投递配置包括：bucket：oss Bucket, prefix：文件投递目录, suffix：文件后缀, pathFormat：分区格式, roleArn：写OSS RAM角色, contentType：存储格式, compressionType：压缩类型, bufferSize：攒批大小, bufferInterval：攒批时间, delaySeconds：延迟投递时间, endpoint：是OSS Endpoint, timeZone：时区
+            - 注意：oss投递的工作流/workflow表示方法： 数据源 和 目标 都是节点, 每个节点内容格式都要是 类型：内容，注意中间冒号是中文冒号：，如：xxx：xxxxx；边线可以用oss投递任务id描述；如果节点中描述文本内容需要用括号包裹则必须使用中文括号包裹坚决不能使用英文的括号；方向是源到目标；
+            - 再次注意：流程图中类型和内容中间要用中文冒号：分隔
+            - 如果需要画流程图、工作流、workflow 默认可以用mermaid的状态图用文本表示
+
+            ## 查询示例
+
+            - "我想查询 project 下有多少oss投递作业/任务"
+            - "我想查询 project 为xxx，logstore为xxxxx，下的所有多少oss投递作业/任务"
+            - "我想查询 所有project下的所有oss投递作业/任务"
+            - "遍历所有project并查询每个project下的所有oss投递作业/任务"
+            - "我想查询 project 下有叫 xxxx 的oss投递作业/任务吗"
+            - "某个 project 有哪些 oss投递作业，名字是什么"
+
+            Args:
+                ctx: MCP上下文，用于访问SLS客户端
+                project: SLS项目名称，必须精确匹配
+                logstore: 存储库名称，必须精确匹配，若值为空则表示所有存储库下
+                size: 拉取的数量, 范围1-200，默认10
+                regionId: 阿里云区域ID,region id format like "xx-xxx",like "cn-hangzhou"
+
+            Returns:
+                oss投递作业的当前页配置列表，包括总页数
+            """
+
+            if project == "":
+                return {
+                    "total": 0,
+                    "exports": [],
+                    "message": "Please specify the project name,if you want to list all projects,please use sls_list_projects tool",
+                }
+            sls_client: Client = ctx.request_context.lifespan_context[
+                "sls_client"
+            ].with_region(regionId)
+            request: ListOSSExportsRequest = ListOSSExportsRequest(
+                logstore=logstore,
+                offset=0,
+                size=size,
+            )
+            response: ListOSSExportsResponse = sls_client.list_ossexports(
+                project=project,
+                request=request
+            )
+            export_count = response.body.total
+            export_list = response.body.results
+            return {
+                "total": export_count,
+                "exports": export_list,
+                "message": (
+                    "Sorry not found oss export,please make sure your project and region is correct, if you want to find metric store,please check is_metric_store parameter"
+                    if export_count == 0
+                    else f"当前最多支持查询个日志库，未防止返回数据过长，如果需要查询更多日志库，您可以提供 logstore 的关键词来模糊查询"
+                ),
+            }
+
+        @self.server.tool()
+        @retry(
+            stop=stop_after_attempt(2),
+            wait=wait_fixed(1),
+            retry=retry_if_exception_type(Exception),
+            reraise=True,
+        )
+        @handle_tea_exception
+        def sls_list_osshdfs_exports(
+                ctx: Context,
+                project: str = Field(...,
+                                     description="sls project name,must exact match,should not contain chinese characters"),
+                logstore: str = Field('', description="log store name,must exact match,should not contain chinese characters"),
+                size: int = Field(10, description="size, max is 200", ge=1, le=200),
+                regionId: str = Field(default=..., description="aliyun region id"),
+        ) -> dict:
+            """列出SLS项目中的oss-hdfs投递作业、任务。
+
+            ## 功能概述
+
+            该工具可以列出指定SLS项目中的所有oss-hdfs投递作业，按照分页方式获取oss-hdfs投递作业
+            - 当未指定logstore或着logstore参数为空时，则该工具可以列出指定SLS项目中的所有oss-hdfs投递作业，按照分页方式获取oss-hdfs投递作业
+            - 当指定logstore，则该工具可以列出指定SLS项目中的指定的logstore下所有oss-hdfs投递作业，按照分页方式获取oss-hdfs投递作业
+
+            ## 使用场景
+
+            - logstore参数设置为空则查找特定项目下所有的oss-hdfs投递作业/任务数量
+            - logstore参数设置为空则查找特定项目下所有的oss-hdfs投递作业/任务配置
+            - 当需要查找特定项目下及特定logstore（日志库/时序库）下的所有oss-hdfs投递作业数量时
+            - 当需要查找特定项目下及特定logstore（日志库/时序库）下的所有oss-hdfs投递作业及配置列表时
+            - 如果从上下文未指定 project参数，除非用户说了遍历或者说了所有项目或者说了所有project，则可使用 sls_list_projects 工具获取项目列表
+            - oss-hdfs投递作业的id是export.name, 显示名称是export.displayName, 一般用id + 显示名称表示一个oss-hdfs投递任务
+            - oss-hdfs投递作业的配置包括oss-hdfs Bucket、文件投递目录、文件后缀、分区格式、写oss-hdfs RAM角色、存储格式、压缩类型、攒批大小、攒批时间、延迟投递、时区、oss-hdfs Endpoint
+            - 数据源：project：用当前project, logstore：用export.configuration.logstore, regionId：用当前regionId
+            - 目标：bucket：用export.configuration.sink.bucket；Endpoint：用export.configuration.sink.endpoint；
+            - 投递配置：用export.configuration.sink表示投递配置信息
+            - 投递配置包括：bucket：oss-hdfs Bucket, prefix：文件投递目录, suffix：文件后缀, pathFormat：分区格式, roleArn：写oss-hdfs RAM角色, contentType：存储格式, compressionType：压缩类型, bufferSize：攒批大小, bufferInterval：攒批时间, delaySeconds：延迟投递时间, endpoint：是oss-hdfs Endpoint, timeZone：时区
+            - 注意：oss-hdfs投递的工作流/workflow表示方法： 数据源 和 目标 都是节点, 每个节点内容格式都要是 类型：内容，注意中间冒号是中文冒号：，如：xxx：xxxxx；边线可以用oss-hdfs投递任务id描述；如果节点中描述文本内容需要用括号包裹则必须使用中文括号包裹坚决不能使用英文的括号；方向是源到目标；
+            - 再次注意：流程图中类型和内容中间要用中文冒号：分隔
+            - 如果需要画流程图、工作流、workflow 默认可以用mermaid的状态图用文本表示
+
+            ## 查询示例
+
+            - "我想查询 project 下有多少oss-hdfs投递作业/任务"
+            - "我想查询 project 为xxx，logstore为xxxxx，下的所有多少oss-hdfs投递作业/任务"
+            - "我想查询 所有project下的所有oss-hdfs投递作业/任务"
+            - "遍历所有project并查询每个project下的所有oss-hdfs投递作业/任务"
+            - "我想查询 project 下有叫 xxxx 的oss-hdfs投递作业/任务吗"
+            - "某个 project 有哪些 oss-hdfs投递作业，名字是什么"
+
+            Args:
+                ctx: MCP上下文，用于访问SLS客户端
+                project: SLS项目名称，必须精确匹配
+                logstore: 存储库名称，必须精确匹配，若值为空则表示所有存储库下
+                size: 拉取的数量, 范围1-200，默认10
+                regionId: 阿里云区域ID,region id format like "xx-xxx",like "cn-hangzhou"
+
+            Returns:
+                oss-hdfs投递作业的当前页配置列表，包括总页数
+            """
+
+            if project == "":
+                return {
+                    "total": 0,
+                    "exports": [],
+                    "message": "Please specify the project name,if you want to list all projects,please use sls_list_projects tool",
+                }
+            sls_client: Client = ctx.request_context.lifespan_context[
+                "sls_client"
+            ].with_region(regionId)
+            request: ListOSSHDFSExportsRequest = ListOSSHDFSExportsRequest(
+                logstore=logstore,
+                offset=0,
+                size=size,
+            )
+            response: ListOSSHDFSExportsResponse = sls_client.list_osshdfsexports(
+                project=project,
+                request=request
+            )
+            export_count = response.body.total
+            export_list = response.body.results
+            return {
+                "total": export_count,
+                "exports": export_list,
+                "message": (
+                    "Sorry not found oss-hdfs export,please make sure your project and region is correct, if you want to find metric store,please check is_metric_store parameter"
+                    if export_count == 0
+                    else f"当前最多支持查询个日志库，未防止返回数据过长，如果需要查询更多日志库，您可以提供 logstore 的关键词来模糊查询"
+                ),
+            }
+
+        @self.server.tool()
+        @retry(
+            stop=stop_after_attempt(2),
+            wait=wait_fixed(1),
+            retry=retry_if_exception_type(Exception),
+            reraise=True,
+        )
+        @handle_tea_exception
+        def sls_list_scheduled_sqls(
+                ctx: Context,
+                project: str = Field(...,
+                                     description="sls project name,must exact match,should not contain chinese characters"),
+                logstore: str = Field('', description="log store name,must exact match,should not contain chinese characters"),
+                size: int = Field(10, description="size, max is 200", ge=1, le=200),
+                regionId: str = Field(default=..., description="aliyun region id"),
+        ) -> dict:
+            """列出SLS项目中的scheduled-sql作业、任务。
+
+            ## 功能概述
+
+            - 当未指定logstore或着logstore参数为空时，则该工具可以列出指定SLS项目中的所有scheduled-sql作业，按照分页方式获取scheduled-sql作业
+            - 当指定logstore，则该工具可以列出指定SLS项目中的指定的logstore下所有scheduled-sql作业，按照分页方式获取scheduled-sql作业
+
+            ## 使用场景
+
+            - logstore参数设置为空则查找特定项目下所有的scheduled-sql作业/任务数量
+            - logstore参数设置为空则查找特定项目下所有的scheduled-sql作业/任务配置
+            - 当需要查找特定项目下及特定logstore（日志库/时序库）下的所有scheduled-sql作业数量时
+            - 当需要查找特定项目下及特定logstore（日志库/时序库）下的所有scheduled-sql作业及配置列表时
+            - 如果从上下文未指定 project参数，除非用户说了遍历或者说了所有项目或者说了所有project，则可使用 sls_list_projects 工具获取项目列表
+            - scheduled-sql作业的id是scheduled.name, 显示名称是scheduled.displayName, 一般用id + 显示名称表示一个scheduled-sql任务
+            - scheduled-sql作业的配置包括 写入模式、目标Endpoint、目标Project、目标Logstore、目标RoleArn、开始时间、结束时间、SQL时间窗口、SQL超时最长时间、SQL超时最大次数、SQL代码
+            - 数据源：project：用当前project, logstore：用当前logstore, regionId：用当前regionId
+            - 目标：destProject：scheduled.configuration.destProject；destLogstore：用scheduled.configuration.destLogstore；destEndpoint：用scheduled.configuration.destEndpoint；
+            - 调度配置：用scheduled.schedule表示调度配置信息
+            - 调度配置包括：delay：延迟执行时间, interval：调度间隔, timeZone：时区, type：调度间隔类型
+            - 注意：scheduled-sql的工作流/workflow表示方法： 数据源 和 目标 都是节点, 每个节点内容格式都要是 类型：内容，注意中间冒号是中文冒号：，如：xxx：xxxxx；边线可以用scheduled-sql任务id描述；如果节点中描述文本内容需要用括号包裹则必须使用中文括号包裹坚决不能使用英文的括号；方向是源到目标；
+            - 再次注意：流程图中类型和内容中间要用中文冒号：分隔
+            - 如果需要画流程图、工作流、workflow 默认可以用mermaid的状态图用文本表示
+
+            ## 查询示例
+
+            - "我想查询 project 下有多少scheduled-sql作业/任务"
+            - "我想查询 project 为xxx，logstore为xxxxx，下的所有多少scheduled-sql作业/任务"
+            - "我想查询 所有project下的所有scheduled-sql作业/任务"
+            - "遍历所有project并查询每个project下的所有scheduled-sql作业/任务"
+            - "我想查询 project 下有叫 xxxx 的scheduled-sql作业/任务吗"
+            - "某个 project 有哪些 scheduled-sql作业，名字是什么"
+
+            Args:
+                ctx: MCP上下文，用于访问SLS客户端
+                project: SLS项目名称，必须精确匹配
+                logstore: 存储库名称，必须精确匹配，若值为空则表示所有存储库下
+                size: 拉取的数量, 范围1-200，默认10
+                regionId: 阿里云区域ID,region id format like "xx-xxx",like "cn-hangzhou"
+
+            Returns:
+                scheduled-sql作业的当前页配置列表，包括总页数
+            """
+
+            if project == "":
+                return {
+                    "total": 0,
+                    "scheduledSQLs": [],
+                    "message": "Please specify the project name,if you want to list all projects,please use sls_list_projects tool",
+                }
+            sls_client: Client = ctx.request_context.lifespan_context[
+                "sls_client"
+            ].with_region(regionId)
+            request: ListScheduledSQLsRequest = ListScheduledSQLsRequest(
+                logstore=logstore,
+                offset=0,
+                size=size,
+            )
+            response: ListScheduledSQLsResponse = sls_client.list_scheduled_sqls(
+                project=project,
+                request=request
+            )
+            scheduled_sql_count = response.body.total
+            scheduled_sql_list = response.body.results
+            return {
+                "total": scheduled_sql_count,
+                "scheduledSQLs": scheduled_sql_list,
+                "message": (
+                    "Sorry not found scheduled sqls,please make sure your project and region is correct, if you want to find metric store,please check is_metric_store parameter"
+                    if scheduled_sql_count == 0
+                    else f"当前最多支持查询个日志库，未防止返回数据过长，如果需要查询更多日志库，您可以提供 logstore 的关键词来模糊查询"
+                ),
+            }
+
+        @self.server.tool()
+        @retry(
+            stop=stop_after_attempt(2),
+            wait=wait_fixed(1),
+            retry=retry_if_exception_type(Exception),
+            reraise=True,
+        )
+        @handle_tea_exception
+        def sls_list_ingestions(
+                ctx: Context,
+                project: str = Field(...,
+                                     description="sls project name,must exact match,should not contain chinese characters"),
+                logstore: str = Field('', description="log store name,must exact match,should not contain chinese characters"),
+                size: int = Field(10, description="size, max is 200", ge=1, le=200),
+                regionId: str = Field(default=..., description="aliyun region id"),
+        ) -> dict:
+            """列出SLS项目中的oss导入作业、任务。
+
+            ## 功能概述
+
+            - 当未指定logstore或着logstore参数为空时，则该工具可以列出指定SLS项目中的所有oss导入作业，按照分页方式获取oss导入作业
+            - 当指定logstore，则该工具可以列出指定SLS项目中的指定的logstore下所有oss导入作业，按照分页方式获取oss导入作业
+
+            ## 使用场景
+
+            - logstore参数设置为空则查找特定项目下的所有oss导入作业/任务数量
+            - logstore参数设置为空则查找特定项目下的所有oss导入作业/任务配置
+            - 当需要查找特定项目下及特定logstore（日志库/时序库）下的所有oss导入作业数量时
+            - 当需要查找特定项目下及特定logstore（日志库/时序库）下的所有oss导入作业及配置列表时
+            - 如果从上下文未指定 project参数，除非用户说了遍历，则可使用 sls_list_projects 工具获取项目列表
+            - oss导入作业的id是ingestion.name, 显示名称是ingestion.displayName, 一般用id + 显示名称表示一个oss导入任务
+            - oss导入作业的配置包括 目标库、资源配置
+            - 数据源：bucket：用ingestion.configuration.source.bucket；endpoint：用ingestion.configuration.source.endpoint；
+            - 目标：project：用当前project；logstore：用ingestion.configuration.logstore；
+            - 导入资源配置：用ingestion.configuration.source表示导入资源配置信息
+            - 导入资源配置包括：bucket：数据源oss bucket, compressionCodec：解压类型, encoding：编码格式, endpoint：oss bucket所属endpoint, interval：检查新文件周期, pattern：文件路径正则, prefix：文件路径前缀, restoreObjectEnabled：导入归档文件, timeField：时间字段, timeFormat：时间字段格式, timePattern：提取时间正则, timeZone：时区, useMetaIndex：使用OSS元数据索引
+            - 注意：oss导入的工作流/workflow表示方法： 数据源 和 目标 都是节点, 每个节点内容格式都要是 类型：内容，注意中间冒号是中文冒号：，如：oss bucket：gyhangzhou；边线可以用oss导入任务id描述；如果节点中描述文本内容需要用括号包裹则必须使用中文括号包裹坚决不能使用英文的括号；方向是源到目标；
+            - 再次注意：流程图中类型和内容中间要用中文冒号：分隔
+            - 如果需要画流程图、工作流、workflow 默认可以用mermaid的状态图用文本表示
+
+            ## 查询示例
+
+            - "我想查询 project 下有多少oss导入作业/任务"
+            - "我想查询 project 为xxx，logstore为xxxxx，下的所有多少oss导入作业/任务"
+            - "我想查询 所有project下的所有oss导入作业/任务"
+            - "遍历所有project并查询每个project下的所有oss导入作业/任务"
+            - "我想查询 project 下有叫 xxxx 的oss导入作业/任务吗"
+            - "某个 project 有哪些 oss导入作业，名字是什么"
+
+            Args:
+                ctx: MCP上下文，用于访问SLS客户端
+                project: SLS项目名称，必须精确匹配
+                logstore: 存储库名称，必须精确匹配，若值为空则表示所有存储库下
+                size: 拉取的数量, 范围1-200，默认10
+                regionId: 阿里云区域ID,region id format like "xx-xxx",like "cn-hangzhou"
+
+            Returns:
+                oss导入作业的当前页配置列表，包括总页数
+            """
+
+            if project == "":
+                return {
+                    "total": 0,
+                    "ingestions": [],
+                    "message": "Please specify the project name,if you want to list all projects,please use sls_list_projects tool",
+                }
+            sls_client: Client = ctx.request_context.lifespan_context[
+                "sls_client"
+            ].with_region(regionId)
+            request: ListOSSIngestionsRequest = ListOSSIngestionsRequest(
+                logstore=logstore,
+                offset=0,
+                size=size,
+            )
+            response: ListOSSIngestionsResponse = sls_client.list_ossingestions(
+                project=project,
+                request=request
+            )
+            ingestion_count = response.body.total
+            ingestion_list = response.body.results
+            return {
+                "total": ingestion_count,
+                "ingestions": ingestion_list,
+                "message": (
+                    "Sorry not found oss-hdfs export,please make sure your project and region is correct, if you want to find metric store,please check is_metric_store parameter"
+                    if ingestion_count == 0
+                    else f"当前最多支持查询个日志库，未防止返回数据过长，如果需要查询更多日志库，您可以提供 logstore 的关键词来模糊查询"
+                ),
+            }
