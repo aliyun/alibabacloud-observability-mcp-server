@@ -1,0 +1,15 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(grep:*)",
+      "Bash(python:*)",
+      "mcp__ide__getDiagnostics",
+      "Bash(pytest:*)",
+      "Bash(rm:*)",
+      "Bash(echo:*)",
+      "Bash(ENABLE_HEADERS_CAPTURE=false python -c \"\nfrom src.mcp_server_aliyun_observability.server import init_server\nfrom src.mcp_server_aliyun_observability.inner.thread_context import ThreadContext\n\nprint(''🔧 测试禁用 headers 捕获功能...'')\nserver = init_server()\n\n# 创建应用实例\nsse_app = server.sse_app()\nstreamable_app = server.streamable_http_app()\n\nprint(''✅ 服务器创建成功 (headers 捕获已禁用)'')\nprint(''✅ SSE 应用创建成功'')  \nprint(''✅ StreamableHTTP 应用创建成功'')\n\n# 验证 headers 上下文应该为空\nheaders = ThreadContext.get_headers()\nprint(f''📋 当前 headers 上下文: {headers}'')\n\nprint(''\\n🎯 现在服务器运行在原始 FastMCP 模式:'')\nprint(''  - 没有 headers 捕获中间件'')\nprint(''  - 与原版 FastMCP 完全一致'')\nprint(''  - 可用于排查 SSE session 问题'')\n\")",
+      "Bash(find:*)"
+    ],
+    "deny": []
+  }
+}

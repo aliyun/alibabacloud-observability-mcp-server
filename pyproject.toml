@@ -1,6 +1,6 @@
 [project]
 name = "mcp-server-aliyun-observability"
-version = "0.2.9"
+version = "0.3.0"
 description = "aliyun observability mcp server"
 readme = "README.md"
 requires-python = ">=3.10"
@@ -10,6 +10,7 @@ dependencies = [
     "alibabacloud_arms20190808==8.0.0",
     "alibabacloud_sls20201230==5.7.0",
     "alibabacloud_credentials>=1.0.1",
+    "rich>=13.9.5",
     "tenacity>=8.0.0",
 ]
 
