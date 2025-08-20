@@ -106,7 +106,7 @@ python -m mcp_server_aliyun_observability --transport sse --access-key-id <your_
 - `--transport-port` 指定传输端口，默认值为 `8000`,仅当 `--transport` 为 `sse` 时有效
 
 2. 使用uv 命令启动
-   可以指定下版本号，会自动拉取对应依赖，默认是 studio 方式启动
+   可以指定下版本号，会自动拉取对应依赖，默认是 stdio 方式启动
 ```bash
 uvx --from 'mcp-server-aliyun-observability==0.2.1' mcp-server-aliyun-observability 
 ```
