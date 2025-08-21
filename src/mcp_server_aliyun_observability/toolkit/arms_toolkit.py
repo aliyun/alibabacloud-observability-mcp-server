@@ -1,15 +1,17 @@
 from typing import Any
 
 from alibabacloud_arms20190808.client import Client as ArmsClient
-from alibabacloud_sls20201230.client import Client
 from alibabacloud_arms20190808.models import (
+    GetTraceAppRequest,
+    GetTraceAppResponse,
+    GetTraceAppResponseBodyTraceApp,
     SearchTraceAppByPageRequest,
     SearchTraceAppByPageResponse,
-    SearchTraceAppByPageResponseBodyPageBean, GetTraceAppRequest, GetTraceAppResponse,
-    GetTraceAppResponseBodyTraceApp,
+    SearchTraceAppByPageResponseBodyPageBean,
 )
-from alibabacloud_tea_util import models as util_models
+from alibabacloud_sls20201230.client import Client
 from alibabacloud_sls20201230.models import CallAiToolsRequest, CallAiToolsResponse
+from alibabacloud_tea_util import models as util_models
 from mcp.server.fastmcp import Context, FastMCP
 from pydantic import Field
 from tenacity import retry, retry_if_exception_type, stop_after_attempt, wait_fixed
@@ -37,11 +39,9 @@ class ArmsToolkit:
                 ...,
                 description="region id,region id format like 'xx-xxx',like 'cn-hangzhou'",
             ),
-            pageSize: int = Field(
-                20, description="page size,max is 100", ge=1, le=100
-            ),
+            pageSize: int = Field(20, description="page size,max is 100", ge=1, le=100),
             pageNumber: int = Field(1, description="page number,default is 1", ge=1),
-        ) -> dict[str, Any]:
+        ) -> Any:
             """搜索ARMS应用。
 
             ## 功能概述
@@ -134,7 +134,7 @@ class ArmsToolkit:
             question: str = Field(
                 ..., description="question,the question to query the trace"
             ),
-        ) -> dict:
+        ) -> Any:
             """生成ARMS应用的调用链查询语句。
 
             ## 功能概述
@@ -205,21 +205,24 @@ class ArmsToolkit:
                 "project": data["project"],
                 "log_store": data["log_store"],
             }
-          
+
         @self.server.tool()
         def arms_profile_flame_analysis(
-                ctx: Context,
-                pid: str = Field(..., description="arms application id"),
-                startMs: str = Field(..., description="profile start ms"),
-                endMs: str = Field(..., description="profile end ms"),
-                profileType: str = Field(default="cpu", description="profile type, like 'cpu' 'memory'"),
-                ip: str = Field(None, description="arms service host ip"),
-                thread: str = Field(None, description="arms service thread id"),
-                threadGroup: str = Field(None, description="arms service thread group"),
-                regionId: str = Field(default=...,
-                    description="aliyun region id,region id format like 'xx-xxx',like 'cn-hangzhou'",
-                ),
-        ) -> dict:
+            ctx: Context,
+            pid: str = Field(..., description="arms application id"),
+            startMs: str = Field(..., description="profile start ms"),
+            endMs: str = Field(..., description="profile end ms"),
+            profileType: str = Field(
+                default="cpu", description="profile type, like 'cpu' 'memory'"
+            ),
+            ip: str = Field(None, description="arms service host ip"),
+            thread: str = Field(None, description="arms service thread id"),
+            threadGroup: str = Field(None, description="arms service thread group"),
+            regionId: str = Field(
+                default=...,
+                description="aliyun region id,region id format like 'xx-xxx',like 'cn-hangzhou'",
+            ),
+        ) -> Any:
             """分析ARMS应用火焰图性能热点。
 
             ## 功能概述
@@ -246,14 +249,20 @@ class ArmsToolkit:
                 regionId: 阿里云区域ID，如'cn-hangzhou'、'cn-shanghai'等
             """
             try:
-                valid_types = ['cpu', 'memory']
+                valid_types = ["cpu", "memory"]
                 profileType = profileType.lower()
                 if profileType not in valid_types:
-                    raise ValueError(f"无效的profileType: {profileType}, 仅支持: {', '.join(valid_types)}")
+                    raise ValueError(
+                        f"无效的profileType: {profileType}, 仅支持: {', '.join(valid_types)}"
+                    )
 
                 # Connect to ARMS client
-                arms_client: ArmsClient = ctx.request_context.lifespan_context["arms_client"].with_region(regionId)
-                request: GetTraceAppRequest = GetTraceAppRequest(pid=pid, region_id=regionId)
+                arms_client: ArmsClient = ctx.request_context.lifespan_context[
+                    "arms_client"
+                ].with_region(regionId)
+                request: GetTraceAppRequest = GetTraceAppRequest(
+                    pid=pid, region_id=regionId
+                )
                 response: GetTraceAppResponse = arms_client.get_trace_app(request)
                 trace_app: GetTraceAppResponseBodyTraceApp = response.body.trace_app
 
@@ -265,14 +274,17 @@ class ArmsToolkit:
                 language = trace_app.language
 
                 # Validate language parameter
-                if language not in ['java', 'go']:
-                    raise ValueError(f"暂不支持的语言类型: {language}. 当前仅支持 'java' 和 'go'")
+                if language not in ["java", "go"]:
+                    raise ValueError(
+                        f"暂不支持的语言类型: {language}. 当前仅支持 'java' 和 'go'"
+                    )
 
                 # Prepare SLS client for Flame analysis
-                sls_client: Client = ctx.request_context.lifespan_context["sls_client"].with_region("cn-shanghai")
+                sls_client: Client = ctx.request_context.lifespan_context[
+                    "sls_client"
+                ].with_region("cn-shanghai")
                 ai_request: CallAiToolsRequest = CallAiToolsRequest(
-                    tool_name="profile_flame_analysis",
-                    region_id=regionId
+                    tool_name="profile_flame_analysis", region_id=regionId
                 )
 
                 params: dict[str, Any] = {
@@ -288,20 +300,21 @@ class ArmsToolkit:
                 }
 
                 ai_request.params = params
-                runtime: util_models.RuntimeOptions = util_models.RuntimeOptions(read_timeout=60000,
-                                                                                 connect_timeout=60000)
+                runtime: util_models.RuntimeOptions = util_models.RuntimeOptions(
+                    read_timeout=60000, connect_timeout=60000
+                )
 
-                tool_response: CallAiToolsResponse = sls_client.call_ai_tools_with_options(request=ai_request,
-                                                                                           headers={},
-                                                                                           runtime=runtime)
+                tool_response: CallAiToolsResponse = (
+                    sls_client.call_ai_tools_with_options(
+                        request=ai_request, headers={}, runtime=runtime
+                    )
+                )
                 data = tool_response.body
 
                 if "------answer------\n" in data:
                     data = data.split("------answer------\n")[1]
 
-                return {
-                    "data": data
-                }
+                return {"data": data}
 
             except Exception as e:
                 log_error(f"调用火焰图数据性能热点AI工具失败: {str(e)}")
@@ -309,19 +322,27 @@ class ArmsToolkit:
 
         @self.server.tool()
         def arms_diff_profile_flame_analysis(
-                ctx: Context,
-                pid: str = Field(..., description="arms application id"),
-                currentStartMs: str = Field(..., description="current profile start ms"),
-                currentEndMs: str = Field(..., description="current profile end ms"),
-                referenceStartMs: str = Field(..., description="reference profile start ms (for comparison)"),
-                referenceEndMs: str = Field(..., description="reference profile end ms (for comparison)"),
-                profileType: str = Field(default="cpu", description="profile type, like 'cpu' 'memory'"),
-                ip: str = Field(None, description="arms service host ip"),
-                thread: str = Field(None, description="arms service thread id"),
-                threadGroup: str = Field(None, description="arms service thread group"),
-                regionId: str = Field(default=...,
-                                      description="aliyun region id,region id format like 'xx-xxx',like 'cn-hangzhou'")
-        ) -> dict:
+            ctx: Context,
+            pid: str = Field(..., description="arms application id"),
+            currentStartMs: str = Field(..., description="current profile start ms"),
+            currentEndMs: str = Field(..., description="current profile end ms"),
+            referenceStartMs: str = Field(
+                ..., description="reference profile start ms (for comparison)"
+            ),
+            referenceEndMs: str = Field(
+                ..., description="reference profile end ms (for comparison)"
+            ),
+            profileType: str = Field(
+                default="cpu", description="profile type, like 'cpu' 'memory'"
+            ),
+            ip: str = Field(None, description="arms service host ip"),
+            thread: str = Field(None, description="arms service thread id"),
+            threadGroup: str = Field(None, description="arms service thread group"),
+            regionId: str = Field(
+                default=...,
+                description="aliyun region id,region id format like 'xx-xxx',like 'cn-hangzhou'",
+            ),
+        ) -> Any:
             """对比两个时间段火焰图的性能变化。
 
             ## 功能概述
@@ -350,12 +371,16 @@ class ArmsToolkit:
                 regionId: 阿里云区域ID，如'cn-hangzhou'、'cn-shanghai'等
             """
             try:
-                valid_types = ['cpu', 'memory']
+                valid_types = ["cpu", "memory"]
                 profileType = profileType.lower()
                 if profileType not in valid_types:
-                    raise ValueError(f"无效的profileType: {profileType}, 仅支持: {', '.join(valid_types)}")
+                    raise ValueError(
+                        f"无效的profileType: {profileType}, 仅支持: {', '.join(valid_types)}"
+                    )
 
-                arms_client: ArmsClient = ctx.request_context.lifespan_context["arms_client"].with_region(regionId)
+                arms_client: ArmsClient = ctx.request_context.lifespan_context[
+                    "arms_client"
+                ].with_region(regionId)
                 request: GetTraceAppRequest = GetTraceAppRequest(
                     pid=pid,
                     region_id=regionId,
@@ -369,13 +394,16 @@ class ArmsToolkit:
                 service_name = trace_app.app_name
                 language = trace_app.language
 
-                if language not in ['java', 'go']:
-                    raise ValueError(f"暂不支持的语言类型: {language}. 当前仅支持 'java' 和 'go'")
+                if language not in ["java", "go"]:
+                    raise ValueError(
+                        f"暂不支持的语言类型: {language}. 当前仅支持 'java' 和 'go'"
+                    )
 
-                sls_client: Client = ctx.request_context.lifespan_context["sls_client"].with_region("cn-shanghai")
+                sls_client: Client = ctx.request_context.lifespan_context[
+                    "sls_client"
+                ].with_region("cn-shanghai")
                 ai_request: CallAiToolsRequest = CallAiToolsRequest(
-                    tool_name="diff_profile_flame_analysis",
-                    region_id=regionId
+                    tool_name="diff_profile_flame_analysis", region_id=regionId
                 )
 
                 params: dict[str, Any] = {
@@ -393,34 +421,40 @@ class ArmsToolkit:
                 }
 
                 ai_request.params = params
-                runtime: util_models.RuntimeOptions = util_models.RuntimeOptions(read_timeout=60000, connect_timeout=60000)
+                runtime: util_models.RuntimeOptions = util_models.RuntimeOptions(
+                    read_timeout=60000, connect_timeout=60000
+                )
 
-                tool_response: CallAiToolsResponse = sls_client.call_ai_tools_with_options(request=ai_request, headers={}, runtime=runtime)
+                tool_response: CallAiToolsResponse = (
+                    sls_client.call_ai_tools_with_options(
+                        request=ai_request, headers={}, runtime=runtime
+                    )
+                )
                 data = tool_response.body
 
                 if "------answer------\n" in data:
                     data = data.split("------answer------\n")[1]
 
-                return {
-                    "data": data
-                }
+                return {"data": data}
 
             except Exception as e:
                 log_error(f"调用差分火焰图性能变化分析工具失败: {str(e)}")
                 raise
 
         @self.server.tool()
-        def arms_get_application_info(ctx: Context,
-                                      pid: str = Field(..., description="pid,the pid of the app"),
-                                      regionId: str = Field(...,
-                                        description="aliyun region id,region id format like 'xx-xxx',like 'cn-hangzhou'",
-                                      ),
-                                      ) -> dict:
+        def arms_get_application_info(
+            ctx: Context,
+            pid: str = Field(..., description="pid,the pid of the app"),
+            regionId: str = Field(
+                ...,
+                description="aliyun region id,region id format like 'xx-xxx',like 'cn-hangzhou'",
+            ),
+        ) -> Any:
             """
             根据 PID获取具体某个应用的信息，
             ## 功能概述
             1. 获取ARMS应用信息，会返回应用的 PID，AppName,开发语言类型比如 java,python 等
-            
+
             ## 使用场景
             1. 当用户明确提出要查询某个应用的信息时，可以调用该工具
             2. 有场景需要获取应用的开发语言类型，可以调用该工具
@@ -442,15 +476,24 @@ class ArmsToolkit:
                 }
             else:
                 return "没有找到应用信息"
-        
+
         @self.server.tool()
-        def arms_trace_quality_analysis(ctx: Context,
-                traceId: str = Field(..., description="traceId"),
-                startMs: int = Field(..., description="start time (ms) for trace query. unit is millisecond, should be unix timestamp, only number, no other characters"),
-                endMs: int = Field(..., description="end time (ms) for trace query. unit is millisecond, should be unix timestamp, only number, no other characters"),
-                regionId: str = Field(default=...,
-                                      description="aliyun region id,region id format like 'xx-xxx',like 'cn-hangzhou'")
-        ) -> dict:
+        def arms_trace_quality_analysis(
+            ctx: Context,
+            traceId: str = Field(..., description="traceId"),
+            startMs: int = Field(
+                ...,
+                description="start time (ms) for trace query. unit is millisecond, should be unix timestamp, only number, no other characters",
+            ),
+            endMs: int = Field(
+                ...,
+                description="end time (ms) for trace query. unit is millisecond, should be unix timestamp, only number, no other characters",
+            ),
+            regionId: str = Field(
+                default=...,
+                description="aliyun region id,region id format like 'xx-xxx',like 'cn-hangzhou'",
+            ),
+        ) -> Any:
             """Trace 质量检测
 
             ## 功能概述
@@ -472,11 +515,11 @@ class ArmsToolkit:
                 regionId: 阿里云区域ID，如'cn-hangzhou'、'cn-shanghai'等
             """
             try:
-
-                sls_client: Client = ctx.request_context.lifespan_context["sls_client"].with_region("cn-shanghai")
+                sls_client: Client = ctx.request_context.lifespan_context[
+                    "sls_client"
+                ].with_region("cn-shanghai")
                 ai_request: CallAiToolsRequest = CallAiToolsRequest(
-                    tool_name="trace_struct_analysis",
-                    region_id=regionId
+                    tool_name="trace_struct_analysis", region_id=regionId
                 )
 
                 params: dict[str, Any] = {
@@ -487,30 +530,43 @@ class ArmsToolkit:
                 }
 
                 ai_request.params = params
-                runtime: util_models.RuntimeOptions = util_models.RuntimeOptions(read_timeout=60000, connect_timeout=60000)
+                runtime: util_models.RuntimeOptions = util_models.RuntimeOptions(
+                    read_timeout=60000, connect_timeout=60000
+                )
 
-                tool_response: CallAiToolsResponse = sls_client.call_ai_tools_with_options(request=ai_request, headers={}, runtime=runtime)
+                tool_response: CallAiToolsResponse = (
+                    sls_client.call_ai_tools_with_options(
+                        request=ai_request, headers={}, runtime=runtime
+                    )
+                )
                 data = tool_response.body
 
                 if "------answer------\n" in data:
                     data = data.split("------answer------\n")[1]
 
-                return {
-                    "data": data
-                }
+                return {"data": data}
 
             except Exception as e:
                 log_error(f"调用Trace质量检测工具失败: {str(e)}")
                 raise
 
         @self.server.tool()
-        def arms_slow_trace_analysis(ctx: Context,
-                                     traceId: str = Field(..., description="traceId"),
-                                     startMs: int = Field(..., description="start time (ms) for trace query. unit is millisecond, should be unix timestamp, only number, no other characters"),
-                                     endMs: int = Field(..., description="end time (ms) for trace query. unit is millisecond, should be unix timestamp, only number, no other characters"),
-                                     regionId: str = Field(default=...,
-                                                           description="aliyun region id,region id format like 'xx-xxx',like 'cn-hangzhou'")
-                                     ) -> dict:
+        def arms_slow_trace_analysis(
+            ctx: Context,
+            traceId: str = Field(..., description="traceId"),
+            startMs: int = Field(
+                ...,
+                description="start time (ms) for trace query. unit is millisecond, should be unix timestamp, only number, no other characters",
+            ),
+            endMs: int = Field(
+                ...,
+                description="end time (ms) for trace query. unit is millisecond, should be unix timestamp, only number, no other characters",
+            ),
+            regionId: str = Field(
+                default=...,
+                description="aliyun region id,region id format like 'xx-xxx',like 'cn-hangzhou'",
+            ),
+        ) -> Any:
             """深入分析 Trace 慢调用根因
 
             ## 功能概述
@@ -533,11 +589,11 @@ class ArmsToolkit:
                 regionId: 阿里云区域ID，如'cn-hangzhou'、'cn-shanghai'等
             """
             try:
-
-                sls_client: Client = ctx.request_context.lifespan_context["sls_client"].with_region("cn-shanghai")
+                sls_client: Client = ctx.request_context.lifespan_context[
+                    "sls_client"
+                ].with_region("cn-shanghai")
                 ai_request: CallAiToolsRequest = CallAiToolsRequest(
-                    tool_name="trace_slow_analysis",
-                    region_id=regionId
+                    tool_name="trace_slow_analysis", region_id=regionId
                 )
 
                 params: dict[str, Any] = {
@@ -548,32 +604,43 @@ class ArmsToolkit:
                 }
 
                 ai_request.params = params
-                runtime: util_models.RuntimeOptions = util_models.RuntimeOptions(read_timeout=60000,
-                                                                                 connect_timeout=60000)
+                runtime: util_models.RuntimeOptions = util_models.RuntimeOptions(
+                    read_timeout=60000, connect_timeout=60000
+                )
 
-                tool_response: CallAiToolsResponse = sls_client.call_ai_tools_with_options(request=ai_request,
-                                                                                           headers={}, runtime=runtime)
+                tool_response: CallAiToolsResponse = (
+                    sls_client.call_ai_tools_with_options(
+                        request=ai_request, headers={}, runtime=runtime
+                    )
+                )
                 data = tool_response.body
 
                 if "------answer------\n" in data:
                     data = data.split("------answer------\n")[1]
 
-                return {
-                    "data": data
-                }
+                return {"data": data}
 
             except Exception as e:
                 log_error(f"调用Trace慢调用分析工具失败: {str(e)}")
                 raise
 
         @self.server.tool()
-        def arms_error_trace_analysis(ctx: Context,
-                                     traceId: str = Field(..., description="traceId"),
-                                     startMs: int = Field(..., description="start time (ms) for trace query. unit is millisecond, should be unix timestamp, only number, no other characters"),
-                                     endMs: int = Field(..., description="end time (ms) for trace query. unit is millisecond, should be unix timestamp, only number, no other characters"),
-                                     regionId: str = Field(default=...,
-                                                           description="aliyun region id,region id format like 'xx-xxx',like 'cn-hangzhou'")
-                                     ) -> dict:
+        def arms_error_trace_analysis(
+            ctx: Context,
+            traceId: str = Field(..., description="traceId"),
+            startMs: int = Field(
+                ...,
+                description="start time (ms) for trace query. unit is millisecond, should be unix timestamp, only number, no other characters",
+            ),
+            endMs: int = Field(
+                ...,
+                description="end time (ms) for trace query. unit is millisecond, should be unix timestamp, only number, no other characters",
+            ),
+            regionId: str = Field(
+                default=...,
+                description="aliyun region id,region id format like 'xx-xxx',like 'cn-hangzhou'",
+            ),
+        ) -> Any:
             """深入分析 Trace 错误根因
 
             ## 功能概述
@@ -596,11 +663,11 @@ class ArmsToolkit:
                 regionId: 阿里云区域ID，如'cn-hangzhou'、'cn-shanghai'等
             """
             try:
-
-                sls_client: Client = ctx.request_context.lifespan_context["sls_client"].with_region("cn-shanghai")
+                sls_client: Client = ctx.request_context.lifespan_context[
+                    "sls_client"
+                ].with_region("cn-shanghai")
                 ai_request: CallAiToolsRequest = CallAiToolsRequest(
-                    tool_name="trace_error_analysis",
-                    region_id=regionId
+                    tool_name="trace_error_analysis", region_id=regionId
                 )
 
                 params: dict[str, Any] = {
@@ -611,20 +678,24 @@ class ArmsToolkit:
                 }
 
                 ai_request.params = params
-                runtime: util_models.RuntimeOptions = util_models.RuntimeOptions(read_timeout=60000,
-                                                                                 connect_timeout=60000)
+                runtime: util_models.RuntimeOptions = util_models.RuntimeOptions(
+                    read_timeout=60000, connect_timeout=60000
+                )
 
-                tool_response: CallAiToolsResponse = sls_client.call_ai_tools_with_options(request=ai_request,
-                                                                                           headers={}, runtime=runtime)
+                tool_response: CallAiToolsResponse = (
+                    sls_client.call_ai_tools_with_options(
+                        request=ai_request, headers={}, runtime=runtime
+                    )
+                )
                 data = tool_response.body
 
                 if "------answer------\n" in data:
                     data = data.split("------answer------\n")[1]
 
-                return {
-                    "data": data
-                }
+                return {"data": data}
 
             except Exception as e:
+                log_error(f"调用Trace错误分析工具失败: {str(e)}")
+                raise
                 log_error(f"调用Trace错误分析工具失败: {str(e)}")
                 raise

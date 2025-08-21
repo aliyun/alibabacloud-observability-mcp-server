@@ -251,7 +251,7 @@ class SLSToolkit:
                 default=...,
                 description="aliyun region id,region id format like 'xx-xxx',like 'cn-hangzhou'",
             ),
-        ) -> dict:
+        ) -> Any:
             """获取SLS日志库的结构信息。
 
             ## 功能概述
@@ -330,7 +330,7 @@ class SLSToolkit:
                 default=...,
                 description="aliyun region id,region id format like 'xx-xxx',like 'cn-hangzhou'",
             ),
-        ) -> dict:
+        ) -> Any:
             """执行SLS日志查询。
 
             ## 功能概述
@@ -420,7 +420,7 @@ class SLSToolkit:
                 default=...,
                 description="aliyun region id,region id format like 'xx-xxx',like 'cn-hangzhou'",
             ),
-        ) -> dict[str, Any]:
+        ) -> Any:
             """将自然语言转换为SLS查询语句。当用户有明确的 logstore 查询需求，必须优先使用该工具来生成查询语句
 
             ## 功能概述
@@ -476,7 +476,7 @@ class SLSToolkit:
                 default=...,
                 description="aliyun region id,region id format like 'xx-xxx',like 'cn-hangzhou'",
             ),
-        ) -> dict:
+        ) -> Any:
             """诊断SLS查询语句。
 
             ## 功能概述
