@@ -22,6 +22,11 @@ from mcp.server.fastmcp import Context
 from Tea.exceptions import TeaException
 
 from mcp_server_aliyun_observability.api_error import TEQ_EXCEPTION_ERROR
+from mcp_server_aliyun_observability.settings import (
+    get_settings,
+    normalize_host,
+)
+from mcp_server_aliyun_observability.logger import log_info
 
 logger = logging.getLogger(__name__)
 
@@ -117,7 +122,25 @@ class SLSClientWrapper:
         else:
             credentialsClient = CredClient()
             config = open_api_models.Config(credential=credentialsClient)
-        config.endpoint = f"{region}.log.aliyuncs.com"
+        # Prefer explicit endpoint > global settings resolver (mapping > template)
+        settings = get_settings().sls
+        if endpoint:
+            host = normalize_host(endpoint)
+            source = "explicit"
+        else:
+            # detect mapping vs template for logging clarity
+            if region in settings.endpoints:
+                host = settings.endpoints[region]
+                source = "mapping"
+            else:
+                host = settings.resolve(region)
+                source = "template"
+        # Log which region/endpoint is used
+        try:
+            log_info(f"SLS endpoint resolved: region={region}, endpoint={host}, source={source}")
+        except Exception:
+            pass
+        config.endpoint = host
         return SLSClient(config)
     
     def get_knowledge_config(self, project: str, logstore: str) -> str:
@@ -145,7 +168,23 @@ class ArmsClientWrapper:
         else:
             credentialsClient = CredClient()
             config = open_api_models.Config(credential=credentialsClient)
-        config.endpoint = endpoint or f"arms.{region}.aliyuncs.com"
+        # Prefer explicit endpoint > global settings resolver
+        arms_settings = get_settings().arms
+        if endpoint:
+            host = normalize_host(endpoint)
+            source = "explicit"
+        else:
+            if region in arms_settings.endpoints:
+                host = arms_settings.endpoints[region]
+                source = "mapping"
+            else:
+                host = arms_settings.resolve(region)
+                source = "template"
+        try:
+            log_info(f"ARMS endpoint resolved: region={region}, endpoint={host}, source={source}")
+        except Exception:
+            pass
+        config.endpoint = host
         return ArmsClient(config)
 
 

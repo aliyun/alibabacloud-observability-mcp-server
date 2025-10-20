@@ -4,8 +4,14 @@ import sys
 import click
 import dotenv
 
-from mcp_server_aliyun_observability.server import server
-from mcp_server_aliyun_observability.utils import CredentialWrapper
+# Avoid importing heavy modules at package import time; import them inside main()
+from mcp_server_aliyun_observability.settings import (
+    GlobalSettings,
+    SLSSettings,
+    ArmsSettings,
+    configure_settings,
+    build_endpoint_mapping,
+)
 
 dotenv.load_dotenv()
 
@@ -38,6 +44,18 @@ dotenv.load_dotenv()
 )
 @click.option("--log-level", type=str, help="log level", default="INFO")
 @click.option("--transport-port", type=int, help="transport port", default=8000)
+@click.option(
+    "--sls-endpoints",
+    "sls_endpoints",
+    type=str,
+    help="REGION=HOST pairs (comma/space separated) or @file (JSON object or pairs).",
+)
+@click.option(
+    "--arms-endpoints",
+    "arms_endpoints",
+    type=str,
+    help="REGION=HOST pairs (comma/space separated) or @file (JSON object or pairs) for ARMS.",
+)
 def main(
     access_key_id,
     access_key_secret,
@@ -46,7 +64,36 @@ def main(
     log_level,
     transport_port,
     host,
+    sls_endpoints,
+    arms_endpoints,
 ):
+    # Import here to avoid side effects for library users / tests importing submodules
+    from mcp_server_aliyun_observability.server import server
+    from mcp_server_aliyun_observability.utils import CredentialWrapper
+
+    # Configure global settings (process-wide, frozen)
+    try:
+        sls_mapping = build_endpoint_mapping(
+            cli_pairs=None,
+            combined=sls_endpoints,
+            file_ref=None,
+            env_var="SLS_ENDPOINTS",
+        )
+        arms_mapping = build_endpoint_mapping(
+            cli_pairs=None,
+            combined=arms_endpoints,
+            file_ref=None,
+            env_var="ARMS_ENDPOINTS",
+        )
+        settings = GlobalSettings(
+            sls=SLSSettings(endpoints=sls_mapping),
+            arms=ArmsSettings(endpoints=arms_mapping),
+        )
+        configure_settings(settings)
+    except Exception as e:
+        # Do not crash on settings issues; log to stderr and continue with defaults
+        click.echo(f"[warn] failed to configure SLS endpoints: {e}", err=True)
+
     if access_key_id and access_key_secret:
         credential = CredentialWrapper(
             access_key_id, access_key_secret, knowledge_config
