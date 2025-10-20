@@ -1,5 +1,13 @@
 # 版本更新
 
+## 0.3.2
+- 新增全局配置 Settings：支持 SLS/ARMS endpoint 映射与模板回退
+  - 启动参数：`--sls-endpoints`、`--arms-endpoints`（支持 `REGION=HOST`、逗号/空格分隔，或 `@file` 加载 JSON/纯文本）
+  - 环境变量：`SLS_ENDPOINTS`、`ARMS_ENDPOINTS`
+  - 未命中映射时回退：SLS `"{region}.log.aliyuncs.com"`，ARMS `"arms.{region}.aliyuncs.com"`
+- 统一客户端端点解析，并打印使用的 region/endpoint/source（explicit/mapping/template）
+- CLI 清理：仅保留 `--sls-endpoints`（移除其他变体）
+
 ## 0.3.1
 - 修复ARMS工具返回结果类型错误问题,会导致高版本的MCP出现返回值提取错误
 
@@ -127,4 +135,3 @@
         - `sls_translate_natural_language_to_query`
         - `sls_execute_query`
     ![image](./images/find_slowest_trace.png)
-
