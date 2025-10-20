@@ -48,13 +48,13 @@ dotenv.load_dotenv()
     "--sls-endpoints",
     "sls_endpoints",
     type=str,
-    help="REGION=HOST pairs (comma/space separated) or @file (JSON object or pairs).",
+    help="REGION=HOST pairs (comma/space separated)",
 )
 @click.option(
     "--arms-endpoints",
     "arms_endpoints",
     type=str,
-    help="REGION=HOST pairs (comma/space separated) or @file (JSON object or pairs) for ARMS.",
+    help="REGION=HOST pairs (comma/space separated) for ARMS.",
 )
 def main(
     access_key_id,
@@ -73,18 +73,8 @@ def main(
 
     # Configure global settings (process-wide, frozen)
     try:
-        sls_mapping = build_endpoint_mapping(
-            cli_pairs=None,
-            combined=sls_endpoints,
-            file_ref=None,
-            env_var="SLS_ENDPOINTS",
-        )
-        arms_mapping = build_endpoint_mapping(
-            cli_pairs=None,
-            combined=arms_endpoints,
-            file_ref=None,
-            env_var="ARMS_ENDPOINTS",
-        )
+        sls_mapping = build_endpoint_mapping(cli_pairs=None, combined=sls_endpoints)
+        arms_mapping = build_endpoint_mapping(cli_pairs=None, combined=arms_endpoints)
         settings = GlobalSettings(
             sls=SLSSettings(endpoints=sls_mapping),
             arms=ArmsSettings(endpoints=arms_mapping),

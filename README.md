@@ -214,7 +214,7 @@ python -m mcp_server_aliyun_observability --transport sse --access-key-id <your_
 
 ### 端点映射与全局配置（SLS/ARMS）
 
-支持在启动时覆盖各区域的服务端点，并在运行时打印实际生效的区域与端点（source=explicit/mapping/template）。
+支持在启动时通过命令行覆盖各区域的服务端点，并在运行时打印实际生效的区域与端点（source=explicit/mapping/template）。
 
 - SLS 端点映射（CLI）
 ```
@@ -228,24 +228,13 @@ python -m mcp_server_aliyun_observability \
 python -m mcp_server_aliyun_observability --arms-endpoints "cn-shanghai=arms.internal"
 ```
 
-- 环境变量方式（优先级低于 CLI）
-```
-SLS_ENDPOINTS="cn-shanghai=cn-hangzhou.log.aliyuncs.com" \
-ARMS_ENDPOINTS="cn-shanghai=arms.internal" \
-python -m mcp_server_aliyun_observability --transport sse
-```
-
-- 从文件加载（@file），文件可为 JSON 对象或纯文本 pairs
-```
-echo '{"cn-shanghai":"cn-hangzhou.log.aliyuncs.com"}' > sls_endpoints.json
-python -m mcp_server_aliyun_observability --sls-endpoints @sls_endpoints.json
-```
+- 仅支持命令行参数方式（不支持环境变量与 @file 加载）
 
 - 默认回退模板（未命中映射时）：
   - SLS: `{region}.log.aliyuncs.com`
   - ARMS: `arms.{region}.aliyuncs.com`
 
-- CMS 说明：CMS 工具内部使用 SLS 客户端，自动复用 `--sls-endpoints` 的映射，无需单独 cms 配置。
+- CMS 说明：CMS 工具内部使用 SLS 客户端，自动复用 `--sls-endpoints` 的映射。
 
 - 日志示例（控制台与文件均会输出）：
 ```

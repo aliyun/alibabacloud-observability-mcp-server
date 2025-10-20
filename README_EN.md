@@ -215,7 +215,7 @@ python -m mcp_server_aliyun_observability --transport sse --access-key-id <your_
 
 ### Endpoint Overrides and Global Settings (SLS/ARMS)
 
-You can override service endpoints per region at startup. The server logs the effective region/endpoint and its source (explicit/mapping/template) when a client is created.
+You can override service endpoints per region at startup via CLI only. The server logs the effective region/endpoint and its source (explicit/mapping/template) when a client is created.
 
 - SLS endpoint overrides (CLI)
 ```
@@ -229,24 +229,13 @@ python -m mcp_server_aliyun_observability \
 python -m mcp_server_aliyun_observability --arms-endpoints "cn-shanghai=arms.internal"
 ```
 
-- Environment variables (lower precedence than CLI)
-```
-SLS_ENDPOINTS="cn-shanghai=cn-hangzhou.log.aliyuncs.com" \
-ARMS_ENDPOINTS="cn-shanghai=arms.internal" \
-python -m mcp_server_aliyun_observability --transport sse
-```
-
-- Load from file (@file). File can be a JSON object or plain pairs text
-```
-echo '{"cn-shanghai":"cn-hangzhou.log.aliyuncs.com"}' > sls_endpoints.json
-python -m mcp_server_aliyun_observability --sls-endpoints @sls_endpoints.json
-```
+- CLI only (environment variables and @file loading are not supported)
 
 - Template fallback when no mapping matched:
   - SLS: `{region}.log.aliyuncs.com`
   - ARMS: `arms.{region}.aliyuncs.com`
 
-- CMS note: CMS tools internally reuse the SLS client, so it automatically respects `--sls-endpoints`.
+- CMS note: CMS tools internally reuse the SLS client and automatically respect `--sls-endpoints`.
 
 - Example logs (to console and file):
 ```

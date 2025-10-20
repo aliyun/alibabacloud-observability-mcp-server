@@ -12,7 +12,6 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from threading import RLock
-from pathlib import Path
 from typing import Optional, Dict, Iterable
 import json
 import os
@@ -46,65 +45,21 @@ def _parse_pairs_str(s: str | None) -> Dict[str, str]:
     return out
 
 
-def _load_mapping_from_file(path: str) -> Dict[str, str]:
-    """Load a mapping from a file. Supports JSON object or pairs text.
-
-    - If content starts with '{', parse as JSON object: {"cn-hangzhou":"x", ...}
-    - Otherwise parse as pairs text like "cn-shanghai=foo,cn-hangzhou=bar"
-    """
-    p = Path(path).expanduser()
-    if not p.exists():
-        raise FileNotFoundError(f"Endpoints file not found: {path}")
-    text = p.read_text(encoding="utf-8").strip()
-    if not text:
-        return {}
-    if text.startswith("{"):
-        data = json.loads(text)
-        if not isinstance(data, dict):
-            raise ValueError("Expected a JSON object for endpoints mapping")
-        return {str(k): str(v) for k, v in data.items()}
-    return _parse_pairs_str(text)
-
-
 def build_endpoint_mapping(
     cli_pairs: Iterable[str] | None,
     combined: Optional[str],
-    file_ref: Optional[str],
-    env_var: str = "SLS_ENDPOINTS",
 ) -> Dict[str, str]:
-    """Build endpoint mapping from multiple sources with precedence:
+    """Build endpoint mapping from CLI inputs only.
 
-    file (lowest) < env var < combined < repeated cli pairs (highest)
+    Precedence: combined string < repeated cli_pairs (last wins).
     """
     mapping: Dict[str, str] = {}
 
-    # File (lowest)
-    if file_ref:
-        src = file_ref.strip()
-        if src.startswith("@"):
-            src = src[1:]
-        mapping.update(_load_mapping_from_file(src))
-
-    # ENV
-    env_val = os.getenv(env_var)
-    if env_val:
-        env_val = env_val.strip()
-        if env_val.startswith("{"):
-            data = json.loads(env_val)
-            if isinstance(data, dict):
-                mapping.update({str(k): str(v) for k, v in data.items()})
-        else:
-            mapping.update(_parse_pairs_str(env_val))
-
-    # Combined
+    # Combined string
     if combined:
-        c = combined.strip()
-        if c.startswith("@"):
-            mapping.update(_load_mapping_from_file(c[1:]))
-        else:
-            mapping.update(_parse_pairs_str(c))
+        mapping.update(_parse_pairs_str(combined.strip()))
 
-    # Repeated CLI pairs (highest)
+    # Repeated CLI pairs (override)
     for pair in (cli_pairs or []):
         mapping.update(_parse_pairs_str(pair))
 
