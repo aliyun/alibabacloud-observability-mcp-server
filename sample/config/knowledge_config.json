@@ -1,0 +1,28 @@
+{
+    "default_endpoint": {
+        "uri": "https://api.default.com",
+        "key": "Bearer dataset-***"
+    },
+    "projects": {
+        "project1": {
+            "default_endpoint": {
+                "uri": "https://api.project1.com",
+                "key": "Bearer dataset-***"
+            },
+            "logstore1": {
+                "uri": "https://api.project1.logstore1.com",
+                "key": "Bearer dataset-***"
+            },
+            "logstore2": {
+                "uri": "https://api.project1.logstore2.com",
+                "key": "Bearer dataset-***"
+            }
+        },
+        "project2": {
+            "logstore3": {
+                "uri": "https://api.project2.logstore3.com",
+                "key": "Bearer dataset-***"
+            }
+        }
+    }
+}

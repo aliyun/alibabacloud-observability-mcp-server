@@ -1,0 +1,524 @@
+---
+alwaysApply: true
+---
+# UModel PaaS API 详细说明文档
+
+## 1. 概述
+
+UModel PaaS 提供了两种查询模式：
+- **Phase 1 Table 模式**：直接访问数据集（DataSet），返回 SPL 查询
+- **Phase 2 Object 模式**：通过实体（EntitySet）访问相关数据，提供更高级的抽象
+
+## 2. Phase 1 Table 模式 API
+
+### 2.1 MetricSet 查询
+
+#### 2.1.1 获取指标数据 (metrics)
+
+**功能说明**：查询 MetricSet 中的指标数据，支持 PromQL 和 SPL 两种查询模式。
+
+**SPL 格式**：
+```spl
+.metric_set with(domain='域名', name='数据集名称', source='metrics', metric='指标名', [其他可选参数])
+```
+
+**参数说明**：
+
+| 参数名 | 类型 | 必填 | 说明 | 示例值 |
+|--------|------|------|------|--------|
+| domain | string | 是 | MetricSet 所属域 | 'apm' |
+| name | string | 是 | MetricSet 名称 | 'apm.metric.apm.operation' |
+| source | string | 是 | 固定为 'metrics' | 'metrics' |
+| metric | string | 是 | 要查询的指标名称 | 'request_count' |
+| query_type | string | 否 | 查询类型：'range'（默认）或 'instant' | 'range' |
+| step | string | 否 | 时间步长 | '1m', '5m' |
+| aggregate | boolean | 否 | 是否聚合 | true/false |
+| aggregate_labels | array | 否 | 聚合维度列表 | ['host', 'service'] |
+| query | string | 否 | 过滤条件 | 'service_id = "xxx" and status =~ "400\|500"' |
+| storage_domain | string | 否 | 指定存储域名 | 'apm' |
+| storage_name | string | 否 | 指定存储名称 | 'metricstore-apm' |
+| storage_kind | string | 否 | 指定存储类型 | 'sls_metricstore' |
+
+**示例 1：PromQL 模式查询**
+```spl
+.metric_set with(
+    domain='apm', 
+    name='apm.metric.apm.operation', 
+    source='metrics', 
+    metric='request_count',
+    query_type='range',
+    step='1m',
+    aggregate=true,
+    aggregate_labels=['service', 'operation'],
+    query='service_id = "hwx28v3j7p@9949e3dbf79e9a082105c"'
+)
+```
+
+**返回的 SPL**：
+```spl
+.metricstore with(region='cn-hangzhou', project='cms-cms-umodel-paas-0620-kffw8bjagidkeyc2', metricstore='metricstore-apm') 
+| prom-call promql_query_range('sum by (acs_arms_service_id, rpc) (rate(arms_app_requests_count_raw{acs_arms_service_id="hwx28v3j7p@9949e3dbf79e9a082105c"}[1m]))', '1m')
+```
+
+**示例 2：SPL 模式查询**
+```spl
+.metric_set with(
+    domain='rum', 
+    name='rum.metric.api', 
+    source='metrics', 
+    metric='api_request_duration',
+    step='5m',
+    aggregate_labels=['api_name', 'status_code']
+)
+```
+
+**返回的 SPL** 
+注意只有dry_run_mode下才是返回SPL，否则返回的是查询后的结果
+```spl
+.logstore with(project='sls-project', logstore='logstore-rum', query='') 
+| extend __ts__ = second_to_nano(__time__ - __time__ % 300)
+| stats __value__ = avg(duration) by __ts__, api_name, status_code
+| make-series __value__ default = 'last' on __ts__ from 'min' to 'max' step '5m' by api_name, status_code
+| extend __labels__=MAP(ARRAY['api_name', 'status_code'], ARRAY[api_name, status_code])
+| project __labels__, __ts__, __value__
+```
+
+#### 2.1.2 获取标签值 (labels)
+
+**功能说明**：查询 MetricSet 中某个标签的所有可能值。
+
+**SPL 格式**：
+```spl
+.metric_set with(domain='域名', name='数据集名称', source='labels', label='标签名', [其他可选参数])
+```
+
+**参数说明**：
+
+| 参数名 | 类型 | 必填 | 说明 | 示例值 |
+|--------|------|------|------|--------|
+| domain | string | 是 | MetricSet 所属域 | 'apm' |
+| name | string | 是 | MetricSet 名称 | 'apm.metric.apm.operation' |
+| source | string | 是 | 固定为 'labels' | 'labels' |
+| label | string | 是 | 要查询的标签名称 | 'rpc' |
+| query | string | 否 | 过滤条件 | 'service_id = "xxx"' |
+| storage_domain | string | 否 | 指定存储域名 | 'apm' |
+| storage_name | string | 否 | 指定存储名称 | 'metricstore-apm' |
+| storage_kind | string | 否 | 指定存储类型 | 'sls_metricstore' |
+
+**示例 1：查询所有 RPC 方法**
+```spl
+.metric_set with(
+    domain='apm', 
+    name='apm.metric.apm.operation', 
+    source='labels', 
+    label='rpc',
+    query='service_id = "hwx28v3j7p@9949e3dbf79e9a082105c"'
+)
+```
+
+**返回的 SPL**：
+```spl
+.metricstore with(region='cn-hangzhou', project='cms-cms-umodel-paas-0620-kffw8bjagidkeyc2', metricstore='metricstore-apm') 
+| prom-call promql_label_values('arms_app_requests_count_raw{acs_arms_service_id="hwx28v3j7p@9949e3dbf79e9a082105c"}', 'rpc')
+```
+
+### 2.2 LogSet 查询
+
+**功能说明**：查询 LogSet 中的日志数据。
+
+**SPL 格式**：
+```spl
+.log_set with(domain='域名', name='数据集名称', [其他可选参数])
+```
+
+**参数说明**：
+
+| 参数名 | 类型 | 必填 | 说明 | 示例值 |
+|--------|------|------|------|--------|
+| domain | string | 是 | LogSet 所属域 | 'apm' |
+| name | string | 是 | LogSet 名称 | 'apm.log.app' |
+| query | string | 否 | 过滤条件 | 'level = "ERROR"' |
+| storage_domain | string | 否 | 指定存储域名 | 'apm' |
+| storage_name | string | 否 | 指定存储名称 | 'logstore-apm' |
+| storage_kind | string | 否 | 指定存储类型 | 'sls_logstore' |
+
+**示例**：
+```spl
+.log_set with(
+    domain='apm', 
+    name='apm.log.app',
+    query='level = "ERROR" and service = "order-service"'
+)
+```
+
+**返回的 SPL**：
+```spl
+.logstore with(project='sls-project', logstore='logstore-apm-app', query='level : "ERROR" and service : "order-service"') 
+| project timestamp, service, level, message, trace_id
+```
+
+### 2.3 TraceSet 查询
+
+**功能说明**：查询 TraceSet 中的追踪数据。
+
+**SPL 格式**：
+```spl
+.trace_set with(domain='域名', name='数据集名称', [其他可选参数])
+```
+
+**示例**：
+```spl
+.trace_set with(
+    domain='apm', 
+    name='apm.trace.span',
+    query='service = "order-service" and duration > 1000'
+)
+```
+
+### 2.4 EventSet 查询
+
+**功能说明**：查询 EventSet 中的事件数据。
+
+**SPL 格式**：
+```spl
+.event_set with(domain='域名', name='数据集名称', [其他可选参数])
+```
+
+**示例**：
+```spl
+.event_set with(
+    domain='apm', 
+    name='apm.event.alert',
+    query='severity = "P1" and status = "firing"'
+)
+```
+
+## 3. Phase 2 Object 模式 API
+
+### 3.1 基本语法
+
+**SPL 格式**：
+```spl
+.entity_set with(domain='域名', name='实体名称', [其他参数]) | entity-call 方法名(参数...)
+```
+
+**通用参数说明**：
+
+| 参数名 | 类型 | 必填 | 说明 | 示例值 |
+|--------|------|------|------|--------|
+| domain | string | 是 | EntitySet 所属域 | 'apm' |
+| name | string | 是 | EntitySet 名称 | 'apm.service' |
+| ids | array | 否 | 实体 ID 列表 | ['id1', 'id2'] |
+| query | string | 否 | 过滤条件 | 'service_id = "xxx"' |
+| storage_domain | string | 否 | 指定存储域名 | 'apm' |
+| storage_name | string | 否 | 指定存储名称 | 'entitystore-apm' |
+| storage_kind | string | 否 | 指定存储类型 | 'sls_entitystore' |
+
+### 3.2 内置方法
+
+#### 3.2.1 列出可用方法 (__list_method__)
+
+**功能说明**：获取当前 EntitySet 支持的所有方法。
+
+**示例**：
+```spl
+.entity_set with(domain='apm', name='apm.service') 
+| entity-call __list_method__()
+```
+
+**返回结果**：
+| name | display_name | description | params | returns |
+|------|--------------|-------------|--------|---------|
+| __list_method__ | List Available Methods | Get all methods supported by current EntitySet | [] | [...] |
+| list_data_set | List DataSets | Get DataSets related to EntitySet | [...] | [...] |
+| list_related_entity_set | List Related EntitySets | Get EntitySets related to current EntitySet | [...] | [...] |
+| get_metric | Get Metric | Get specified metric data from a MetricSet | [...] | [...] |
+| get_label_values | Get Label Values | Get label values from a MetricSet | [...] | [...] |
+| get_log | Get Log | Get log data from a LogSet | [...] | [...] |
+
+#### 3.2.2 列出相关数据集 (list_data_set)
+
+**功能说明**：获取 EntitySet 关联的所有数据集。
+
+**参数**：
+- `data_set_types` (array, 可选): 数据集类型列表，如 ['metric_set', 'log_set']
+- `detail` (boolean, 可选): 是否返回详细信息，默认 false
+
+**示例 1：获取所有数据集**
+```spl
+.entity_set with(domain='apm', name='apm.service', query='service_id = "xxx"') 
+| entity-call list_data_set()
+```
+
+**示例 2：只获取 MetricSet**
+```spl
+.entity_set with(domain='apm', name='apm.service') 
+| entity-call list_data_set(['metric_set'], true)
+```
+
+**返回结果**：
+| data_set_id | type | domain | name | fields_mapping | filterable_fields | fields | data_link_detail | data_set_detail |
+|-------------|------|--------|------|----------------|-------------------|--------|------------------|-----------------|
+| apm@metric_set@apm.metric.apm.service | metric_set | apm | apm.metric.apm.service | {"service_id": "acs_arms_service_id"} | ["service_id", "region"] | [...] | {...} | {...} |
+| apm@log_set@apm.log.app | log_set | apm | apm.log.app | {"service_id": "service"} | ["service", "level"] | [...] | {...} | {...} |
+
+#### 3.2.3 列出相关实体 (list_related_entity_set)
+
+**功能说明**：获取与当前 EntitySet 相关的其他实体。
+
+**参数**：
+- `relations` (array, 可选): 关系类型列表，如 ['contains', 'calls']
+- `direction` (string, 可选): 方向，'in'/'out'/'both'（默认）
+- `detail` (boolean, 可选): 是否返回详细信息，默认 true
+
+**示例 1：查找服务包含的操作**
+```spl
+.entity_set with(domain='apm', name='apm.service') 
+| entity-call list_related_entity_set(['contains'], 'out')
+```
+
+**示例 2：查找调用当前服务的其他服务**
+```spl
+.entity_set with(domain='apm', name='apm.service', query='service_id = "order-service"') 
+| entity-call list_related_entity_set(['calls'], 'in')
+```
+
+**返回结果**：
+| entity_set_id | relation | direction | domain | name | fields_mapping | fields | relation_data_sets | entity_link_detail | entity_set_detail |
+|---------------|----------|-----------|--------|------|----------------|--------|--------------------|--------------------|--------------------|
+| apm@entity_set@apm.operation | contains | out | apm | apm.operation | {"service": "service", "operation": "operation"} | [...] | [{...}] | {...} | {...} |
+
+### 3.3 数据集访问方法
+
+#### 3.3.1 获取指标数据 (get_metric)
+
+**功能说明**：从关联的 MetricSet 获取指标数据。
+
+**参数**：
+- `domain` (string, 必填): MetricSet 域名
+- `name` (string, 必填): MetricSet 名称
+- `metric` (string, 必填): 指标名称
+- `query_type` (string, 可选): 查询类型，'range'（默认）或 'instant'
+- `step` (string, 可选): 时间步长
+
+**示例**：
+```spl
+.entity_set with(domain='apm', name='apm.service', query='service_id = "order-service"') 
+| entity-call get_metric('apm', 'apm.metric.apm.service', 'request_count', 'range', '1m')
+```
+
+**工作原理**：
+1. 根据 EntitySet 的数据自动构建过滤条件
+2. 应用 DataLink 中定义的字段映射
+3. 生成最终的 SPL 查询
+
+#### 3.3.2 获取标签值 (get_label_values)
+
+**功能说明**：从关联的 MetricSet 获取标签值。
+
+**参数**：
+- `domain` (string, 必填): MetricSet 域名
+- `name` (string, 必填): MetricSet 名称
+- `label` (string, 必填): 标签名称
+
+**示例**：
+```spl
+.entity_set with(domain='apm', name='apm.service', query='service_id = "order-service"') 
+| entity-call get_label_values('apm', 'apm.metric.apm.service', 'region')
+```
+
+#### 3.3.3 获取日志数据 (get_log)
+
+**功能说明**：从关联的 LogSet 获取日志数据。
+
+**参数**：
+- `domain` (string, 必填): LogSet 域名
+- `name` (string, 必填): LogSet 名称
+
+**示例**：
+```spl
+.entity_set with(domain='apm', name='apm.service', query='service_id = "order-service"') 
+| entity-call get_log('apm', 'apm.log.app')
+```
+
+### 3.4 关系数据访问方法
+
+#### 3.4.1 获取关系指标 (get_relation_metric)
+
+**功能说明**：获取实体关系上的指标数据。
+
+**参数**：
+- `dest_entity_set_domain` (string, 必填): 目标实体域名
+- `dest_entity_set_name` (string, 必填): 目标实体名称
+- `dest_entity_ids` (array, 必填): 目标实体 ID 列表，可为空数组
+- `dest_entity_filter` (string, 必填): 目标实体过滤条件，可为空字符串
+- `entity_link_type` (string, 必填): 关系类型（如 'calls', 'contains'）
+- `direction` (string, 必填): 方向（'in'/'out'）
+- `metric_set_domain` (string, 必填): MetricSet 域名
+- `metric_set_name` (string, 必填): MetricSet 名称
+- `metric` (string, 必填): 指标名称
+- `query_type` (string, 可选): 查询类型
+- `step` (string, 可选): 时间步长
+- `aggregate_labels` (array, 可选): 聚合标签列表
+
+**示例 1：获取服务 A 调用服务 B 的请求量**
+```spl
+.entity_set with(domain='apm', name='apm.service', query='service = "service-a"') 
+| entity-call get_relation_metric(
+    'apm', 'apm.service', [], 'service = "service-b"', 
+    'calls', 'out', 
+    'apm', 'apm.metric.service_calls_service', 
+    'request_count', 'range', '5m'
+)
+```
+
+**示例 2：获取服务包含的所有操作的平均延迟**
+```spl
+.entity_set with(domain='apm', name='apm.service', query='service_id = "xxx"') 
+| entity-call get_relation_metric(
+    'apm', 'apm.operation', [], '', 
+    'contains', 'out', 
+    'apm', 'apm.metric.apm.operation', 
+    'avg_latency', 'range', '1m',
+    ['operation']
+)
+```
+
+#### 3.4.2 获取关系日志 (get_relation_log)
+
+**功能说明**：获取实体关系上的日志数据。
+
+**参数**：
+- `dest_entity_set_domain` (string, 必填): 目标实体域名
+- `dest_entity_set_name` (string, 必填): 目标实体名称
+- `dest_entity_ids` (array, 必填): 目标实体 ID 列表
+- `dest_entity_filter` (string, 必填): 目标实体过滤条件
+- `entity_link_type` (string, 必填): 关系类型
+- `direction` (string, 必填): 方向（'in'/'out'）
+- `log_set_domain` (string, 必填): LogSet 域名
+- `log_set_name` (string, 必填): LogSet 名称
+
+**示例：获取服务调用相关的日志**
+```spl
+.entity_set with(domain='apm', name='apm.service', ids=['dc5abde8cd8cbc1fd142927f006f694d']) 
+| entity-call get_relation_log(
+    'apm', 'apm.operation', ['dc5abde8cd8cbc1fd142927f006f694a'], '',
+    'contains', 'out',
+    'apm', 'apm.log.relation'
+)
+```
+
+**返回的 SPL**：
+```spl
+.logstore with(project='cms-cms-umodel-paas-0620-kffw8bjagidkeyc2', logstore='logstore-apm-relation-logs', 
+    query='service : "arms-springboot-demo" and operation : "POST /order/service"') 
+| project timestamp, service, operation, log_level, message, trace_id
+```
+
+#### 3.4.3 获取关系标签值 (get_relation_label_values)
+
+**功能说明**：获取实体关系上的标签值。
+
+**参数**：
+- `dest_entity_set_domain` (string, 必填): 目标实体域名
+- `dest_entity_set_name` (string, 必填): 目标实体名称
+- `dest_entity_ids` (array, 必填): 目标实体 ID 列表
+- `dest_entity_filter` (string, 必填): 目标实体过滤条件
+- `entity_link_type` (string, 必填): 关系类型
+- `direction` (string, 必填): 方向（'in'/'out'）
+- `metric_set_domain` (string, 必填): MetricSet 域名
+- `metric_set_name` (string, 必填): MetricSet 名称
+- `label` (string, 必填): 标签名称
+
+**示例：获取服务调用的所有 RPC 方法**
+```spl
+.entity_set with(domain='apm', name='apm.service', query='service_id = "service-a"') 
+| entity-call get_relation_label_values(
+    'apm', 'apm.operation', [], 'service = "service-a"',
+    'contains', 'out',
+    'apm', 'apm.metric.apm.operation',
+    'rpc'
+)
+```
+
+**返回的 SPL**：
+```spl
+.metricstore with(region='cn-hangzhou', project='cms-cms-umodel-paas-0620-kffw8bjagidkeyc2', metricstore='metricstore-apm') 
+| prom-call promql_label_values('arms_app_requests_count_raw{acs_arms_service_id="xxx",rpc="POST /order/service"}', 'rpc')
+```
+
+## 4. 字段映射机制
+
+### 4.1 基本字段映射
+
+在 DataLink 中定义的字段映射会自动应用：
+
+```yaml
+fields_mapping:
+  'service_id': 'acs_arms_service_id'  # EntitySet 字段 -> 存储字段
+  'operation': 'rpc'
+```
+
+### 4.2 关系字段映射
+
+对于 EntitySetLink 关联的 DataSet，使用特殊的映射格式：
+
+```yaml
+fields_mapping:
+  '${{src.service_id}}': 'source_service'     # 源实体字段
+  '${{dest.service_id}}': 'target_service'    # 目标实体字段
+```
+
+## 5. 最佳实践
+
+### 5.1 选择合适的查询模式
+
+- **使用 Phase 1 Table 模式**：
+  - 需要直接访问底层数据
+  - 需要完全控制查询逻辑
+  - 不需要实体关系的抽象
+
+- **使用 Phase 2 Object 模式**：
+  - 需要基于实体的抽象
+  - 需要自动处理字段映射
+  - 需要查询实体间的关系数据
+
+### 5.2 性能优化建议
+
+1. **使用过滤条件**：尽可能提供 `query` 参数来减少数据扫描范围
+2. **合理设置时间步长**：根据查询时间范围选择合适的 `step` 参数
+3. **按需聚合**：只在必要时使用 `aggregate` 和 `aggregate_labels`
+4. **指定存储**：在多存储场景下，明确指定 `storage_*` 参数可以提高查询效率
+
+### 5.3 常见问题处理
+
+1. **输出字段为空**：
+   - 检查 LogSet/TraceSet/EventSet 的字段定义中是否设置了 `analysable: true`
+   - 对于需要输出的字段，确保在 UModel 定义中正确配置
+
+2. **字段映射不生效**：
+   - 检查 DataLink 或 StorageLink 中的 `fields_mapping` 配置
+   - 确保映射的源字段在 EntitySet 中存在
+
+3. **关系查询无结果**：
+   - 验证 EntitySetLink 是否正确定义
+   - 检查关系方向（in/out）是否正确
+   - 确认目标实体的过滤条件是否正确
+
+## 6. 错误处理
+
+常见错误码和处理方法：
+
+| 错误码 | 说明 | 处理方法 |
+|--------|------|----------|
+| 400 | 参数错误 | 检查参数格式和必填项 |
+| 404 | 资源未找到 | 确认 EntitySet/DataSet 名称和域是否正确 |
+| 500 | 内部错误 | 检查日志获取详细错误信息 |
+
+## 7. 版本兼容性
+
+- 当前版本：v1.0.0
+- 最低支持版本：v1.0.0
+- 向后兼容策略：新增参数不影响现有查询 
+
+点我也可以一键收藏哦 👉🏻

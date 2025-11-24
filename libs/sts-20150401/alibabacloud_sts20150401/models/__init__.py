@@ -1,0 +1,89 @@
+# -*- coding: utf-8 -*-
+# This file is auto-generated, don't edit it. Thanks.
+from __future__ import annotations
+
+from ._assume_role_request import AssumeRoleRequest
+from ._assume_role_response import AssumeRoleResponse
+from ._assume_role_response_body import AssumeRoleResponseBody
+from ._assume_role_response_body_assumed_role_user import AssumeRoleResponseBodyAssumedRoleUser
+from ._assume_role_response_body_credentials import AssumeRoleResponseBodyCredentials
+from ._assume_role_with_oidcrequest import AssumeRoleWithOIDCRequest
+from ._assume_role_with_oidcresponse import AssumeRoleWithOIDCResponse
+from ._assume_role_with_oidcresponse_body import AssumeRoleWithOIDCResponseBody
+from ._assume_role_with_oidcresponse_body_assumed_role_user import AssumeRoleWithOIDCResponseBodyAssumedRoleUser
+from ._assume_role_with_oidcresponse_body_credentials import AssumeRoleWithOIDCResponseBodyCredentials
+from ._assume_role_with_oidcresponse_body_oidctoken_info import AssumeRoleWithOIDCResponseBodyOIDCTokenInfo
+from ._assume_role_with_samlrequest import AssumeRoleWithSAMLRequest
+from ._assume_role_with_samlresponse import AssumeRoleWithSAMLResponse
+from ._assume_role_with_samlresponse_body import AssumeRoleWithSAMLResponseBody
+from ._assume_role_with_samlresponse_body_assumed_role_user import AssumeRoleWithSAMLResponseBodyAssumedRoleUser
+from ._assume_role_with_samlresponse_body_credentials import AssumeRoleWithSAMLResponseBodyCredentials
+from ._assume_role_with_samlresponse_body_samlassertion_info import AssumeRoleWithSAMLResponseBodySAMLAssertionInfo
+from ._assume_role_with_service_identity_request import AssumeRoleWithServiceIdentityRequest
+from ._assume_role_with_service_identity_response import AssumeRoleWithServiceIdentityResponse
+from ._assume_role_with_service_identity_response_body import AssumeRoleWithServiceIdentityResponseBody
+from ._assume_role_with_service_identity_response_body_assumed_role_user import (
+    AssumeRoleWithServiceIdentityResponseBodyAssumedRoleUser,
+)
+from ._assume_role_with_service_identity_response_body_credentials import (
+    AssumeRoleWithServiceIdentityResponseBodyCredentials,
+)
+from ._generate_session_access_key_request import GenerateSessionAccessKeyRequest
+from ._generate_session_access_key_response import GenerateSessionAccessKeyResponse
+from ._generate_session_access_key_response_body import GenerateSessionAccessKeyResponseBody
+from ._generate_session_access_key_response_body_session_access_key import (
+    GenerateSessionAccessKeyResponseBodySessionAccessKey,
+)
+from ._generate_token_by_ticket_request import GenerateTokenByTicketRequest
+from ._generate_token_by_ticket_response import GenerateTokenByTicketResponse
+from ._generate_token_by_ticket_response_body import GenerateTokenByTicketResponseBody
+from ._generate_token_by_ticket_response_body_assumed_role_user import GenerateTokenByTicketResponseBodyAssumedRoleUser
+from ._generate_token_by_ticket_response_body_credentials import GenerateTokenByTicketResponseBodyCredentials
+from ._get_caller_identity_response import GetCallerIdentityResponse
+from ._get_caller_identity_response_body import GetCallerIdentityResponseBody
+from ._get_federation_token_request import GetFederationTokenRequest
+from ._get_federation_token_response import GetFederationTokenResponse
+from ._get_federation_token_response_body import GetFederationTokenResponseBody
+from ._get_federation_token_response_body_credentials import GetFederationTokenResponseBodyCredentials
+from ._get_federation_token_response_body_federated_user import GetFederationTokenResponseBodyFederatedUser
+
+__all__ = [
+    AssumeRoleResponseBodyAssumedRoleUser,
+    AssumeRoleResponseBodyCredentials,
+    AssumeRoleWithOIDCResponseBodyAssumedRoleUser,
+    AssumeRoleWithOIDCResponseBodyCredentials,
+    AssumeRoleWithOIDCResponseBodyOIDCTokenInfo,
+    AssumeRoleWithSAMLResponseBodyAssumedRoleUser,
+    AssumeRoleWithSAMLResponseBodyCredentials,
+    AssumeRoleWithSAMLResponseBodySAMLAssertionInfo,
+    AssumeRoleWithServiceIdentityResponseBodyAssumedRoleUser,
+    AssumeRoleWithServiceIdentityResponseBodyCredentials,
+    GenerateSessionAccessKeyResponseBodySessionAccessKey,
+    GenerateTokenByTicketResponseBodyAssumedRoleUser,
+    GenerateTokenByTicketResponseBodyCredentials,
+    GetFederationTokenResponseBodyCredentials,
+    GetFederationTokenResponseBodyFederatedUser,
+    AssumeRoleRequest,
+    AssumeRoleResponseBody,
+    AssumeRoleResponse,
+    AssumeRoleWithOIDCRequest,
+    AssumeRoleWithOIDCResponseBody,
+    AssumeRoleWithOIDCResponse,
+    AssumeRoleWithSAMLRequest,
+    AssumeRoleWithSAMLResponseBody,
+    AssumeRoleWithSAMLResponse,
+    AssumeRoleWithServiceIdentityRequest,
+    AssumeRoleWithServiceIdentityResponseBody,
+    AssumeRoleWithServiceIdentityResponse,
+    GenerateSessionAccessKeyRequest,
+    GenerateSessionAccessKeyResponseBody,
+    GenerateSessionAccessKeyResponse,
+    GenerateTokenByTicketRequest,
+    GenerateTokenByTicketResponseBody,
+    GenerateTokenByTicketResponse,
+    GetCallerIdentityResponseBody,
+    GetCallerIdentityResponse,
+    GetFederationTokenRequest,
+    GetFederationTokenResponseBody,
+    GetFederationTokenResponse,
+]
