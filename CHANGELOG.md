@@ -9,7 +9,7 @@
   - **forecast (时序预测)**: 基于历史数据预测未来指标趋势，支持自定义预测时长
     - 输出: `__forecast_ts__`, `__forecast_value__`, `__forecast_lower/upper_value__`, `__labels__`, `__name__`, `__entity_id__`
     - 自动调整学习时间范围 (1-5天)
-    - 新增 `forecast_duration` 参数，支持 `30m`, `1h`, `2d` 等格式（默认30分钟，最大1天）
+    - 新增 `forecast_duration` 参数，支持 `30m`, `1h`, `2d` 等格式
   - **anomaly_detection (异常检测)**: 使用时序分解算法识别指标中的异常点
     - 输出: `__entity_id__`, `__anomaly_list_`, `__anomaly_msg__`, `__value_min/max/avg__`
     - 自动调整学习时间范围 (1-3天)
