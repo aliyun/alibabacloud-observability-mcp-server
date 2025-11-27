@@ -88,3 +88,5 @@ CLAUDE.md
 **.log
 .CLAUDE
 .claude-trace
+docs/
+agents.md

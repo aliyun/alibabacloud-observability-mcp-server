@@ -1,5 +1,10 @@
 # 版本更新
 
+## 1.0.0 (重建)
+- `master` 已重建为 `1.x.x` 最新内容的单提交快照，旧 `master` 历史迁移至 `0.3.x` 分支。
+- README 增加分支说明、工具差异对照表，明确后续基于 1.x.x 维护。
+- `.gitignore` 补充 `docs/`、`agents.md` 以避免无意提交。
+
 ## 0.2.9
 - 修复获取logstore时候类型不匹配问题
 ## 0.2.8
@@ -121,4 +126,3 @@
         - `sls_translate_natural_language_to_query`
         - `sls_execute_query`
     ![image](./images/find_slowest_trace.png)
-

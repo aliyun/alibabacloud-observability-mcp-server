@@ -1,3 +1,5 @@
+> 分支变动说明：`master` 已使用 `1.x.x` 最新内容重建为单个提交（不保留旧历史）；原 `master` 全量历史和代码已迁移到 `0.3.x` 分支，后续如需沿用旧版本，请在 `0.3.x` 上继续迭代。1.x 版本基于可观测 2.0 做了较大功能升级，工具形态与 0.3.x 有明显差异。详情见文末《0.3.x 与 1.x.x 工具差异对照》。后续我们将持续基于 1.x.x 版本维护和演进，感谢理解与支持。
+
 ## 什么是 Observable MCP Server
 
 Observable MCP Server 是阿里云可观测官方推出的一个 MCP 服务，旨在为用户提供一整套的可观测 AI 交互能力，支持自然语言形式的多模态数据的访问和分析。可以与 Cursor、Cline、Windsurf 以及各类 Agent 框架无缝集成，使得企业人员可以更高效率和可靠地使用可观测数据。
@@ -283,3 +285,39 @@ python -m mcp_server_aliyun_observability
 ![image](./images/chatwise_inter.png)
 
 ![image](./images/chatwise_demo.png)
+
+## 0.3.x 与 1.x.x 工具差异对照
+
+1.x 基于可观测 2.0 做了大规模升级：日志/指标/事件/链路等能力以 UModel 结构化接口为主（`umodel_*`），并补充了少量 IaaS 直连工具。下表汇总了新增、替换/重命名和移除的能力，便于从 0.3.x 迁移。
+
+### 替换 / 重命名
+| 0.3.x 工具 | 1.x.x 对应 | 变化类型 | 说明 |
+| --- | --- | --- | --- |
+| `sls_translate_text_to_sql_query` | `sls_text_to_sql` | 重命名 | 依然用于将自然语言生成 SLS 查询语句。 |
+| `sls_execute_sql_query` | `sls_execute_sql` | 重命名 | 执行 SLS 查询，参数名与时间解析方式调整。 |
+| `cms_translate_text_to_promql` | `cms_text_to_promql` | 重命名 | 生成 PromQL 查询文本。 |
+| `cms_execute_promql_query` | `cms_execute_promql` | 重命名 | 执行 PromQL，底层改为通过 SLS metricstore 包装执行。 |
+| `sls_list_projects` | `sls_list_projects` | 保留/增强 | 保留，增加参数校验与提示。 |
+| `sls_list_logstores` | `sls_list_logstores` | 保留/增强 | 保留，支持指标库筛选等参数。 |
+
+### 新增（1.x.x 独有）
+| 新工具 | 能力说明 |
+| --- | --- |
+| `sls_execute_spl` | 直接执行 SPL 查询（高级用法）。 |
+| `list_workspace` / `list_domains` / `introduction` | 工作空间/域发现与服务自述。 |
+| `umodel_get_entities` / `umodel_get_neighbor_entities` / `umodel_search_entities` | 实体发现与邻居查询。 |
+| `umodel_list_data_set` / `umodel_search_entity_set` / `umodel_list_related_entity_set` | 数据集枚举、实体集搜索及关联关系发现。 |
+| `umodel_get_metrics` / `umodel_get_golden_metrics` / `umodel_get_relation_metrics` | 指标与关系级指标查询。 |
+| `umodel_get_logs` / `umodel_get_events` | 日志、事件查询。 |
+| `umodel_get_traces` / `umodel_search_traces` | 链路明细与搜索。 |
+| `umodel_get_profiles` | 性能剖析数据查询。 |
+
+### 移除 / 暂不提供
+| 0.3.x 工具 | 状态 | 说明 |
+| --- | --- | --- |
+| `sls_describe_logstore` | 移除 | 1.x 以 UModel 元数据与 `umodel_list_data_set` 为主，不再暴露 describe 接口。 |
+| `sls_diagnose_query` | 移除 | 未在 1.x 保留。 |
+| `arms_*` 系列（`arms_search_apps`、`arms_generate_trace_query`、`arms_profile_flame_analysis`、`arms_diff_profile_flame_analysis`、`arms_get_application_info`、`arms_trace_quality_analysis`、`arms_slow_trace_analysis`、`arms_error_trace_analysis`） | 移除 | 1.x 聚焦可观测 2.0 数据模型，未提供 ARMS 专用工具。 |
+| `sls_get_regions` / `sls_get_current_time` | 移除 | 通用工具未在 1.x 延续。 |
+
+迁移建议：优先改用 `umodel_*` 系列获取实体、数据集与指标/日志/事件/链路；仅在需要直接操作 SLS/CMS 时使用 IaaS 工具（`sls_*`、`cms_*`）。***
