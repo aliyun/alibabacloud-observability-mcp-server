@@ -472,11 +472,16 @@ class PaasDataToolkit:
             ),
             regionId: str = Field(..., description="Region ID"),
         ) -> Dict[str, Any]:
-            """获取指定trace ID的详细trace数据，包括所有span、时序数据和元数据。用于深入分析慢trace和错误trace。
+            """获取指定trace ID的详细trace数据，包括所有span、独占耗时和元数据。用于深入分析慢trace和错误trace。
+
             ## 参数获取: 1)搜索trace → 2)获取详细信息
             - trace_ids: 通常从`umodel_search_traces()`工具输出中获得
             - domain,entity_set_name: `umodel_search_entity_set(search_text="apm")`
             - trace_set_domain,trace_set_name: `umodel_list_data_set(data_set_types="trace_set")`返回domain/name
+
+            ## 输出字段说明
+            - duration_ms: span总耗时（毫秒）
+            - exclusive_duration_ms: span独占耗时（毫秒），即排除子span后的实际执行时间
             """
             # 校验 trace_set_domain 和 trace_set_name 是否存在
             self._validate_data_set_exists(
@@ -501,9 +506,23 @@ class PaasDataToolkit:
             quoted_filters = [f"traceId='{id}'" for id in parts]
             trace_ids_param = " or ".join(quoted_filters)
 
-            # 实现基于 trace_ids 的查询逻辑
-            # 这里需要使用不同的查询方式，直接通过 trace_ids 获取详细信息
-            query = f".entity_set with(domain='{domain}', name='{entity_set_name}') | entity-call get_trace('{trace_set_domain}', '{trace_set_name}') | where {trace_ids_param} | extend duration_ms = cast(duration as double) / 1000000 | project-away duration | sort traceId desc, duration_ms desc | limit 1000"
+            # 使用 .let 语法构建多步骤查询，计算 exclusive_duration（独占耗时）
+            query = f""".let trace_data = .entity_set with(domain='{domain}', name='{entity_set_name}') | entity-call get_trace('{trace_set_domain}', '{trace_set_name}') | where {trace_ids_param} | extend duration_ms = cast(duration as double) / 1000000;
+
+.let trace_data_with_time = $trace_data
+| extend startTime=cast(startTime as bigint), duration=cast(duration as bigint)
+| extend endTime = startTime + duration
+| make-trace
+    traceId=traceId,
+    spanId=spanId,
+    parentSpanId=parentSpanId,
+    statusCode=statusCode,
+    startTime=startTime,
+    endTime=endTime | extend span_list_with_exclusive = trace_exclusive_duration(traceRow.traceId, traceRow.spanList)
+| extend span_id = span_list_with_exclusive.span_id, span_index = span_list_with_exclusive.span_index, exclusive_duration = span_list_with_exclusive.exclusive_duration
+| extend __trace_id__ = traceRow.traceId | project __trace_id__, span_id, exclusive_duration | unnest | extend exclusive_duration_ms = cast(exclusive_duration as double) / 1000000;
+
+$trace_data | join $trace_data_with_time on $trace_data_with_time.__trace_id__ = traceId and $trace_data_with_time.span_id = spanId | project-away duration, exclusive_duration | sort traceId desc, exclusive_duration_ms desc, duration_ms desc | limit 1000"""
             return execute_cms_query_with_context(
                 ctx, query, workspace, regionId, from_time, to_time, 1000
             )
