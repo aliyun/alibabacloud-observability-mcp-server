@@ -1,4 +1,6 @@
-from typing import Any, Dict, Optional, Union
+import math
+import re
+from typing import Any, Dict, Literal, Optional, Union
 
 from mcp.server.fastmcp import Context, FastMCP
 from pydantic import Field
@@ -57,6 +59,20 @@ class PaasDataToolkit:
                 "range", description="Query type: range or instant"
             ),
             aggregate: bool = Field(True, description="Aggregate results"),
+            analysis_mode: Literal[
+                "basic", "cluster", "forecast", "anomaly_detection"
+            ] = Field(
+                "basic",
+                description="""分析模式:
+- basic: (默认)返回原始时序数据
+- cluster: 使用K-Means对指标进行聚类分析，输出聚类索引、实体列表、采样数据及统计值
+- forecast: 基于1-5天历史数据预测未来趋势，输出预测值及置信区间
+- anomaly_detection: 使用时序分解识别异常点，输出异常列表及统计值""",
+            ),
+            forecast_duration: Optional[str] = Field(
+                None,
+                description="预测时长(仅forecast模式有效)，如'30m','1h','2d'。默认30分钟",
+            ),
             from_time: Union[str, int] = Field(
                 "now-5m", description="开始时间: Unix时间戳(秒/毫秒)或相对时间(now-5m)"
             ),
@@ -65,25 +81,48 @@ class PaasDataToolkit:
             ),
             regionId: str = Field(..., description="Region ID"),
         ) -> Dict[str, Any]:
-            """获取实体的时序指标数据，支持range/instant查询和聚合计算。
+            """获取实体的时序指标数据，支持range/instant查询、聚合计算和高级分析模式。
 
             ## 参数获取: 1)搜索实体集→ 2)列出MetricSet→ 3)获取实体ID(可选) → 4)执行查询
             - domain,entity_set_name: `umodel_search_entity_set(search_text="apm")`
             - metric_domain_name,metric: `umodel_list_data_set(data_set_types="metric_set")`返回name/fields
             - entity_ids: `umodel_get_entities()` (可选)
 
+            ## 分析模式说明
+            - **basic**: 返回原始时序数据
+            - **cluster**: 时序聚类，输出字段: __cluster_index__, __entities__, __sample_ts__, __sample_value__, __sample_value_max/min/avg__
+            - **forecast**: 时序预测，输出字段: __forecast_ts__, __forecast_value__, __forecast_lower/upper_value__, __labels__, __name__, __entity_id__
+            - **anomaly_detection**: 异常检测，输出字段: __entity_id__, __anomaly_list_, __anomaly_msg__, __value_min/max/avg__
+
             ## 示例用法
 
-            ```
-            # 获取服务的CPU使用率时序数据
+            ```python
+            # 基础查询 - 获取服务的CPU使用率时序数据
             umodel_get_metrics(
-                domain="apm",
-                entity_set_name="apm.service",
-                metric_domain_name="apm.metric.apm.operation",
-                metric="cpu_usage",
-                entity_ids="service-1,service-2",
-                query_type="range",
-                aggregate=True
+                domain="apm", entity_set_name="apm.service",
+                metric_domain_name="apm.metric.apm.operation", metric="cpu_usage",
+                entity_ids="service-1,service-2", analysis_mode="basic"
+            )
+
+            # 时序聚类 - 对多个服务的延迟指标进行聚类分析
+            umodel_get_metrics(
+                domain="apm", entity_set_name="apm.service",
+                metric_domain_name="apm.metric.apm.service", metric="avg_request_latency_seconds",
+                entity_ids="svc1,svc2,svc3", analysis_mode="cluster"
+            )
+
+            # 时序预测 - 预测未来1小时的指标趋势
+            umodel_get_metrics(
+                domain="apm", entity_set_name="apm.service",
+                metric_domain_name="apm.metric.apm.service", metric="request_count",
+                entity_ids="service-1", analysis_mode="forecast", forecast_duration="1h"
+            )
+
+            # 异常检测 - 检测指标中的异常点
+            umodel_get_metrics(
+                domain="apm", entity_set_name="apm.service",
+                metric_domain_name="apm.metric.apm.service", metric="error_rate",
+                entity_ids="service-1", analysis_mode="anomaly_detection"
             )
             ```
 
@@ -95,16 +134,17 @@ class PaasDataToolkit:
                 metric: 指标名称
                 entity_ids: 逗号分隔的实体ID列表，可选
                 query_type: 查询类型，range或instant
-                aggregate: 是否聚合结果
+                aggregate: 是否聚合结果(cluster/forecast/anomaly_detection模式强制为false)
+                analysis_mode: 分析模式，可选basic/cluster/forecast/anomaly_detection
+                forecast_duration: 预测时长，仅forecast模式有效
                 from_time: 数据查询开始时间
                 to_time: 数据查询结束时间
                 regionId: 阿里云区域ID
 
             Returns:
-                包含指标时序数据的响应对象
+                包含指标时序数据或分析结果的响应对象
             """
             # 校验 metric_domain_name 是否存在
-            # metric_domain_name 格式如 "apm.metric.apm.operation"，需要从中提取 domain 和 name
             metric_parts = metric_domain_name.split(".")
             if len(metric_parts) >= 2:
                 metric_set_domain = metric_parts[0]
@@ -128,9 +168,32 @@ class PaasDataToolkit:
             entity_ids_param = self._build_entity_ids_param(entity_ids)
             step_param = "''"  # Auto step
 
-            query = f".entity_set with(domain='{domain}', name='{entity_set_name}'{entity_ids_param}) | entity-call get_metric('{domain}', '{metric_domain_name}', '{metric}', '{query_type}', {step_param})"
+            # 计算实体数量（用于 cluster 模式）
+            entity_count = 0
+            if entity_ids and entity_ids.strip():
+                entity_count = len(
+                    [id.strip() for id in entity_ids.split(",") if id.strip()]
+                )
+
+            # 根据分析模式构建查询和调整时间范围
+            query, actual_from, actual_to = self._build_analysis_query(
+                domain=domain,
+                entity_set_name=entity_set_name,
+                metric_domain_name=metric_domain_name,
+                metric=metric,
+                entity_ids_param=entity_ids_param,
+                query_type=query_type,
+                step_param=step_param,
+                aggregate=aggregate,
+                analysis_mode=analysis_mode,
+                forecast_duration=forecast_duration,
+                from_time=from_time,
+                to_time=to_time,
+                entity_count=entity_count,
+            )
+
             return execute_cms_query_with_context(
-                ctx, query, workspace, regionId, from_time, to_time, 1000
+                ctx, query, workspace, regionId, actual_from, actual_to, 1000
             )
 
         @self.server.tool()
@@ -740,3 +803,204 @@ class PaasDataToolkit:
         parts = [id.strip() for id in entity_ids.split(",") if id.strip()]
         quoted = [f"'{id}'" for id in parts]
         return f", ids=[{','.join(quoted)}]"
+
+    def _parse_duration_to_seconds(self, duration: str) -> int:
+        """解析时长字符串为秒数，支持 30m, 1h, 2d, 1w 等格式"""
+        if not duration:
+            return 0
+
+        duration = duration.strip()
+        if len(duration) < 2:
+            return 0
+
+        unit = duration[-1].lower()
+        try:
+            value = int(duration[:-1])
+        except ValueError:
+            return 0
+
+        multipliers = {
+            "m": 60,
+            "h": 3600,
+            "d": 86400,
+            "w": 604800,
+        }
+        return value * multipliers.get(unit, 1)
+
+    def _calculate_time_range(
+        self,
+        from_time: Union[str, int],
+        to_time: Union[str, int],
+        min_duration_days: int,
+        max_duration_days: int,
+    ) -> tuple:
+        """根据分析模式计算调整后的时间范围
+
+        Args:
+            from_time: 原始开始时间
+            to_time: 原始结束时间
+            min_duration_days: 最小时长（天）
+            max_duration_days: 最大时长（天）
+
+        Returns:
+            (adjusted_from, adjusted_to) 调整后的时间范围
+        """
+        import time
+
+        # 解析时间为秒级时间戳
+        now = int(time.time())
+
+        def parse_time(t: Union[str, int]) -> int:
+            if isinstance(t, int):
+                # 如果是毫秒级时间戳，转换为秒
+                return t // 1000 if t > 10000000000 else t
+            if isinstance(t, str):
+                if t == "now":
+                    return now
+                # 处理 now-5m 格式
+                match = re.match(r"now-(\d+)([mhd])", t)
+                if match:
+                    value = int(match.group(1))
+                    unit = match.group(2)
+                    multipliers = {"m": 60, "h": 3600, "d": 86400}
+                    return now - value * multipliers.get(unit, 1)
+            return now
+
+        from_ts = parse_time(from_time)
+        to_ts = parse_time(to_time)
+
+        current_duration = to_ts - from_ts
+        min_duration = min_duration_days * 86400
+        max_duration = max_duration_days * 86400
+
+        # 将时间范围限制在 [min_duration, max_duration] 区间内
+        final_duration = current_duration
+        if final_duration < min_duration:
+            final_duration = min_duration
+        if final_duration > max_duration:
+            final_duration = max_duration
+
+        return to_ts - final_duration, to_ts
+
+    def _build_analysis_query(
+        self,
+        domain: str,
+        entity_set_name: str,
+        metric_domain_name: str,
+        metric: str,
+        entity_ids_param: str,
+        query_type: str,
+        step_param: str,
+        aggregate: bool,
+        analysis_mode: str,
+        forecast_duration: Optional[str],
+        from_time: Union[str, int],
+        to_time: Union[str, int],
+        entity_count: int,
+    ) -> tuple:
+        """根据分析模式构建查询语句和时间范围
+
+        Returns:
+            (query, from_time, to_time) 查询语句和调整后的时间范围
+        """
+        import time
+
+        now = int(time.time())
+
+        # 解析原始时间范围
+        def parse_time(t: Union[str, int]) -> int:
+            if isinstance(t, int):
+                return t // 1000 if t > 10000000000 else t
+            if isinstance(t, str):
+                if t == "now":
+                    return now
+                match = re.match(r"now-(\d+)([mhd])", t)
+                if match:
+                    value = int(match.group(1))
+                    unit = match.group(2)
+                    multipliers = {"m": 60, "h": 3600, "d": 86400}
+                    return now - value * multipliers.get(unit, 1)
+            return now
+
+        from_ts = parse_time(from_time)
+        to_ts = parse_time(to_time)
+
+        # basic 模式：返回原始查询
+        if analysis_mode == "basic":
+            query = f".entity_set with(domain='{domain}', name='{entity_set_name}'{entity_ids_param}) | entity-call get_metric('{domain}', '{metric_domain_name}', '{metric}', '{query_type}', {step_param})"
+            return query, from_time, to_time
+
+        # cluster 模式：时序聚类
+        if analysis_mode == "cluster":
+            # 计算聚类数：nClusters = ceil(entityCount / 2)，最少 2，最多 7
+            n_clusters = max(2, min(7, math.ceil(entity_count / 2))) if entity_count > 0 else 2
+
+            base_query = f".entity_set with(domain='{domain}', name='{entity_set_name}'{entity_ids_param}) | entity-call get_metric('{domain}', '{metric_domain_name}', '{metric}', '{query_type}', {step_param}, aggregate=false)"
+            query = f"""{base_query}
+| stats __entity_id_array__ = array_agg(__entity_id__), __labels_array__ = array_agg(__labels__), ts_array = array_agg(__ts__), ds_array = array_agg(__value__)
+| extend ret = cluster(ds_array, 'kmeans', '{{"n_clusters":"{n_clusters}"}}')
+| extend __cluster_index__ = ret.assignments, error_msg = ret.error_msg, __entity_id__ = __entity_id_array__, __labels__ = __labels_array__, __value__ = ds_array, __ts__ = ts_array
+| project __entity_id__, __labels__, __ts__, __value__, __cluster_index__
+| unnest
+| stats cnt = count(1), __entities__ = array_agg(__entity_id__), __labels_agg__ = array_agg(__ts__), __value_agg__ = array_agg(__value__) by __cluster_index__
+| extend __sample_value__ = __value_agg__[1], __sample_ts__ = __labels_agg__[1]
+| extend __sample_value_min__ = array_min(__sample_value__), __sample_value_max__ = array_max(__sample_value__), __sample_value_avg__ = reduce(__sample_value__, 0.0, (s, x) -> s + x, s -> s) / cast(cardinality(__sample_value__) as double)
+| project __cluster_index__, __entities__, __sample_ts__, __sample_value__, __sample_value_max__, __sample_value_min__, __sample_value_avg__"""
+            return query, from_time, to_time
+
+        # forecast 模式：时序预测
+        if analysis_mode == "forecast":
+            # 调整时间范围：1-5 天
+            adjusted_from, adjusted_to = self._calculate_time_range(
+                from_time, to_time, min_duration_days=1, max_duration_days=5
+            )
+            learning_duration = adjusted_to - adjusted_from
+
+            # 解析预测时长，默认 30 分钟
+            forecast_dur = (
+                self._parse_duration_to_seconds(forecast_duration)
+                if forecast_duration
+                else 1800
+            )
+            if forecast_dur <= 0:
+                forecast_dur = 1800
+
+            # 计算预测点数
+            forecast_points = max(3, int(forecast_dur * 200 / learning_duration))
+
+            base_query = f".entity_set with(domain='{domain}', name='{entity_set_name}'{entity_ids_param}) | entity-call get_metric('{domain}', '{metric_domain_name}', '{metric}', '{query_type}', {step_param}, aggregate=false)"
+            query = f"""{base_query}
+| extend r = series_forecast(__value__, {forecast_points})
+| extend __forecast_rst_m__ = zip(r.time_series, r.forecast_metric_series, r.forecast_metric_lower_series, r.forecast_metric_upper_series), __forecast_msg__ = r.error_msg
+| extend __forecast_rst__ = slice(__forecast_rst_m__, cardinality(__forecast_rst_m__) - {forecast_points} + 1, {forecast_points})
+| project __labels__, __name__, __ts__, __value__, __forecast_rst__, __forecast_msg__, __entity_id__
+| extend __forecast_ts__ = transform(__forecast_rst__, x->x.field0), __forecast_value__ = transform(__forecast_rst__, x->x.field1), __forecast_lower_value__ = transform(__forecast_rst__, x->x.field2), __forecast_upper_value__ = transform(__forecast_rst__, x->x.field3)
+| project __labels__, __name__, __entity_id__, __forecast_ts__, __forecast_value__, __forecast_lower_value__, __forecast_upper_value__"""
+            return query, adjusted_from, adjusted_to
+
+        # anomaly_detection 模式：异常检测
+        if analysis_mode == "anomaly_detection":
+            # 调整时间范围：1-3 天
+            adjusted_from, adjusted_to = self._calculate_time_range(
+                from_time, to_time, min_duration_days=1, max_duration_days=3
+            )
+            # 转换为纳秒级时间戳
+            start_time_ns = adjusted_from * 1_000_000_000
+
+            base_query = f".entity_set with(domain='{domain}', name='{entity_set_name}'{entity_ids_param}) | entity-call get_metric('{domain}', '{metric_domain_name}', '{metric}', '{query_type}', {step_param}, aggregate=false)"
+            query = f"""{base_query}
+| extend slice_index = find_first_index(__ts__, x -> x > {start_time_ns})
+| extend len = cardinality(__ts__)
+| extend r = series_decompose_anomalies(__value__)
+| extend anomaly_b = r.anomalies_score_series, anomaly_type = r.anomalies_type_series, __anomaly_msg__ = r.error_msg
+| extend x = zip(anomaly_b, __ts__, anomaly_type, __value__)
+| extend __anomaly_rst__ = filter(x, x-> x.field0 > 0 and x.field1 >= {start_time_ns})
+| extend __anomaly_list_ = transform(__anomaly_rst__, x-> map(ARRAY['anomary_time', 'anomary_type', 'value'], ARRAY[cast(x.field1 as varchar), x.field2, cast(x.field3 as varchar)]))
+| extend __detection_value__ = slice(__value__, slice_index, len - slice_index)
+| extend __value_min__ = array_min(__detection_value__), __value_max__ = array_max(__detection_value__), __value_avg__ = reduce(__detection_value__, 0.0, (s, x) -> s + x, s -> s) / cast(len as double)
+| project __entity_id__, __anomaly_list_, __anomaly_msg__, __value_min__, __value_max__, __value_avg__"""
+            return query, adjusted_from, adjusted_to
+
+        # 未知模式，回退到 basic
+        query = f".entity_set with(domain='{domain}', name='{entity_set_name}'{entity_ids_param}) | entity-call get_metric('{domain}', '{metric_domain_name}', '{metric}', '{query_type}', {step_param})"
+        return query, from_time, to_time

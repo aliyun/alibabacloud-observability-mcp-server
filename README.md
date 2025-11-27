@@ -66,7 +66,7 @@ Observable MCP Server 现已支持日志服务 SLS、应用实时监控服务 AR
 ##### 数据查询工具 (data)
 | 工具名称 | 用途 | 关键参数 | 最佳实践 |
 |---------|------|---------|---------|  
-| `umodel_get_metrics` | 获取实体的时序指标数据 | `workspace`：工作空间名称（必需）<br>`domain`：实体域（必需）<br>`entity_set_name`：实体类型（必需）<br>`metric_domain_name`：指标域名称（必需）<br>`metric`：指标名称（必需）<br>`regionId`：阿里云区域ID（必需） | - 支持range/instant查询<br>- 可指定时间范围和聚合方式 |
+| `umodel_get_metrics` | 获取实体的时序指标数据，支持高级分析模式 | `workspace`：工作空间名称（必需）<br>`domain`：实体域（必需）<br>`entity_set_name`：实体类型（必需）<br>`metric_domain_name`：指标域名称（必需）<br>`metric`：指标名称（必需）<br>`analysis_mode`：分析模式（可选，默认basic）<br>`forecast_duration`：预测时长（可选）<br>`regionId`：阿里云区域ID（必需） | - 支持range/instant查询<br>- **basic**: 原始时序数据<br>- **cluster**: K-Means聚类分析<br>- **forecast**: 时序预测（1-5天学习）<br>- **anomaly_detection**: 异常检测（1-3天学习） |
 | `umodel_get_golden_metrics` | 获取黄金指标数据 | `workspace`：工作空间名称（必需）<br>`domain`：实体域（必需）<br>`entity_set_name`：实体类型（必需）<br>`regionId`：阿里云区域ID（必需） | - 快速获取关键性能指标<br>- 包含延迟、吞吐量、错误率等 |
 | `umodel_get_relation_metrics` | 获取实体间关系级别的指标 | `workspace`：工作空间名称（必需）<br>`src_domain`：源实体域（必需）<br>`src_entity_set_name`：源实体类型（必需）<br>`src_entity_ids`：源实体ID列表（必需）<br>`relation_type`：关系类型（必需）<br>`direction`：关系方向（必需）<br>`regionId`：阿里云区域ID（必需） | - 分析微服务调用关系<br>- 支持服务依赖分析 |
 | `umodel_get_logs` | 获取实体相关的日志数据 | `workspace`：工作空间名称（必需）<br>`domain`：实体域（必需）<br>`entity_set_name`：实体类型（必需）<br>`log_set_name`：日志集名称（必需）<br>`log_set_domain`：日志集域（必需）<br>`regionId`：阿里云区域ID（必需） | - 用于故障诊断<br>- 支持性能分析 |
@@ -307,7 +307,7 @@ python -m mcp_server_aliyun_observability
 | `list_workspace` / `list_domains` / `introduction` | 工作空间/域发现与服务自述。 |
 | `umodel_get_entities` / `umodel_get_neighbor_entities` / `umodel_search_entities` | 实体发现与邻居查询。 |
 | `umodel_list_data_set` / `umodel_search_entity_set` / `umodel_list_related_entity_set` | 数据集枚举、实体集搜索及关联关系发现。 |
-| `umodel_get_metrics` / `umodel_get_golden_metrics` / `umodel_get_relation_metrics` | 指标与关系级指标查询。 |
+| `umodel_get_metrics` / `umodel_get_golden_metrics` / `umodel_get_relation_metrics` | 指标与关系级指标查询。`umodel_get_metrics` 支持高级分析模式：cluster(聚类)、forecast(预测)、anomaly_detection(异常检测)。 |
 | `umodel_get_logs` / `umodel_get_events` | 日志、事件查询。 |
 | `umodel_get_traces` / `umodel_search_traces` | 链路明细与搜索。 |
 | `umodel_get_profiles` | 性能剖析数据查询。 |
