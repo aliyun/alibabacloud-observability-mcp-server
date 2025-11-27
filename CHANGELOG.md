@@ -9,10 +9,14 @@
   - **forecast (时序预测)**: 基于历史数据预测未来指标趋势，支持自定义预测时长
     - 输出: `__forecast_ts__`, `__forecast_value__`, `__forecast_lower/upper_value__`, `__labels__`, `__name__`, `__entity_id__`
     - 自动调整学习时间范围 (1-5天)
-    - 新增 `forecast_duration` 参数，支持 `30m`, `1h`, `2d` 等格式
+    - 新增 `forecast_duration` 参数，支持 `30m`, `1h`, `2d` 等格式（默认30分钟，最大1天）
   - **anomaly_detection (异常检测)**: 使用时序分解算法识别指标中的异常点
     - 输出: `__entity_id__`, `__anomaly_list_`, `__anomaly_msg__`, `__value_min/max/avg__`
     - 自动调整学习时间范围 (1-3天)
+
+- `umodel_get_traces` 工具新增独占耗时计算
+  - 新增输出字段 `exclusive_duration_ms`：span 独占耗时（排除子 span 后的实际执行时间）
+  - 结果按独占耗时降序排序，便于快速定位性能瓶颈
 
 ## 1.0.0 (重建)
 - `master` 已重建为 `1.x.x` 最新内容的单提交快照，旧 `master` 历史迁移至 `0.3.x` 分支。
