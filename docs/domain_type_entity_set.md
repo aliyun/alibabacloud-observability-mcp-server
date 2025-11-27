@@ -1,4 +1,0 @@
-需要你统一：把toolkits下面的domain_type 的概念成为entity_set
-即domain_type一律成为entity_set,工具和描述里面需要修改下定义
-
-另外获取一个域的entity_set使用 umodel_search_entity_set，这样就不需要list_entity_types这个了
