@@ -66,12 +66,12 @@ Observable MCP Server 现已支持日志服务 SLS、应用实时监控服务 AR
 ##### 数据查询工具 (data)
 | 工具名称 | 用途 | 关键参数 | 最佳实践 |
 |---------|------|---------|---------|  
-| `umodel_get_metrics` | 获取实体的时序指标数据 | `workspace`：工作空间名称（必需）<br>`domain`：实体域（必需）<br>`entity_set_name`：实体类型（必需）<br>`metric_domain_name`：指标域名称（必需）<br>`metric`：指标名称（必需）<br>`regionId`：阿里云区域ID（必需） | - 支持range/instant查询<br>- 可指定时间范围和聚合方式 |
+| `umodel_get_metrics` | 获取实体的时序指标数据，支持高级分析模式 | `workspace`：工作空间名称（必需）<br>`domain`：实体域（必需）<br>`entity_set_name`：实体类型（必需）<br>`metric_domain_name`：指标域名称（必需）<br>`metric`：指标名称（必需）<br>`analysis_mode`：分析模式（可选，默认basic）<br>`forecast_duration`：预测时长（可选）<br>`regionId`：阿里云区域ID（必需） | - 支持range/instant查询<br>- **basic**: 原始时序数据<br>- **cluster**: K-Means聚类分析<br>- **forecast**: 时序预测（1-5天学习）<br>- **anomaly_detection**: 异常检测（1-3天学习） |
 | `umodel_get_golden_metrics` | 获取黄金指标数据 | `workspace`：工作空间名称（必需）<br>`domain`：实体域（必需）<br>`entity_set_name`：实体类型（必需）<br>`regionId`：阿里云区域ID（必需） | - 快速获取关键性能指标<br>- 包含延迟、吞吐量、错误率等 |
 | `umodel_get_relation_metrics` | 获取实体间关系级别的指标 | `workspace`：工作空间名称（必需）<br>`src_domain`：源实体域（必需）<br>`src_entity_set_name`：源实体类型（必需）<br>`src_entity_ids`：源实体ID列表（必需）<br>`relation_type`：关系类型（必需）<br>`direction`：关系方向（必需）<br>`regionId`：阿里云区域ID（必需） | - 分析微服务调用关系<br>- 支持服务依赖分析 |
 | `umodel_get_logs` | 获取实体相关的日志数据 | `workspace`：工作空间名称（必需）<br>`domain`：实体域（必需）<br>`entity_set_name`：实体类型（必需）<br>`log_set_name`：日志集名称（必需）<br>`log_set_domain`：日志集域（必需）<br>`regionId`：阿里云区域ID（必需） | - 用于故障诊断<br>- 支持性能分析 |
 | `umodel_get_events` | 获取实体的事件数据 | `workspace`：工作空间名称（必需）<br>`domain`：实体域（必需）<br>`entity_set_name`：实体类型（必需）<br>`event_set_domain`：事件集域（必需）<br>`event_set_name`：事件集名称（必需）<br>`regionId`：阿里云区域ID（必需） | - 用于异常事件分析<br>- 支持告警事件追踪 |
-| `umodel_get_traces` | 获取指定trace ID的详细数据 | `workspace`：工作空间名称（必需）<br>`domain`：实体域（必需）<br>`entity_set_name`：实体类型（必需）<br>`trace_set_domain`：链路集域（必需）<br>`trace_set_name`：链路集名称（必需）<br>`trace_ids`：链路ID列表（必需）<br>`regionId`：阿里云区域ID（必需） | - 深入分析调用链<br>- 包含完整span信息 |
+| `umodel_get_traces` | 获取指定trace ID的详细数据，包含独占耗时 | `workspace`：工作空间名称（必需）<br>`domain`：实体域（必需）<br>`entity_set_name`：实体类型（必需）<br>`trace_set_domain`：链路集域（必需）<br>`trace_set_name`：链路集名称（必需）<br>`trace_ids`：链路ID列表（必需）<br>`regionId`：阿里云区域ID（必需） | - 深入分析调用链<br>- 包含 `exclusive_duration_ms` 独占耗时<br>- 按独占耗时排序定位瓶颈 |
 | `umodel_search_traces` | 基于条件搜索调用链 | `workspace`：工作空间名称（必需）<br>`domain`：实体域（必需）<br>`entity_set_name`：实体类型（必需）<br>`trace_set_domain`：链路集域（必需）<br>`trace_set_name`：链路集名称（必需）<br>`regionId`：阿里云区域ID（必需） | - 支持按持续时间、错误状态过滤<br>- 返回链路摘要信息 |
 | `umodel_get_profiles` | 获取性能剖析数据 | `workspace`：工作空间名称（必需）<br>`domain`：实体域（必需）<br>`entity_set_name`：实体类型（必需）<br>`profile_set_domain`：性能剖析集域（必需）<br>`profile_set_name`：性能剖析集名称（必需）<br>`entity_ids`：实体ID列表（必需）<br>`regionId`：阿里云区域ID（必需） | - 用于性能瓶颈分析<br>- 包含CPU、内存使用情况 |
 
@@ -307,7 +307,7 @@ python -m mcp_server_aliyun_observability
 | `list_workspace` / `list_domains` / `introduction` | 工作空间/域发现与服务自述。 |
 | `umodel_get_entities` / `umodel_get_neighbor_entities` / `umodel_search_entities` | 实体发现与邻居查询。 |
 | `umodel_list_data_set` / `umodel_search_entity_set` / `umodel_list_related_entity_set` | 数据集枚举、实体集搜索及关联关系发现。 |
-| `umodel_get_metrics` / `umodel_get_golden_metrics` / `umodel_get_relation_metrics` | 指标与关系级指标查询。 |
+| `umodel_get_metrics` / `umodel_get_golden_metrics` / `umodel_get_relation_metrics` | 指标与关系级指标查询。`umodel_get_metrics` 支持高级分析模式：cluster(聚类)、forecast(预测)、anomaly_detection(异常检测)。 |
 | `umodel_get_logs` / `umodel_get_events` | 日志、事件查询。 |
 | `umodel_get_traces` / `umodel_search_traces` | 链路明细与搜索。 |
 | `umodel_get_profiles` | 性能剖析数据查询。 |
