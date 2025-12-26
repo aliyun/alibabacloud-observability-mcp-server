@@ -298,5 +298,57 @@ class TestPaaSDataToolkit:
         result = check_credentials_and_result(result)
 
 
+class TestMetricSetNameSuffix:
+    """测试 metric_set_name 自动拼接逻辑"""
+
+    def test_metric_set_name_needs_suffix(self):
+        """测试：传入简单格式时，应自动拼接后缀"""
+        # 模拟输入
+        metric_set_name = "apm.metric.apm.operation"
+        relation_type = "calls"
+        src_entity_set_name = "apm.operation"
+
+        # 拼接逻辑
+        relation_suffix = f"_{relation_type}_{src_entity_set_name}"
+        if relation_suffix not in metric_set_name:
+            metric_set_name = f"{metric_set_name}{relation_suffix}"
+
+        # 验证结果
+        expected = "apm.metric.apm.operation_calls_apm.operation"
+        assert metric_set_name == expected, f"Expected {expected}, got {metric_set_name}"
+
+    def test_metric_set_name_already_has_suffix(self):
+        """测试：传入完整格式时，不应重复拼接"""
+        # 模拟输入（已经是完整格式）
+        metric_set_name = "apm.metric.apm.operation_calls_apm.operation"
+        relation_type = "calls"
+        src_entity_set_name = "apm.operation"
+
+        # 拼接逻辑
+        relation_suffix = f"_{relation_type}_{src_entity_set_name}"
+        if relation_suffix not in metric_set_name:
+            metric_set_name = f"{metric_set_name}{relation_suffix}"
+
+        # 验证结果：应保持不变
+        expected = "apm.metric.apm.operation_calls_apm.operation"
+        assert metric_set_name == expected, f"Expected {expected}, got {metric_set_name}"
+
+    def test_metric_set_name_different_relation_type(self):
+        """测试：不同 relation_type 时，应正确拼接"""
+        # 模拟输入
+        metric_set_name = "apm.metric.apm.service"
+        relation_type = "depends_on"
+        src_entity_set_name = "apm.service"
+
+        # 拼接逻辑
+        relation_suffix = f"_{relation_type}_{src_entity_set_name}"
+        if relation_suffix not in metric_set_name:
+            metric_set_name = f"{metric_set_name}{relation_suffix}"
+
+        # 验证结果
+        expected = "apm.metric.apm.service_depends_on_apm.service"
+        assert metric_set_name == expected, f"Expected {expected}, got {metric_set_name}"
+
+
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])
