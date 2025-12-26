@@ -1,5 +1,12 @@
 # 版本更新
 
+## 1.0.3
+### 修复
+- `umodel_get_relation_metrics` 工具修复 `get_relation_metric` 查询参数错误
+  - 修复前两个参数错误传入空值的问题，现在正确传入 `src_domain` 和 `src_entity_set_name`
+  - 新增 `metric_set_name` 自动拼接逻辑：自动拼接 `_{relation_type}_{src_entity_set_name}` 后缀
+  - 校验逻辑调整到拼接之前，确保校验用户传入的原始值
+
 ## 1.0.2
 ### 新功能
 - `umodel_get_metrics` 工具新增高级分析模式支持

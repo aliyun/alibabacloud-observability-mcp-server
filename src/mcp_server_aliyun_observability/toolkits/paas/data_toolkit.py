@@ -283,19 +283,6 @@ class PaasDataToolkit:
             # 构建源实体 IDs 参数
             if not src_entity_ids or not src_entity_ids.strip():
                 raise ValueError("src_entity_ids is required and cannot be empty")
-
-            self._validate_data_set_exists(
-                ctx,
-                workspace,
-                regionId,
-                src_domain,
-                src_entity_set_name,
-                "metric_set",
-                metric_set_domain,
-                metric_set_name,
-                metric,
-            )
-
             src_parts = [id.strip() for id in src_entity_ids.split(",") if id.strip()]
             src_quoted = [f"'{id}'" for id in src_parts]
             src_entity_ids_param = f"[{','.join(src_quoted)}]"
@@ -315,8 +302,27 @@ class PaasDataToolkit:
             else:
                 dest_entity_ids_param = "[]"
 
+            # 先校验用户传入的原始 metric_set_name 是否存在（在拼接之前）
+            self._validate_data_set_exists(
+                ctx,
+                workspace,
+                regionId,
+                src_domain,
+                src_entity_set_name,
+                "metric_set",
+                metric_set_domain,
+                metric_set_name,
+                metric,
+            )
+
+            # 自动拼接 metric_set_name：如果未包含 relation_type，则拼接为 {name}_{relation}_{src_entity}
+            relation_suffix = f"_{relation_type}_{src_entity_set_name}"
+            if relation_suffix not in metric_set_name:
+                metric_set_name = f"{metric_set_name}{relation_suffix}"
+
             # 根据Go实现构建正确的查询
-            query = f".entity_set with(domain='{src_domain}', name='{src_entity_set_name}', ids={src_entity_ids_param}) | entity-call get_relation_metric({dest_domain_param}, {dest_name_param}, {dest_entity_ids_param}, '', '{relation_type}', '{direction}', '{metric_set_domain}', '{metric_set_name}', '{metric}', '{query_type}', '', [])"
+            # get_relation_metric 前两个参数是 src_domain 和 src_entity_set_name
+            query = f".entity_set with(domain='{src_domain}', name='{src_entity_set_name}', ids={src_entity_ids_param}) | entity-call get_relation_metric('{src_domain}', '{src_entity_set_name}', {dest_entity_ids_param}, {dest_domain_param}, '{relation_type}', '{direction}', '{metric_set_domain}', '{metric_set_name}', '{metric}', '{query_type}', {dest_name_param}, [])"
 
             return execute_cms_query_with_context(
                 ctx, query, workspace, regionId, from_time, to_time, 1000
