@@ -224,6 +224,15 @@ class IaaSToolkit:
                 description="to time,support unix timestamp or relative time like 'now'",
             ),
             limit: int = Field(10, description="limit,max is 100", ge=1, le=100),
+            offset: int = Field(
+                0,
+                description="query start offset for pagination, default is 0. Only effective when query is a search statement (not SQL analytics)",
+                ge=0,
+            ),
+            reverse: bool = Field(
+                False,
+                description="whether to return logs in descending order by timestamp, default is False. Only effective when query is a search statement",
+            ),
             regionId: str = Field(
                 default=...,
                 description="aliyun region id,region id format like 'xx-xxx',like 'cn-hangzhou'",
@@ -268,6 +277,8 @@ class IaaSToolkit:
                 from_time: 查询开始时间，支持时间戳或相对时间
                 to_time: 查询结束时间，支持时间戳或相对时间
                 limit: 返回结果的最大数量，范围1-100，默认10
+                offset: 查询开始行，用于分页查询，默认0。仅在query为纯查询语句时有效
+                reverse: 是否按日志时间戳降序返回，默认False。仅在query为纯查询语句时有效
                 regionId: 阿里云区域ID
 
             Returns:
@@ -290,6 +301,8 @@ class IaaSToolkit:
                 from_=from_timestamp,
                 to=to_timestamp,
                 line=limit,
+                offset=offset,
+                reverse=reverse,
             )
 
             runtime: util_models.RuntimeOptions = util_models.RuntimeOptions()

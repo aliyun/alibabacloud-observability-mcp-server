@@ -1,3 +1,7 @@
+"""PaaS Data Toolkit 测试用例
+
+注意：这些测试需要真实的阿里云凭证，属于集成测试。
+"""
 import os
 
 import dotenv
@@ -13,6 +17,15 @@ from mcp_server_aliyun_observability.toolkits.shared.toolkit import (
 from mcp_server_aliyun_observability.utils import CMSClientWrapper, CredentialWrapper
 
 dotenv.load_dotenv()
+
+# 标记所有测试为集成测试（需要真实阿里云凭证）
+pytestmark = [
+    pytest.mark.integration,
+    pytest.mark.skipif(
+        not os.getenv("ALIBABA_CLOUD_ACCESS_KEY_ID") and not os.getenv("ALIYUN_ACCESS_KEY_ID"),
+        reason="需要设置 ALIBABA_CLOUD_ACCESS_KEY_ID 或 ALIYUN_ACCESS_KEY_ID 环境变量才能运行"
+    ),
+]
 
 import logging
 
