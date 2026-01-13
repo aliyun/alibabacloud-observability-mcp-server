@@ -1,6 +1,6 @@
 [project]
 name = "mcp-server-aliyun-observability"
-version = "1.0.4"
+version = "1.0.5"
 description = "aliyun observability mcp server"
 readme = "README.md"
 requires-python = ">=3.10"
