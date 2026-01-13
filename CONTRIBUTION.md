@@ -153,12 +153,136 @@ Returns:
 ```
 * 可以使用 LLM 生成初步描述，然后根据需要进行调整完善
 
-### 如何测试
+## 测试指引
 
-#### [阶段1] 不基于 LLM，使用测试用例测试
+每次 PR 提交前，必须完成以下测试工作以确保代码质量。
 
-1. 补充下测试用例，在 tests目录下,可有参考 test_sls_toolkit.py 的实现
-2. 使用 `pytest` 运行测试用例，保证功能是正确可用
+### 测试分类
 
-#### [阶段2] 基于 LLM，使用测试用例测试
-1. 通过 Cursor,Client 等客户端来测试和大模型集成后的最终效果
+| 类型 | 标记 | 说明 | 是否需要凭证 |
+|------|------|------|-------------|
+| 单元测试 | 无标记 | 不依赖外部服务，测试纯逻辑 | ❌ |
+| 集成测试 | `@pytest.mark.integration` | 需要真实阿里云环境 | ✅ |
+
+### 环境准备
+
+```bash
+# 1. 创建虚拟环境
+python3 -m venv .venv
+source .venv/bin/activate
+
+# 2. 安装依赖
+pip install -e ".[dev]"
+
+# 3. 配置凭证（集成测试需要）
+export ALIBABA_CLOUD_ACCESS_KEY_ID="your_access_key_id"
+export ALIBABA_CLOUD_ACCESS_KEY_SECRET="your_access_key_secret"
+export SLS_TEST_REGION="cn-hangzhou"
+```
+
+### 测试命令
+
+```bash
+# 仅运行单元测试（不需要凭证，CI 必须通过）
+pytest tests/ -m "not integration" -v
+
+# 运行集成测试（需要凭证）
+pytest tests/ -m "integration" -v -s
+
+# 运行全部测试
+pytest tests/ -v
+
+# 运行特定文件的测试
+pytest tests/mcp_server_aliyun_observability/toolkits/iaas/test_iaas_integration.py -v -s
+
+# 生成覆盖率报告
+pytest tests/ -m "not integration" --cov=src/mcp_server_aliyun_observability --cov-report=html
+```
+
+### PR 提交检查清单
+
+- [ ] **单元测试通过**: `pytest tests/ -m "not integration"` 全部通过
+- [ ] **集成测试通过**: 涉及 API 调用的改动需运行集成测试验证
+- [ ] **新增测试用例**: 新功能需补充对应的测试用例
+- [ ] **向后兼容**: 确保改动不破坏现有功能
+
+### 编写测试用例
+
+#### 单元测试示例
+
+```python
+# tests/test_xxx.py
+import pytest
+
+def test_my_function():
+    """测试纯逻辑功能"""
+    result = my_function(input_data)
+    assert result == expected_output
+```
+
+#### 集成测试示例
+
+```python
+# tests/test_xxx_integration.py
+import os
+import pytest
+
+# 标记为集成测试，无凭证时自动跳过
+pytestmark = [
+    pytest.mark.integration,
+    pytest.mark.skipif(
+        not os.getenv("ALIBABA_CLOUD_ACCESS_KEY_ID"),
+        reason="需要设置 ALIBABA_CLOUD_ACCESS_KEY_ID 环境变量"
+    ),
+]
+
+class TestMyFeatureIntegration:
+    @pytest.mark.asyncio
+    async def test_real_api_call(self, real_context):
+        """测试真实 API 调用"""
+        result = await my_tool.run({...}, context=real_context)
+        assert result["message"] == "success"
+```
+
+#### 测试环境 Fixture（setup/teardown）
+
+对于需要创建真实资源的测试，使用 `conftest.py` 中的 fixture 实现资源的自动创建和清理：
+
+```python
+# tests/.../conftest.py
+@pytest.fixture(scope="module")
+def test_resource():
+    """测试资源 fixture"""
+    # Setup: 创建资源
+    resource = create_resource()
+    yield resource
+    # Teardown: 清理资源
+    delete_resource(resource)
+```
+
+### 测试目录结构
+
+```
+tests/
+├── mcp_server_aliyun_observability/
+│   └── toolkits/
+│       ├── iaas/
+│       │   ├── conftest.py           # 集成测试 fixture（资源创建/销毁）
+│       │   ├── test_iaas_toolkit.py  # 工具包集成测试
+│       │   └── test_iaas_integration.py  # API 集成测试
+│       └── paas/
+│           ├── test_paas_data_toolkit.py
+│           └── ...
+└── test_settings_endpoints.py        # 单元测试（无需凭证）
+```
+
+### 阶段性测试
+
+#### [阶段1] 自动化测试
+1. 编写/更新测试用例
+2. 运行 `pytest tests/ -m "not integration"` 确保单元测试通过
+3. 运行集成测试验证真实 API 调用
+
+#### [阶段2] 端到端测试
+1. 通过 Cursor、Cherry Studio 等客户端测试与大模型集成后的效果
+2. 验证工具在实际对话场景中的表现

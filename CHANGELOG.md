@@ -1,5 +1,28 @@
 # 版本更新
 
+## 1.0.5 (2026-01-13)
+### 新功能
+- `sls_execute_sql` 工具新增分页查询支持
+  - 新增 `offset` 参数：查询开始行，用于分页查询，默认 0
+  - 新增 `reverse` 参数：是否按日志时间戳降序返回，默认 False
+  - 支持获取超过 100 条的完整日志数据（通过多次分页调用）
+  - 完全向后兼容，新参数均为可选且有默认值
+
+### 测试改进
+- 新增 SLS 集成测试框架，支持测试环境自动创建和销毁
+  - 新增 `conftest.py`：自动创建/销毁 Project、Logstore、索引和测试数据
+  - 新增 `test_iaas_integration.py`：分页查询、排序、向后兼容性等集成测试
+- 为所有需要真实凭证的测试添加 `@pytest.mark.integration` 标记
+  - 无凭证环境下自动跳过集成测试，不影响 CI 流水线
+- `pytest.ini` 新增 `integration` marker 定义
+
+### 文档更新
+- 完善 `CONTRIBUTION.md` 测试指引
+  - 新增测试分类说明（单元测试 vs 集成测试）
+  - 新增环境准备和测试命令文档
+  - 新增 PR 提交检查清单
+  - 新增测试用例编写示例和目录结构说明
+
 ## 1.0.4 (2025-12-26)
 ### 修复
 - `umodel_get_relation_metrics` 工具修复 `get_relation_metric` 查询参数错误
