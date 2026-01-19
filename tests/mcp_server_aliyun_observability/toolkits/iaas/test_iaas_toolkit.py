@@ -9,6 +9,7 @@
 注意：这些测试需要真实的阿里云凭证，属于集成测试。
 """
 import os
+import json
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import dotenv
@@ -33,17 +34,24 @@ pytestmark = [
 ]
 
 # 测试常量
-TEST_PROJECT = "test-project"
-TEST_LOGSTORE = "test-logstore"
-TEST_REGION = "cn-hangzhou"
+TEST_PROJECT = "testdevcomb"
+TEST_LOGSTORE = "stable-v3"
+TEST_REGION = "cn-shenzhen"
 TEST_SQL_QUERY = "SELECT * FROM test_table LIMIT 10"
 TEST_PROMQL_QUERY = "up{job='prometheus'}"
 
 # log explore and log compare test data
-LOG_EXPLORE_PROJECT = "sls-ml-spl-shanghai-cloudspe"
-LOG_EXPLORE_LOGSTORE = "massive-hdfs-log"
-LOG_EXPLORE_REGION = "cn-shanghai"
+LOG_EXPLORE_PROJECT = "testdevcomb"
+LOG_EXPLORE_LOGSTORE = "stable-v3"
+LOG_EXPLORE_REGION = "cn-shenzhen"
 
+
+    # log explore and log compare test data
+LOG_EXPLORE_PROJECT1 = "testdevcomb"
+LOG_EXPLORE_LOGSTORE1 = "stable-v3"
+LOG_EXPLORE_REGION1 = "cn-shenzhen"
+SLS_CONTEXT_PACK_ID = "9DC3C950CF9A40FD-D"
+SLS_CONTEXT_PACK_META = "1|MTc2ODI0MzgzNzc0OTczMDkxNQ==|1223|383"
 @pytest.fixture
 def mock_request_context():
     # """模拟请求上下文"""
@@ -368,5 +376,31 @@ class TestIaaSToolkit:
         print (f"len(result['patterns']): {len(result['patterns'])}")
         print (result["patterns"][2])
 
+    @pytest.mark.asyncio
+    async def test_sls_get_context_logs(self, mcp_server: FastMCP, mock_request_context: Context):
+        tool = mcp_server._tool_manager.get_tool("sls_get_context_logs")
+        assert tool is not None, "sls_get_context_logs 工具未找到"
+
+        tool_input = {
+            "project": LOG_EXPLORE_PROJECT1,
+            "logStore": LOG_EXPLORE_LOGSTORE1,
+            "pack_id": SLS_CONTEXT_PACK_ID,
+            "pack_meta": SLS_CONTEXT_PACK_META,
+            "back_lines": int(os.getenv("SLS_CONTEXT_BACK_LINES", "10")),
+            "forward_lines": int(os.getenv("SLS_CONTEXT_FORWARD_LINES", "10")),
+            "regionId": LOG_EXPLORE_REGION1,
+        }
+        print("\n[sls_get_context_logs] input:")
+        print(json.dumps(tool_input, ensure_ascii=False, indent=2))
+
+        result = await tool.run(tool_input, context=mock_request_context)
+
+        print("\n[sls_get_context_logs] output:")
+        print(json.dumps(result, ensure_ascii=False, indent=2, default=str))
+
+        assert "message" in result
+        assert "data" in result
+
 if __name__ == "__main__":
-    pytest.main([__file__, "-s", "-v", "-k" "test_log_explore"])
+    # pytest.main([__file__, "-s", "-v", "-k" "test_log_explore"])
+    pytest.main([__file__, "-s", "-v", "-ktest_sls_get_context_logs"])
