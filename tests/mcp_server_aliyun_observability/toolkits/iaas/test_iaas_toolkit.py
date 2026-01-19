@@ -34,16 +34,16 @@ pytestmark = [
 ]
 
 # 测试常量
-TEST_PROJECT = "testdevcomb"
-TEST_LOGSTORE = "stable-v3"
-TEST_REGION = "cn-shenzhen"
+TEST_PROJECT = "test-project"
+TEST_LOGSTORE = "test-logstore"
+TEST_REGION = "cn-hangzhou"
 TEST_SQL_QUERY = "SELECT * FROM test_table LIMIT 10"
 TEST_PROMQL_QUERY = "up{job='prometheus'}"
 
 # log explore and log compare test data
-LOG_EXPLORE_PROJECT = "testdevcomb"
-LOG_EXPLORE_LOGSTORE = "stable-v3"
-LOG_EXPLORE_REGION = "cn-shenzhen"
+LOG_EXPLORE_PROJECT = "sls-ml-spl-shanghai-cloudspe"
+LOG_EXPLORE_LOGSTORE = "massive-hdfs-log"
+LOG_EXPLORE_REGION = "cn-shanghai"
 
 
     # log explore and log compare test data
