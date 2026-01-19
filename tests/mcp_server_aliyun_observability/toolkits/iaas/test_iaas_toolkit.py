@@ -46,7 +46,7 @@ LOG_EXPLORE_LOGSTORE = "massive-hdfs-log"
 LOG_EXPLORE_REGION = "cn-shanghai"
 
 
-    # log explore and log compare test data
+# log explore and log compare test data
 LOG_EXPLORE_PROJECT1 = "testdevcomb"
 LOG_EXPLORE_LOGSTORE1 = "stable-v3"
 LOG_EXPLORE_REGION1 = "cn-shenzhen"
