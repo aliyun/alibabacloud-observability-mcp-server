@@ -1,5 +1,17 @@
 # 版本更新
 
+## 1.0.6 (2026-01-19)
+### 新功能
+- 新增 `sls_get_context_logs` 工具：基于 `pack_id` / `pack_meta` 查询起始日志上下文（上文/下文）日志
+  - 支持 `back_lines` / `forward_lines`（0~100），且至少一个大于 0
+  - 返回结构与 SLS OpenAPI `GetContextLogs` 保持一致（包含 `total_lines/back_lines/forward_lines/progress/logs` 等）
+
+### 文档更新
+- 补充上下文日志的 pack 信息获取说明：通过 `sls_execute_sql` 查询语句追加 `|with_pack_meta` 获取 `__tag__:__pack_id__` 与 `__pack_meta__`
+
+### 测试改进
+- 新增 `sls_get_context_logs` 的真实调用测试方法（在 `test_iaas_toolkit.py` 内），并支持通过 `__main__` + 环境变量选择性运行与打印入参/出参
+
 ## 1.0.5 (2026-01-13)
 ### 新功能
 - `sls_execute_sql` 工具新增分页查询支持
