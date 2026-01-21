@@ -7,6 +7,8 @@ from alibabacloud_sls20201230.client import Client as SLSClient
 from alibabacloud_sls20201230.models import (
     CallAiToolsRequest,
     CallAiToolsResponse,
+    GetContextLogsRequest,
+    GetContextLogsResponse,
     GetHistogramsRequest,
     GetHistogramsResponse,
     GetLogsRequest,
@@ -36,6 +38,7 @@ class IaaSToolkit:
     Provides basic infrastructure tools for SLS database query operations:
     - sls_text_to_sql: Convert natural language to SQL queries
     - sls_execute_sql: Execute SQL queries against SLS
+    - sls_get_context_logs: Query context logs around an anchor log
     - cms_execute_promql: Execute PromQL queries against CMS
     - sls_execute_spl: Execute raw SPL queries
     - sls_list_projects: List SLS projects in a region
@@ -317,6 +320,99 @@ class IaaSToolkit:
             return {
                 "data": response_body,
                 "message": "success" if response_body else "No data found",
+            }
+
+        @self.server.tool()
+        @retry(
+            stop=stop_after_attempt(Config.get_retry_attempts()),
+            wait=wait_fixed(Config.RETRY_WAIT_SECONDS),
+            retry=retry_if_exception_type(Exception),
+            reraise=True,
+        )
+        @handle_tea_exception
+        def sls_get_context_logs(
+            ctx: Context,
+            project: str = Field(..., description="sls project name"),
+            logStore: str = Field(..., description="sls log store name"),
+            pack_id: str = Field(..., description="pack_id of the anchor log"),
+            pack_meta: str = Field(..., description="pack_meta of the anchor log"),
+            back_lines: int = Field(
+                10, description="lines before anchor log, range 0-100", ge=0, le=100
+            ),
+            forward_lines: int = Field(
+                10, description="lines after anchor log, range 0-100", ge=0, le=100
+            ),
+            regionId: str = Field(
+                default=...,
+                description="aliyun region id,region id format like 'xx-xxx',like 'cn-hangzhou'",
+            ),
+        ) -> Dict[str, Any]:
+            """查询指定日志前后的上下文日志。
+
+            ## 功能概述
+
+            该工具用于根据“起始日志”的 pack_id 与 pack_meta，查询该日志前（上文）后（下文）的若干条上下文日志。
+
+            说明：上下文查询的时间范围固定为起始日志的前后一天（由SLS服务端限制）。
+
+            ## 如何获取 pack_id 与 pack_meta（推荐方式）
+
+            先使用本项目的 `sls_execute_sql` 获取目标日志，并在查询语句末尾追加 `|with_pack_meta`，
+            使查询结果携带内部字段：
+            - `__pack_id__`：对应本工具的 pack_id
+            - `__pack_meta__`：对应本工具的 pack_meta
+
+            然后选定你要作为起始点的那条日志，将上述两个字段值传入本工具即可。
+
+            ## 参数说明
+
+            - back_lines / forward_lines：范围 0~100，且两者至少一个大于 0。
+
+            ## 返回结果
+
+            返回结构与SLS OpenAPI一致（包含 total_lines/back_lines/forward_lines/progress/logs 等），
+            其中 logs 内每条日志会包含：
+            - `__index_number__`：相对起始日志的位置（负数为上文，0 为起始日志，正数为下文）
+            - `__tag__:__pack_id__` 与 `__pack_meta__`：可作为下一次上下文查询的定位信息
+            """
+            if back_lines == 0 and forward_lines == 0:
+                return {
+                    "data": None,
+                    "message": "back_lines 与 forward_lines 不能同时为 0，至少一个需要大于 0",
+                }
+
+            sls_client: SLSClient = ctx.request_context.lifespan_context[
+                "sls_client"
+            ].with_region(regionId)
+
+            request: GetContextLogsRequest = GetContextLogsRequest(
+                pack_id=pack_id,
+                pack_meta=pack_meta,
+                back_lines=back_lines,
+                forward_lines=forward_lines,
+            )
+
+            runtime: util_models.RuntimeOptions = util_models.RuntimeOptions()
+            runtime.read_timeout = 60000
+            runtime.connect_timeout = 60000
+
+            response: GetContextLogsResponse = sls_client.get_context_logs_with_options(
+                project, logStore, request, headers={}, runtime=runtime
+            )
+
+            response_body: Any = response.body
+            if hasattr(response_body, "to_map"):
+                response_body = response_body.to_map()
+
+            logs: Any = None
+            if isinstance(response_body, dict):
+                logs = response_body.get("logs")
+            else:
+                logs = getattr(response_body, "logs", None)
+
+            return {
+                "data": response_body,
+                "message": "success" if logs else "No data found",
             }
 
         @self.server.tool()
@@ -696,7 +792,7 @@ class IaaSToolkit:
                 description="sls project name, must exact match, should not contain chinese characters",
             ),
             logStore: str = Field(
-                ..., 
+                ...,
                 description="sls log store name, must exact match, should not contain chinese characters"
             ),
             from_time: Union[str, int] = Field(
@@ -706,7 +802,7 @@ class IaaSToolkit:
                 "now", description="结束时间: Unix时间戳(秒/毫秒)或相对时间(now)"
             ),
             regionId: str = Field(
-                ..., 
+                ...,
                 description="Region ID"
             ),
             logField: str = Field(
@@ -751,7 +847,7 @@ class IaaSToolkit:
             Returns:
                 日志数据概览信息
             """
-            
+
             sls_client: SLSClient = ctx.request_context.lifespan_context[
                 "sls_client"
             ].with_region(regionId)
@@ -763,7 +859,7 @@ class IaaSToolkit:
 
             from_timestamp = TimeRangeParser.parse_time_expression(from_time)
             to_timestamp = TimeRangeParser.parse_time_expression(to_time)
-            
+
             # 1) get total number of log records in the specified time range
             request: GetHistogramsRequest = GetHistogramsRequest(
                 from_=from_timestamp,
@@ -771,8 +867,8 @@ class IaaSToolkit:
                 query=None if not filter_query else filter_query
             )
             response: GetHistogramsResponse = sls_client.get_histograms(
-                project=project, 
-                logstore=logStore, 
+                project=project,
+                logstore=logStore,
                 request=request
             )
             histograms = response.body
@@ -838,7 +934,7 @@ class IaaSToolkit:
                     "patterns": [],
                     "message": f"Failed to do log explore because pattern model creation failed: {error_msg}"
                 }
-            
+
             # 3) use model to match log data
             sampling_rate = int(200000 / total_count * 100)
             sampling_rate = min(max(sampling_rate, 1), 100)
@@ -932,7 +1028,7 @@ class IaaSToolkit:
                     variables.append(var_info)
                 formatted_item["variables"] = variables
                 return formatted_item
-            
+
             results = [format_result(item) for item in response.body]
             return {
                 "patterns": results,
@@ -954,7 +1050,7 @@ class IaaSToolkit:
                 description="sls project name, must exact match, should not contain chinese characters",
             ),
             logStore: str = Field(
-                ..., 
+                ...,
                 description="sls log store name, must exact match, should not contain chinese characters"
             ),
             test_from_time: Union[str, int] = Field(
@@ -970,7 +1066,7 @@ class IaaSToolkit:
                 "now", description="对照组数据的结束时间: Unix时间戳(秒/毫秒)或相对时间(now)"
             ),
             regionId: str = Field(
-                ..., 
+                ...,
                 description="Region ID"
             ),
             logField: str = Field(
@@ -1045,8 +1141,8 @@ class IaaSToolkit:
                 query=None if not filter_query else filter_query
             )
             response: GetHistogramsResponse = sls_client.get_histograms(
-                project=project, 
-                logstore=logStore, 
+                project=project,
+                logstore=logStore,
                 request=request
             )
             histograms = response.body
@@ -1256,7 +1352,7 @@ class IaaSToolkit:
                     variables.append(var_info)
                 formatted_item["variables"] = variables
                 return formatted_item
-            
+
             pairs: Dict[Tuple[str, str], Dict] = {}
             for item in response.body:
                 formatted_item = format_result(item)
@@ -1264,7 +1360,7 @@ class IaaSToolkit:
                 if key not in pairs:
                     pairs[key] = {}
                 pairs[key][formatted_item["test_or_control"]] = formatted_item
-            
+
             def merge_items(test: Optional[Dict] = None, control: Optional[Dict] = None) -> Optional[Dict]:
                 if not test and not control:
                     return None
@@ -1278,7 +1374,7 @@ class IaaSToolkit:
                     "test_variables": [] if not test else test["variables"],
                     "control_variables": [] if not control else control["variables"]
                 }
-            
+
             results: List[Dict] = []
             for pair in pairs.values():
                 merged_item = merge_items(pair.get("test"), pair.get("control"))
