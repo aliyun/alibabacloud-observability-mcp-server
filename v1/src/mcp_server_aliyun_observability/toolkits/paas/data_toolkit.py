@@ -952,7 +952,7 @@ $trace_data | join $trace_data_with_time on $trace_data_with_time.__trace_id__ =
 
         # basic 模式：返回原始查询
         if analysis_mode == "basic":
-            query = f".entity_set with(domain='{domain}', name='{entity_set_name}'{entity_ids_param}) | entity-call get_metric('{domain}', '{metric_domain_name}', '{metric}', '{query_type}', {step_param})"
+            query = f".entity_set with(domain='{domain}', name='{entity_set_name}'{entity_ids_param}) | entity-call get_metric('{domain}', '{metric_domain_name}', '{metric}', '{query_type}', {step_param}, aggregate=false)"
             return query, from_time, to_time
 
         # cluster 模式：时序聚类
