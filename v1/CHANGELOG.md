@@ -1,5 +1,11 @@
 # 版本更新
 
+## 1.0.7 (2026-02-03)
+### 修复
+- `umodel_get_metrics` 工具 basic 模式查询添加 `aggregate=false` 参数
+  - 修复 basic 模式下获取指标数据时返回聚合数据的问题
+  - 现在 basic 模式默认返回原始时序数据，与 cluster/forecast/anomaly_detection 模式保持一致
+
 ## 1.0.6 (2026-01-19)
 ### 新功能
 - 新增 `sls_get_context_logs` 工具：基于 `pack_id` / `pack_meta` 查询起始日志上下文（上文/下文）日志
