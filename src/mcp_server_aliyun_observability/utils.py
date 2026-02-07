@@ -402,6 +402,290 @@ def text_to_sql(
         raise
 
 
+def text_to_spl(
+    ctx: Context, 
+    text: str, 
+    region_id: str,
+    project: str,
+    logstore: str,
+    data_sample: List[Dict[str, Any]]
+) -> dict[str, Any]:
+    """
+    Generate SPL from natural language and sample data.
+    
+    Args:
+        ctx: MCP context
+        text: Natural language query
+        region_id: Aliyun region ID for the client
+        project: SLS project name
+        logstore: SLS logstore name
+        data_sample: Sample log data (list of dicts)
+    """
+    import time
+    import uuid
+    
+    current_ts = int(time.time())
+    
+    # Construct userContext
+    user_context = [
+        {
+            "type": "metadata",
+            "data": {
+                "from_time": current_ts - 900,
+                "to_time": current_ts,
+                "fromTime": current_ts - 900,
+                "toTime": current_ts
+            }
+        },
+        {
+            "type": "spl_generation",
+            "data": {
+                "data": json.dumps(data_sample)
+            }
+        }
+    ]
+
+    variables = {
+        "workspace": "",
+        "region": region_id,
+        "project": project,
+        "language": "zh",
+        "logstore": logstore,
+        "skill": "spl_intent_recognition",
+        "skill_name": "spl_intent_recognition",
+        "timeZone": "Asia/Shanghai",
+        "timeStamp": str(current_ts),
+        "startTime": current_ts - 900,
+        "endTime": current_ts,
+        "config": "{\"disableThreadData\":false}",
+        "userContext": json.dumps(user_context)
+    }
+
+    thread_id = f"thread-{uuid.uuid4().hex}"
+    digital_employee_name = "apsara-ops"
+
+    logger.info(
+        f"Start text_to_spl, text={text}, region_id={region_id}, digital_employee={digital_employee_name}"
+    )
+
+    try:
+        cms_client_wrapper = ctx.request_context.lifespan_context["cms_client"]
+        cms_client: CmsClient = cms_client_wrapper.with_region(region_id)
+
+        messages = [
+            cms_model.CreateChatRequestMessages(
+                role="user",
+                contents=[
+                    cms_model.CreateChatRequestMessagesContents(
+                        type="text", value=text
+                    )
+                ],
+            )
+        ]
+
+        request = cms_model.CreateChatRequest(
+            action="create",
+            digital_employee_name=digital_employee_name,
+            messages=messages,
+            variables=variables,
+            thread_id=thread_id
+        )
+
+        logger.info("Building CMS AI Chat request")
+
+        runtime = util_models.RuntimeOptions(
+            read_timeout=60000,
+            connect_timeout=60000
+        )
+
+        # Use SSE to handle stream response
+        response_stream = cms_client.create_chat_with_sse(request, {}, runtime)
+        
+        full_content = ""
+        events = []
+        request_id = ""
+        
+        for event in response_stream:
+            # event structure is typically a dict or object with 'body'
+            # We access it as a dict based on test results
+            body = event.body if hasattr(event, "body") else event.get("body", {})
+            if hasattr(body, "to_map"):
+                body = body.to_map()
+            
+            if not request_id and "requestId" in body:
+                request_id = body["requestId"]
+            
+            if "messages" in body:
+                for msg in body["messages"]:
+                    # Accumulate text content
+                    if "contents" in msg:
+                        for content in msg["contents"]:
+                            if content.get("type") == "text" and "value" in content:
+                                full_content += content["value"]
+                    
+                    # Collect events (e.g. interactive payloads)
+                    if "events" in msg:
+                        events.extend(msg["events"])
+
+        # 解析事件以提取生成的SPL和预览数据
+        generated_spl = None
+        preview_data = None
+
+        for event in events:
+            if event.get("type") == "interactive":
+                payload = event.get("payload", {})
+                if payload.get("type") == "sls_query":
+                    queries = payload.get("queries", [])
+                    if queries:
+                        generated_spl = queries[0].get("query")
+                elif payload.get("type") == "diff":
+                    data_items = payload.get("data", [])
+                    if data_items:
+                        try:
+                            preview_data = json.loads(data_items[0].get("preview_data", "[]"))
+                        except json.JSONDecodeError:
+                            logger.warning("Failed to parse preview_data JSON")
+
+        result = {
+            "content": full_content,
+            "query": generated_spl,
+            "data": preview_data,
+            "events": events,
+            "requestId": request_id,
+        }
+
+        logger.info(f"Chat request successful, requestId: {request_id}")
+        return result
+
+    except Exception as e:
+        logger.error(f"Call CMS AI Chat failed: {str(e)}", exc_info=True)
+        raise
+
+def sls_sop(
+    ctx: Context, 
+    text: str, 
+    region_id: str,
+    project: Optional[str] = None,
+    logstore: Optional[str] = None,
+) -> dict[str, Any]:
+    """
+    SLS SOP Assistant
+    
+    Args:
+        ctx: MCP context
+        text: Natural language query
+        region_id: Aliyun region ID
+        project: SLS project name (optional)
+        logstore: SLS logstore name (optional)
+    """
+    import time
+    import uuid
+    
+    current_ts = int(time.time())
+    
+    # Construct userContext
+    user_context = [
+        {
+            "type": "metadata",
+            "data": {
+                "from_time": current_ts - 900,
+                "to_time": current_ts,
+                "fromTime": current_ts - 900,
+                "toTime": current_ts
+            }
+        }
+    ]
+
+    variables = {
+        "workspace": "",
+        "region": region_id,
+        "project": project if project else "not provided, it should provided by user",
+        "language": "zh",
+        "logstore": logstore if logstore else "",
+        "skill": "sop",
+        "timeZone": "Asia/Shanghai",
+        "timeStamp": str(current_ts),
+        "startTime": current_ts - 900,
+        "endTime": current_ts,
+        "config": "{\"disableThreadData\":false}",
+        "userContext": json.dumps(user_context)
+    }
+
+    thread_id = f"thread-{uuid.uuid4().hex}"
+    digital_employee_name = "apsara-ops"
+
+    logger.info(
+        f"Start sls_sop, text={text}, region_id={region_id}, digital_employee={digital_employee_name}"
+    )
+
+    try:
+        cms_client_wrapper = ctx.request_context.lifespan_context["cms_client"]
+        cms_client: CmsClient = cms_client_wrapper.with_region(region_id)
+
+        messages = [
+            cms_model.CreateChatRequestMessages(
+                role="user",
+                contents=[
+                    cms_model.CreateChatRequestMessagesContents(
+                        type="text", value=text
+                    )
+                ],
+            )
+        ]
+
+        request = cms_model.CreateChatRequest(
+            action="create",
+            digital_employee_name=digital_employee_name,
+            messages=messages,
+            variables=variables,
+            thread_id=thread_id
+        )
+
+        logger.info("Building CMS AI Chat request for SOP")
+
+        runtime = util_models.RuntimeOptions(
+            read_timeout=60000,
+            connect_timeout=60000
+        )
+
+        # Use SSE to handle stream response
+        response_stream = cms_client.create_chat_with_sse(request, {}, runtime)
+        
+        full_content = ""
+        events = []
+        request_id = ""
+        
+        for event in response_stream:
+            body = event.body if hasattr(event, "body") else event.get("body", {})
+            if hasattr(body, "to_map"):
+                body = body.to_map()
+            
+            if not request_id and "requestId" in body:
+                request_id = body["requestId"]
+            
+            if "messages" in body:
+                for msg in body["messages"]:
+                    if "contents" in msg:
+                        for content in msg["contents"]:
+                            if content.get("type") == "text" and "value" in content:
+                                full_content += content["value"]
+                    
+                    if "events" in msg:
+                        events.extend(msg["events"])
+
+        result = {
+            "content": full_content,
+            "events": events,
+            "requestId": request_id,
+        }
+
+        logger.info(f"SOP Chat request successful, requestId: {request_id}")
+        return result
+
+    except Exception as e:
+        logger.error(f"Call CMS AI Chat (SOP) failed: {str(e)}", exc_info=True)
+        raise
+
 def append_current_time(text: str) -> str:
     """
     添加当前时间

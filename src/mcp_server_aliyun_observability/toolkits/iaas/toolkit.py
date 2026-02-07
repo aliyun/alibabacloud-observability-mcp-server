@@ -30,6 +30,8 @@ from mcp_server_aliyun_observability.utils import (
     handle_tea_exception,
 )
 from mcp_server_aliyun_observability.utils import text_to_sql as utils_text_to_sql
+from mcp_server_aliyun_observability.utils import text_to_spl as utils_text_to_spl
+from mcp_server_aliyun_observability.utils import sls_sop as utils_sls_sop
 
 
 class IaaSToolkit:
@@ -37,6 +39,8 @@ class IaaSToolkit:
 
     Provides basic infrastructure tools for SLS database query operations:
     - sls_text_to_sql: Convert natural language to SQL queries
+    - sls_text_to_spl: Convert natural language to SPL queries
+    - sls_sop: Ask questions about SLS usage and SOP
     - sls_execute_sql: Execute SQL queries against SLS
     - sls_get_context_logs: Query context logs around an anchor log
     - cms_execute_promql: Execute PromQL queries against CMS
@@ -204,6 +208,137 @@ class IaaSToolkit:
                 生成的SLS查询语句
             """
             return utils_text_to_sql(ctx, text, project, logStore, regionId)
+
+        @self.server.tool()
+        @retry(
+            stop=stop_after_attempt(Config.get_retry_attempts()),
+            wait=wait_fixed(Config.RETRY_WAIT_SECONDS),
+            retry=retry_if_exception_type(Exception),
+            reraise=True,
+        )
+        @handle_tea_exception
+        def sls_text_to_spl(
+            ctx: Context,
+            text: str = Field(
+                ...,
+                description="the natural language text to generate sls spl query",
+            ),
+            project: str = Field(..., description="sls project name"),
+            logStore: str = Field(..., description="sls log store name"),
+            data_sample: List[Dict[str, Any]] = Field(
+                ..., description="sample log data for SPL generation"
+            ),
+            regionId: str = Field(
+                default=...,
+                description="aliyun region id,region id format like 'xx-xxx',like 'cn-hangzhou'",
+            ),
+        ) -> Dict[str, Any]:
+            """将自然语言转换为SLS SPL查询语句。
+            
+            ## 功能概述
+            
+            该工具可以将自然语言描述转换为有效的SLS SPL查询语句。
+            注意：SPL (Search Processing Language) 是SLS的一种管道式查询语句，主要用于数据加工、过滤、提取等场景，与标准SQL不同。
+            
+            ## 使用场景
+            
+            - 当用户需要对日志数据进行结构化提取时
+            - 当需要从非结构化文本中解析字段时
+            
+            ## 注意事项
+            
+            - 本工具会基于提供的 data_sample 直接执行生成的 SPL 并返回结果（preview_data），通常无需额外再次调用执行工具。
+            - 返回结果中包含生成的 query 和基于样例数据的执行结果 data。
+            
+            ## 示例用法
+
+            ### 1. 基础字段提取
+            **Query**: "从日志中提取 IP 地址和状态码"
+            **Data Sample**:
+            ```json
+            [
+              {"content": "2023-10-01 10:00:00 192.168.1.1 GET /index.html 200"},
+              {"content": "2023-10-01 10:00:01 10.0.0.1 POST /api/login 403"}
+            ]
+            ```
+
+            ### 2. 复杂正则解析
+            **Query**: "解析日志中的时间、级别、线程号和消息内容"
+            **Data Sample**:
+            ```json
+            [
+              {"raw": "[2023-10-01 10:00:00] [INFO] [Thread-1] System started"},
+              {"raw": "[2023-10-01 10:00:05] [ERROR] [Thread-main] Connection failed"}
+            ]
+            ```
+            
+            ### 3. JSON字段处理
+            **Query**: "提取 details 字段中的 error_code"
+            **Data Sample**:
+            ```json
+            [
+              {"time": "1696154400", "details": "{\\"error_code\\": 500, \\"msg\\": \\"Internal Error\\"}"},
+              {"time": "1696154401", "details": "{\\"error_code\\": 200, \\"msg\\": \\"OK\\"}"}
+            ]
+            ```
+
+            Args:
+                ctx: MCP上下文
+                text: 自然语言描述
+                project: SLS项目名称
+                logStore: SLS日志库名称
+                data_sample: 样例日志数据
+                regionId: 阿里云区域ID
+                
+            Returns:
+                包含生成的SPL查询语句(query)、样例数据执行结果(data)及完整响应信息
+            """
+            return utils_text_to_spl(ctx, text, regionId, project, logStore, data_sample)
+
+        @self.server.tool()
+        @retry(
+            stop=stop_after_attempt(Config.get_retry_attempts()),
+            wait=wait_fixed(Config.RETRY_WAIT_SECONDS),
+            retry=retry_if_exception_type(Exception),
+            reraise=True,
+        )
+        @handle_tea_exception
+        def sls_sop(
+            ctx: Context,
+            text: str = Field(..., description="The user's question about SLS usage or SOP"),
+            regionId: str = Field(..., description="Aliyun region ID"),
+            project: Optional[str] = Field(None, description="SLS project name"),
+            logStore: Optional[str] = Field(None, description="SLS log store name"),
+        ) -> Dict[str, Any]:
+            """SLS SOP (Standard Operating Procedure) assistant.
+            
+            ## 功能概述
+            
+            该工具是一个智能助手，用于回答关于 SLS (Simple Log Service) 使用方法、功能介绍、操作步骤 (SOP) 等方面的问题。
+            
+            ## 使用场景
+            
+            - 当用户不知道如何使用某个功能时（如：如何创建数据加工任务）
+            - 当用户需要了解 SLS 的概念或术语时
+            - 当用户遇到操作问题需要指引时
+            
+            ## 示例用法
+            
+            - "如何创建新的数据加工"
+            - "什么是 Project"
+            - "怎么配置告警"
+            
+            Args:
+                ctx: MCP上下文
+                text: 用户的问题
+                regionId: 阿里云区域ID
+                project: SLS项目名称（可选）
+                logStore: SLS日志库名称（可选）
+                
+            Returns:
+                助手的回答内容
+            """
+            return utils_sls_sop(ctx, text, regionId, project, logStore)
 
         @self.server.tool()
         @retry(
