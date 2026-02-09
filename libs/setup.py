@@ -36,7 +36,7 @@ DESCRIPTION = ""
 AUTHOR = "Alibaba"
 AUTHOR_EMAIL = ""
 URL = "https://github.com/"
-VERSION = "1.1.6"
+VERSION = __import__(PACKAGE).__version__
 REQUIRES = ["darabonba-core>=1.0.0, <2.0.0", "alibabacloud_tea_openapi==0.4.0rc3"]
 
 LONG_DESCRIPTION = ""
