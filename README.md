@@ -93,6 +93,8 @@ Observable MCP Server 现已支持日志服务 SLS、应用实时监控服务 AR
 | `sls_text_to_sql` | 将自然语言转换为SQL查询 | `text`：自然语言问题（必需）<br>`project`：SLS项目名称（必需）<br>`logStore`：日志存储名称（必需）<br>`regionId`：阿里云区域ID（必需） | - 智能生成SLS SQL查询<br>- 支持自然语言交互 |
 | `sls_execute_sql` | 执行SLS SQL查询 | `project`：SLS项目名称（必需）<br>`logStore`：日志存储名称（必需）<br>`query`：SQL查询语句（必需）<br>`from_time`：查询开始时间（必需）<br>`to_time`：查询结束时间（必需）<br>`limit`：返回最大日志条数，1-100，默认10（可选）<br>`offset`：查询开始行，用于分页，默认0（可选）<br>`reverse`：是否按时间戳降序返回，默认False（可选）<br>`regionId`：阿里云区域ID（必需） | - 直接执行SQL查询<br>- 使用适当时间范围优化性能<br>- 支持分页查询获取更多日志 |
 | `cms_execute_promql` | 执行PromQL查询 | `project`：项目名称（必需）<br>`metricStore`：指标存储名称（必需）<br>`query`：PromQL查询语句（必需）<br>`start_time`：查询开始时间（必需）<br>`end_time`：查询结束时间（必需）<br>`regionId`：阿里云区域ID（必需） | - 查询云监控指标数据<br>- 支持标准PromQL语法 |
+| `sls_text_to_spl` | 将自然语言转换为SPL查询 | `text`：自然语言问题（必需）<br>`project`：SLS项目名称（必需）<br>`logStore`：日志存储名称（必需）<br>`data_sample`：样例数据（必需）<br>`regionId`：阿里云区域ID（必需） | - 智能生成SPL语句并基于样例数据执行<br>- 适用于数据加工、提取场景 |
+| `sls_sop` | SLS使用助手 | `text`：关于SLS使用的问题（必需）<br>`regionId`：阿里云区域ID（必需） | - 回答SLS功能使用、概念解释、操作步骤等问题<br>- 智能助手 |
 | `sls_list_projects` | 列出SLS项目 | `projectName`：项目名称（可选，模糊搜索）<br>`regionId`：阿里云区域ID（必需） | - 发现可用的SLS项目<br>- 支持模糊搜索 |
 | `sls_execute_spl` | 执行原生SPL查询 | `query`：SPL查询语句（必需）<br>`regionId`：阿里云区域ID（必需） | - 执行复杂的SLS查询<br>- 支持高级分析功能 |
 | `sls_list_logstores` | 列出指定项目的日志存储 | `project`：SLS项目名称（必需）<br>`regionId`：阿里云区域ID（必需） | - 发现项目中的日志存储<br>- 了解数据分布 |
@@ -304,6 +306,8 @@ python -m mcp_server_aliyun_observability
 | 新工具 | 能力说明 |
 | --- | --- |
 | `sls_execute_spl` | 直接执行 SPL 查询（高级用法）。 |
+| `sls_text_to_spl` | 自然语言转 SPL 查询并执行。 |
+| `sls_sop` | SLS 智能问答助手。 |
 | `list_workspace` / `list_domains` / `introduction` | 工作空间/域发现与服务自述。 |
 | `umodel_get_entities` / `umodel_get_neighbor_entities` / `umodel_search_entities` | 实体发现与邻居查询。 |
 | `umodel_list_data_set` / `umodel_search_entity_set` / `umodel_list_related_entity_set` | 数据集枚举、实体集搜索及关联关系发现。 |
