@@ -42,6 +42,9 @@ class PaaSDatasetToolkit:
             data_set_types: Optional[str] = Field(
                 None, description="Comma-separated data set types"
             ),
+            entity_ids: Optional[str] = Field(
+                None, description="逗号分隔的实体ID列表，如'id1,id2,id3'。指定后只返回这些实体关联的数据集"
+            ),
             from_time: Union[str, int] = Field(
                 "now-5m", description="开始时间: Unix时间戳(秒/毫秒)或相对时间(now-5m)"
             ),
@@ -74,6 +77,7 @@ class PaaSDatasetToolkit:
               * 'event_set': 事件集合，用于获取可查询的事件数据源
               * 'trace_set': 追踪集合，用于获取可查询的追踪数据源
               * 'entity_set_name': 实体集合，用于获取实体关联的数据集合
+            - entity_ids: （可选）指定具体实体ID列表，只获取这些实体关联的数据集
 
             ## 工具依赖关系
 
@@ -102,6 +106,14 @@ class PaaSDatasetToolkit:
                 entity_set_name="apm.service",
                 data_set_types="log_set,event_set"
             )
+
+            # 指定具体实体获取数据集（适用于实体间数据集可能不同的场景）
+            umodel_list_data_set(
+                domain="apm",
+                entity_set_name="apm.service",
+                entity_ids="service-001,service-002",
+                data_set_types="metric_set"
+            )
             ```
 
             Args:
@@ -110,6 +122,7 @@ class PaaSDatasetToolkit:
                 domain: 实体域，不能为通配符 '*'
                 entity_set_name: 实体类型，不能为通配符 '*'
                 data_set_types: 数据集合类型过滤器，逗号分隔的类型列表
+                entity_ids: 逗号分隔的实体ID列表，指定后只返回这些实体关联的数据集
                 from_time: 查询开始时间
                 to_time: 查询结束时间
                 regionId: 阿里云区域ID
@@ -123,7 +136,15 @@ class PaaSDatasetToolkit:
                 types_param = f"[{','.join(types_list)}]"
             else:
                 types_param = "[]"
-            query = f".entity_set with(domain='{domain}', name='{entity_set_name}') | entity-call list_data_set({types_param})"
+
+            # 构建 entity_ids 参数
+            entity_ids_param = ""
+            if entity_ids and entity_ids.strip():
+                parts = [id.strip() for id in entity_ids.split(",") if id.strip()]
+                quoted = [f"'{id}'" for id in parts]
+                entity_ids_param = f", ids=[{','.join(quoted)}]"
+
+            query = f".entity_set with(domain='{domain}', name='{entity_set_name}'{entity_ids_param}) | entity-call list_data_set({types_param})"
             return execute_cms_query_with_context(
                 ctx, query, workspace, regionId, from_time, to_time, 1000
             )
