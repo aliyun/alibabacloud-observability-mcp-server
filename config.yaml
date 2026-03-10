@@ -1,0 +1,63 @@
+# MCP Server 配置文件
+# 配置按功能分类组织，凭证信息请在 .env 文件中配置
+
+# 服务器配置
+server:
+  # 传输模式: stdio, sse, streamable-http
+  # stdio: 标准输入输出（MCP 客户端启动时使用）
+  # sse: Server-Sent Events
+  # streamable-http: HTTP 流式传输（推荐生产环境使用）
+  transport: streamable-http
+  
+  # 监听地址（仅 sse/streamable-http 模式）
+  host: "0.0.0.0"
+  
+  # 监听端口（仅 sse/streamable-http 模式）
+  port: 8080
+
+# 日志配置
+logging:
+  # 日志级别: debug, info, warn, error
+  level: debug
+  
+  # 调试模式（输出完整请求/响应）
+  debug_mode: true
+
+# 工具集配置
+toolkit:
+  # 工具集范围: all, paas, iaas
+  # all: 启用所有工具
+  # paas: 仅启用 PaaS 工具（umodel_* 前缀）
+  # iaas: 仅启用 IaaS 工具（sls_*, cms_* 前缀）
+  scope: all
+
+# 网络配置
+network:
+  # 最大重试次数
+  max_retry: 1
+  
+  # 重试等待时间（秒）
+  retry_wait_seconds: 1
+  
+  # 读取超时（毫秒）
+  read_timeout_ms: 610000
+  
+  # 连接超时（毫秒）
+  connect_timeout_ms: 30000
+
+# 本地化配置
+locale:
+  # 时区（用于时间解析）
+  timezone: Asia/Shanghai
+  
+  # 语言（用于错误消息等）
+  language: zh-CN
+
+# 端点覆盖配置（可选）
+# 用于内网访问或自定义端点
+# endpoints:
+#   sls:
+#     cn-hangzhou: "cn-hangzhou-intranet.log.aliyuncs.com"
+#     cn-shanghai: "cn-shanghai-intranet.log.aliyuncs.com"
+#   cms:
+#     cn-hangzhou: "cms.cn-hangzhou.aliyuncs.com"
