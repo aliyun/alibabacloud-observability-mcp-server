@@ -104,11 +104,8 @@ func runStart(cmd *cobra.Command, _ []string) error {
 
 	// Create credential provider.
 	cred := client.NewCredentialProvider(cfg.Credentials.AccessKeyID, cfg.Credentials.AccessKeySecret)
-
-	// Validate credentials early.
-	if _, err := cred.GetAccessKeyID(); err != nil {
-		return fmt.Errorf("credential check failed: %w", err)
-	}
+	// Note: We don't validate credentials at startup to support per-request credentials.
+	// Validation happens lazily when API calls are made.
 
 	// Create API clients.
 	slsClient := client.NewSLSClient(cred, cfg)
