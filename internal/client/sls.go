@@ -81,19 +81,30 @@ func (c *SLSClientImpl) executeWithResilience(ctx context.Context, fn func(ctx c
 	})
 }
 
+// resolveCredential returns the per-request credential from ctx if available,
+// otherwise falls back to the client's default credential provider.
+func (c *SLSClientImpl) resolveCredential(ctx context.Context) CredentialProvider {
+	if cred := CredentialFromContext(ctx); cred != nil {
+		return cred
+	}
+	return c.credential
+}
+
 // createClient creates an SLS SDK client for the given region.
-func (c *SLSClientImpl) createClient(region string) (*sls.Client, error) {
+func (c *SLSClientImpl) createClient(ctx context.Context, region string) (*sls.Client, error) {
 	ep, err := c.resolver.Resolve(region)
 	if err != nil {
 		return nil, fmt.Errorf("sls: resolve endpoint: %w", err)
 	}
 
-	accessKeyID, err := c.credential.GetAccessKeyID()
+	cred := c.resolveCredential(ctx)
+
+	accessKeyID, err := cred.GetAccessKeyID()
 	if err != nil {
 		return nil, fmt.Errorf("sls: get access key id: %w", err)
 	}
 
-	accessKeySecret, err := c.credential.GetAccessKeySecret()
+	accessKeySecret, err := cred.GetAccessKeySecret()
 	if err != nil {
 		return nil, fmt.Errorf("sls: get access key secret: %w", err)
 	}
@@ -105,7 +116,7 @@ func (c *SLSClientImpl) createClient(region string) (*sls.Client, error) {
 	}
 
 	// Add security token if available (for STS)
-	token, _ := c.credential.GetSecurityToken()
+	token, _ := cred.GetSecurityToken()
 	if token != "" {
 		cfg.SecurityToken = tea.String(token)
 	}
@@ -128,7 +139,7 @@ func (c *SLSClientImpl) runtimeOptions() *util.RuntimeOptions {
 
 // Query executes a log query against the specified logstore.
 func (c *SLSClientImpl) Query(ctx context.Context, region, project, logstore, query string, from, to int64) ([]map[string]interface{}, error) {
-	client, err := c.createClient(region)
+	client, err := c.createClient(ctx, region)
 	if err != nil {
 		return nil, err
 	}
@@ -183,7 +194,7 @@ func (c *SLSClientImpl) Query(ctx context.Context, region, project, logstore, qu
 
 // GetContextLogs retrieves context logs around an anchor log identified by pack_id and pack_meta.
 func (c *SLSClientImpl) GetContextLogs(ctx context.Context, region, project, logstore, packID, packMeta string, backLines, forwardLines int) (map[string]interface{}, error) {
-	client, err := c.createClient(region)
+	client, err := c.createClient(ctx, region)
 	if err != nil {
 		return nil, err
 	}
@@ -269,7 +280,7 @@ func (c *SLSClientImpl) ListProjects(ctx context.Context, region string) ([]stri
 
 // ListProjectsWithFilter returns SLS project names with optional name filter and limit.
 func (c *SLSClientImpl) ListProjectsWithFilter(ctx context.Context, region, projectName string, limit int) ([]map[string]interface{}, error) {
-	client, err := c.createClient(region)
+	client, err := c.createClient(ctx, region)
 	if err != nil {
 		return nil, err
 	}
@@ -329,7 +340,7 @@ func (c *SLSClientImpl) ListLogStores(ctx context.Context, region, project strin
 
 // ListLogStoresWithFilter returns logstore names with optional filter, limit, and type.
 func (c *SLSClientImpl) ListLogStoresWithFilter(ctx context.Context, region, project, logStoreName string, limit int, isMetricStore bool) ([]string, error) {
-	client, err := c.createClient(region)
+	client, err := c.createClient(ctx, region)
 	if err != nil {
 		return nil, err
 	}
@@ -386,7 +397,7 @@ func (c *SLSClientImpl) ListLogStoresWithFilter(ctx context.Context, region, pro
 
 // ListMetricStores returns all metric store names within a project.
 func (c *SLSClientImpl) ListMetricStores(ctx context.Context, region, project string) ([]string, error) {
-	client, err := c.createClient(region)
+	client, err := c.createClient(ctx, region)
 	if err != nil {
 		return nil, err
 	}

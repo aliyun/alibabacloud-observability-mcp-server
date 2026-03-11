@@ -9,6 +9,7 @@ import (
 	"net"
 	"net/http"
 
+	"github.com/alibabacloud-observability-mcp-server-go/internal/client"
 	"github.com/alibabacloud-observability-mcp-server-go/internal/config"
 	mcpserver "github.com/mark3labs/mcp-go/server"
 )
@@ -92,6 +93,7 @@ func newSSETransport(cfg *config.Config, mcpSrv *mcpserver.MCPServer) *sseTransp
 	sse := mcpserver.NewSSEServer(mcpSrv,
 		mcpserver.WithHTTPServer(httpSrv),
 		mcpserver.WithUseFullURLForMessageEndpoint(false),
+		mcpserver.WithSSEContextFunc(extractCredentialFromRequest),
 	)
 
 	// Now wire the SSEServer (which implements http.Handler) as the inner handler.
@@ -135,6 +137,7 @@ func newStreamableHTTPTransport(cfg *config.Config, mcpSrv *mcpserver.MCPServer)
 	srv := mcpserver.NewStreamableHTTPServer(mcpSrv,
 		mcpserver.WithEndpointPath("/streamhttp"),
 		mcpserver.WithStreamableHTTPServer(httpSrv),
+		mcpserver.WithHTTPContextFunc(extractCredentialFromRequest),
 	)
 
 	// Wire the StreamableHTTPServer as the inner handler for non-/health routes.
@@ -171,4 +174,29 @@ func baseURLHost(cfg *config.Config) string {
 		host = "127.0.0.1"
 	}
 	return net.JoinHostPort(host, fmt.Sprintf("%d", cfg.Server.Port))
+}
+
+// extractCredentialFromRequest extracts Alibaba Cloud credentials from HTTP
+// request headers and injects them into the context. If both x-acs-accesskey-id
+// and x-acs-accesskey-secret are present, a StaticCredentialProvider is stored
+// in the context for downstream API calls. Otherwise the context is returned
+// unchanged and the client will fall back to its default credentials.
+func extractCredentialFromRequest(ctx context.Context, r *http.Request) context.Context {
+	accessKeyID := r.Header.Get("x-acs-accesskey-id")
+	accessKeySecret := r.Header.Get("x-acs-accesskey-secret")
+
+	if accessKeyID == "" || accessKeySecret == "" {
+		return ctx
+	}
+
+	securityToken := r.Header.Get("x-acs-security-token")
+
+	slog.Debug("transport: injecting per-request credentials from headers")
+
+	cred := &client.StaticCredentialProvider{
+		AccessKeyID:     accessKeyID,
+		AccessKeySecret: accessKeySecret,
+		SecurityToken:   securityToken,
+	}
+	return client.CredentialToContext(ctx, cred)
 }

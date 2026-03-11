@@ -96,15 +96,26 @@ func (c *CMSClientImpl) executeWithResilience(ctx context.Context, fn func(ctx c
 	})
 }
 
+// resolveCredential returns the per-request credential from ctx if available,
+// otherwise falls back to the client's default credential provider.
+func (c *CMSClientImpl) resolveCredential(ctx context.Context) CredentialProvider {
+	if cred := CredentialFromContext(ctx); cred != nil {
+		return cred
+	}
+	return c.credential
+}
+
 // signRequest signs an HTTP request using Alibaba Cloud Signature Version 3.
 // Reference: https://help.aliyun.com/document_detail/315526.html
-func (c *CMSClientImpl) signRequest(req *http.Request, body []byte, action string) error {
-	accessKeyID, err := c.credential.GetAccessKeyID()
+func (c *CMSClientImpl) signRequest(ctx context.Context, req *http.Request, body []byte, action string) error {
+	cred := c.resolveCredential(ctx)
+
+	accessKeyID, err := cred.GetAccessKeyID()
 	if err != nil {
 		return fmt.Errorf("get access key id: %w", err)
 	}
 
-	accessKeySecret, err := c.credential.GetAccessKeySecret()
+	accessKeySecret, err := cred.GetAccessKeySecret()
 	if err != nil {
 		return fmt.Errorf("get access key secret: %w", err)
 	}
@@ -117,7 +128,7 @@ func (c *CMSClientImpl) signRequest(req *http.Request, body []byte, action strin
 	req.Header.Set("x-acs-signature-nonce", fmt.Sprintf("%d", time.Now().UnixNano()))
 
 	// Add security token if available (for STS)
-	token, _ := c.credential.GetSecurityToken()
+	token, _ := cred.GetSecurityToken()
 	if token != "" {
 		req.Header.Set("x-acs-security-token", token)
 	}
@@ -272,7 +283,7 @@ func (c *CMSClientImpl) ListWorkspaces(ctx context.Context, region string) ([]ma
 		req.Header.Set("Accept", "application/json")
 
 		// Sign the request
-		if err := c.signRequest(req, nil, "ListWorkspaces"); err != nil {
+		if err := c.signRequest(ctx, req, nil, "ListWorkspaces"); err != nil {
 			return fmt.Errorf("sign request: %w", err)
 		}
 
@@ -360,7 +371,7 @@ func (c *CMSClientImpl) ExecuteSPL(ctx context.Context, region, workspace, query
 		req.Header.Set("Accept", "application/json")
 
 		// Sign the request
-		if err := c.signRequest(req, bodyBytes, "GetEntityStoreData"); err != nil {
+		if err := c.signRequest(ctx, req, bodyBytes, "GetEntityStoreData"); err != nil {
 			return fmt.Errorf("sign request: %w", err)
 		}
 
@@ -455,18 +466,20 @@ func (c *CMSClientImpl) QueryMetric(ctx context.Context, region, namespace, metr
 }
 
 // createCMSSDKClient creates a CMS SDK client for the given region.
-func (c *CMSClientImpl) createCMSSDKClient(region string) (*cms.Client, error) {
+func (c *CMSClientImpl) createCMSSDKClient(ctx context.Context, region string) (*cms.Client, error) {
 	ep, err := c.resolver.Resolve(region)
 	if err != nil {
 		return nil, fmt.Errorf("cms: resolve endpoint: %w", err)
 	}
 
-	accessKeyID, err := c.credential.GetAccessKeyID()
+	cred := c.resolveCredential(ctx)
+
+	accessKeyID, err := cred.GetAccessKeyID()
 	if err != nil {
 		return nil, fmt.Errorf("cms: get access key id: %w", err)
 	}
 
-	accessKeySecret, err := c.credential.GetAccessKeySecret()
+	accessKeySecret, err := cred.GetAccessKeySecret()
 	if err != nil {
 		return nil, fmt.Errorf("cms: get access key secret: %w", err)
 	}
@@ -478,7 +491,7 @@ func (c *CMSClientImpl) createCMSSDKClient(region string) (*cms.Client, error) {
 	}
 
 	// Add security token if available (for STS)
-	token, _ := c.credential.GetSecurityToken()
+	token, _ := cred.GetSecurityToken()
 	if token != "" {
 		cfg.SecurityToken = dara.String(token)
 	}
@@ -494,7 +507,7 @@ func (c *CMSClientImpl) createCMSSDKClient(region string) (*cms.Client, error) {
 // TextToSQL converts natural language to SQL query using CMS Chat API with SSE streaming.
 // This matches the Python implementation that uses CreateThread + CreateChatWithSSE.
 func (c *CMSClientImpl) TextToSQL(ctx context.Context, region, project, logstore, text string) (string, error) {
-	client, err := c.createCMSSDKClient(region)
+	client, err := c.createCMSSDKClient(ctx, region)
 	if err != nil {
 		return "", err
 	}
@@ -750,7 +763,7 @@ func (c *CMSClientImpl) TextToSQL(ctx context.Context, region, project, logstore
 // DataAgentQuery performs a natural language data query using CMS CreateThread + CreateChatWithSSE API.
 // This matches the Python implementation's _data_agent_query function.
 func (c *CMSClientImpl) DataAgentQuery(ctx context.Context, region, workspace, query string, fromTime, toTime int64) (*DataAgentResult, error) {
-	client, err := c.createCMSSDKClient(region)
+	client, err := c.createCMSSDKClient(ctx, region)
 	if err != nil {
 		return nil, err
 	}
@@ -1170,4 +1183,3 @@ func mapKeys(m map[string]interface{}) []string {
 	sort.Strings(keys)
 	return keys
 }
-
