@@ -1,5 +1,7 @@
 # 阿里云可观测 MCP Server（Go 版）
 
+> **版本说明**：当前为 Go 语言重构版本。如需使用原 Python 版本，请切换到 [`v1`](./v1) 目录查看。
+
 <p align="center">
   <a href="./README.md"><img alt="中文" src="https://img.shields.io/badge/简体中文-d9d9d9"></a>
 </p>

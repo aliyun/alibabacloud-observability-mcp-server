@@ -53,6 +53,10 @@ type stdioTransport struct {
 
 func (t *stdioTransport) Start(_ context.Context) error {
 	slog.Info("transport: starting stdio")
+	slog.Info("========================================")
+	slog.Info("  MCP Server started successfully!")
+	slog.Info("  Transport: stdio")
+	slog.Info("========================================")
 	return mcpserver.ServeStdio(t.mcpServer)
 }
 
@@ -93,6 +97,11 @@ func newSSETransport(cfg *config.Config, mcpSrv *mcpserver.MCPServer) *sseTransp
 
 func (t *sseTransport) Start(_ context.Context) error {
 	slog.Info("transport: starting SSE", "addr", t.addr)
+	slog.Info("========================================")
+	slog.Info("  MCP Server started successfully!")
+	slog.Info("  Transport: SSE")
+	slog.Info("  SSE Endpoint", "url", fmt.Sprintf("http://%s/sse", t.addr))
+	slog.Info("========================================")
 	return t.sse.Start(t.addr)
 }
 
@@ -131,6 +140,11 @@ func newStreamableHTTPTransport(cfg *config.Config, mcpSrv *mcpserver.MCPServer)
 
 func (t *streamableHTTPTransport) Start(_ context.Context) error {
 	slog.Info("transport: starting streamable-http", "addr", t.addr)
+	slog.Info("========================================")
+	slog.Info("  MCP Server started successfully!")
+	slog.Info("  Transport: streamable-http")
+	slog.Info("  Endpoint", "url", fmt.Sprintf("http://%s/streamhttp", t.addr))
+	slog.Info("========================================")
 	return t.srv.Start(t.addr)
 }
 
