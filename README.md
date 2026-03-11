@@ -29,42 +29,77 @@
 
 ## 快速开始
 
-### 前置条件
+### 下载与安装
 
-- Go 1.22+
-- 阿里云 AccessKey（[获取方式](https://help.aliyun.com/document_detail/53045.html)）
-
-### 构建
+从 [Releases](https://github.com/aliyun/alibabacloud-observability-mcp-server/releases) 页面下载对应平台的二进制文件：
 
 ```bash
-make build
+# Linux amd64
+wget https://github.com/aliyun/alibabacloud-observability-mcp-server/releases/latest/download/alibabacloud-observability-mcp-server-linux-amd64.tar.gz
+tar -xzf alibabacloud-observability-mcp-server-linux-amd64.tar.gz
+
+# macOS arm64 (M1/M2)
+wget https://github.com/aliyun/alibabacloud-observability-mcp-server/releases/latest/download/alibabacloud-observability-mcp-server-darwin-arm64.tar.gz
+tar -xzf alibabacloud-observability-mcp-server-darwin-arm64.tar.gz
 ```
 
-生成的二进制文件位于 `bin/alibabacloud-observability-mcp-serve`。
+解压后包含：
+- `alibabacloud-observability-mcp-server` - 可执行文件
+- `config.yaml` - 默认配置文件
 
-### 运行
+### 配置凭证
 
 ```bash
-# 使用环境变量配置凭证
+# 设置阿里云 AccessKey
 export ALIBABA_CLOUD_ACCESS_KEY_ID=<your_access_key_id>
 export ALIBABA_CLOUD_ACCESS_KEY_SECRET=<your_access_key_secret>
+```
 
-# 启动（使用 config.yaml 中的配置）
-./bin/alibabacloud-observability-mcp-serve start
+> AccessKey 获取方式：[阿里云 AccessKey 管理](https://help.aliyun.com/document_detail/53045.html)
 
-# 指定配置文件路径
-./bin/alibabacloud-observability-mcp-serve start --config /path/to/config.yaml
+### 启动服务
+
+```bash
+# stdio的方式启动
+./alibabacloud-observability-mcp-server start --stdio
+
+# 以sse的方式启动(默认的transport 在config.yaml中设置sse/streamable-http)
+./alibabacloud-observability-mcp-server start --config config.yaml
 ```
 
 ### CLI 命令
 
 ```bash
 # 查看版本信息
-./bin/alibabacloud-observability-mcp-serve version
+./alibabacloud-observability-mcp-server version
 
-# 列出所有已注册工具（使用 config.yaml 中的 toolkit.scope）
-./bin/alibabacloud-observability-mcp-serve tools
+# 列出所有已注册工具
+./alibabacloud-observability-mcp-server tools
 ```
+
+---
+
+## 从源码构建
+
+### 前置条件
+
+- Go 1.22+
+
+### 构建
+
+```bash
+# 克隆仓库
+git clone https://github.com/aliyun/alibabacloud-observability-mcp-server.git
+cd alibabacloud-observability-mcp-server
+
+# 构建当前平台
+make build
+
+# 构建所有平台
+make build-all
+```
+
+生成的二进制文件位于 `bin/` 目录。
 
 ## 配置
 

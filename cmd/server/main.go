@@ -59,6 +59,9 @@ func rootCmd() *cobra.Command {
 // configPath holds the path to the config file (set via --config flag).
 var configPath string
 
+// stdioMode forces stdio transport when set (via --stdio flag).
+var stdioMode bool
+
 // startCmd creates the "start" subcommand that boots the MCP server.
 func startCmd() *cobra.Command {
 	cmd := &cobra.Command{
@@ -70,6 +73,8 @@ func startCmd() *cobra.Command {
 
 	// Register --config flag for specifying config file path.
 	cmd.Flags().StringVar(&configPath, "config", "", "Path to config file (default: ./config.yaml)")
+	// Register --stdio flag to force stdio transport mode.
+	cmd.Flags().BoolVar(&stdioMode, "stdio", false, "Force stdio transport mode (overrides config.yaml)")
 
 	return cmd
 }
@@ -80,6 +85,11 @@ func runStart(cmd *cobra.Command, _ []string) error {
 	cfg, err := config.Load(configPath)
 	if err != nil {
 		return fmt.Errorf("failed to load config: %w", err)
+	}
+
+	// Override transport to stdio if --stdio flag is set.
+	if stdioMode {
+		cfg.Server.Transport = "stdio"
 	}
 
 	// Initialize structured logger.
