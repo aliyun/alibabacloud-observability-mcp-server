@@ -8,7 +8,7 @@ server:
   # sse: Server-Sent Events
   # streamable-http: HTTP 流式传输（推荐生产环境使用）
 #transport: streamable-http
-  transport: sse
+  transport: streamable-http
   
   # 监听地址（仅 sse/streamable-http 模式）
   host: "0.0.0.0"
@@ -31,6 +31,58 @@ toolkit:
   # paas: 仅启用 PaaS 工具（umodel_* 前缀）
   # iaas: 仅启用 IaaS 工具（sls_*, cms_* 前缀）
   scope: all
+
+  # 精细化工具选择（可选）
+  # 当 enabled_tools 非空时，仅注册列表中的工具（scope 仍决定加载哪些 toolkit）。
+  # 取消注释需要的工具即可启用，其余保持注释状态。
+  # enabled_tools:
+  #   ## ── Shared 工具（通用） ──
+  #   - introduction              # 获取服务介绍信息
+  #   - list_workspace            # 列出可用工作空间
+  #   - list_domains              # 列出工作空间中的实体域
+  #   ## ── PaaS 工具（云监控 2.0，umodel_* 前缀） ──
+  #   # 实体管理
+  #   - umodel_get_entities       # 获取实体列表
+  #   - umodel_get_neighbor_entities  # 获取实体邻居节点
+  #   - umodel_search_entities    # 搜索实体
+  #   # 数据集管理
+  #   - umodel_list_data_set      # 列出数据集
+  #   - umodel_search_entity_set  # 搜索实体集
+  #   - umodel_list_related_entity_set  # 列出关联实体集
+  #   # 数据查询
+  #   - umodel_get_metrics        # 获取时序指标
+  #   - umodel_get_golden_metrics # 获取黄金指标
+  #   - umodel_get_relation_metrics  # 获取关系指标
+  #   - umodel_get_logs           # 获取日志
+  #   - umodel_get_events         # 获取事件
+  #   - umodel_get_traces         # 获取链路详情
+  #   - umodel_search_traces      # 搜索链路
+  #   - umodel_get_profiling      # 获取性能剖析
+  #   - umodel_compare_metrics    # 指标对比分析
+  #   - umodel_data_agent_query   # 自然语言数据查询
+  #   ## ── IaaS 工具（SLS/CMS 直接访问） ──
+  #   # SLS 工具
+  #   - sls_query_logstore        # 查询日志库
+  #   - sls_query_metricstore     # 查询指标库（PromQL）
+  #   - sls_list_projects         # 列出项目
+  #   - sls_list_logstores        # 列出日志库
+  #   - sls_list_metricstores     # 列出指标库
+  #   - sls_text_to_sql           # 自然语言转 SQL
+  #   - sls_text_to_sql_old       # 自然语言转 SQL（旧版）
+  #   - sls_text_to_promql        # 自然语言转 PromQL
+  #   - sls_text_to_spl           # 自然语言转 SPL
+  #   - sls_execute_sql           # 执行 SQL 查询
+  #   - sls_execute_spl           # 执行 SPL 查询
+  #   - sls_get_context_logs      # 获取日志上下文
+  #   - sls_log_explore           # 日志探索分析
+  #   - sls_log_compare           # 日志对比分析
+  #   - sls_sop                   # SLS 运维助手
+  #   # CMS 工具
+  #   - cms_query_metric          # 查询云监控指标
+  #   - cms_list_metrics          # 列出可用指标
+  #   - cms_list_namespaces       # 列出命名空间
+  #   - cms_execute_promql        # 执行 PromQL 查询
+  #   - cms_text_to_promql        # 自然语言转 PromQL
 
 # 网络配置
 network:

@@ -495,3 +495,89 @@ func TestServer_Shutdown(t *testing.T) {
 		t.Fatalf("unexpected shutdown error: %v", err)
 	}
 }
+
+func TestApplyRuntimeDefaults(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name      string
+		region    string
+		workspace string
+		params    map[string]interface{}
+		wantR     string
+		wantW     string
+	}{
+		{
+			name:      "fills missing regionId and workspace",
+			region:    "cn-hangzhou",
+			workspace: "default-ws",
+			params:    map[string]interface{}{},
+			wantR:     "cn-hangzhou",
+			wantW:     "default-ws",
+		},
+		{
+			name:      "fills empty string regionId and workspace",
+			region:    "cn-beijing",
+			workspace: "ws-2",
+			params:    map[string]interface{}{"regionId": "", "workspace": ""},
+			wantR:     "cn-beijing",
+			wantW:     "ws-2",
+		},
+		{
+			name:      "does not overwrite user-provided values",
+			region:    "cn-hangzhou",
+			workspace: "default-ws",
+			params:    map[string]interface{}{"regionId": "cn-shanghai", "workspace": "my-ws"},
+			wantR:     "cn-shanghai",
+			wantW:     "my-ws",
+		},
+		{
+			name:      "no-op when runtime config is empty",
+			region:    "",
+			workspace: "",
+			params:    map[string]interface{}{},
+			wantR:     "",
+			wantW:     "",
+		},
+		{
+			name:      "fills only regionId when workspace config is empty",
+			region:    "cn-hangzhou",
+			workspace: "",
+			params:    map[string]interface{}{},
+			wantR:     "cn-hangzhou",
+			wantW:     "",
+		},
+		{
+			name:      "does not touch non-string param values",
+			region:    "cn-hangzhou",
+			workspace: "default-ws",
+			params:    map[string]interface{}{"regionId": 123, "workspace": true},
+			wantR:     "",
+			wantW:     "",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			cfg := newTestConfig()
+			cfg.Runtime = config.RuntimeConfig{
+				Region:    tt.region,
+				Workspace: tt.workspace,
+			}
+			srv := &Server{cfg: cfg}
+
+			srv.applyRuntimeDefaults(tt.params)
+
+			gotR, _ := tt.params["regionId"].(string)
+			gotW, _ := tt.params["workspace"].(string)
+
+			if gotR != tt.wantR {
+				t.Errorf("regionId = %q, want %q", gotR, tt.wantR)
+			}
+			if gotW != tt.wantW {
+				t.Errorf("workspace = %q, want %q", gotW, tt.wantW)
+			}
+		})
+	}
+}

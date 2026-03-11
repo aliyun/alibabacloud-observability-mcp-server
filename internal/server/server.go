@@ -137,6 +137,10 @@ func (s *Server) wrapHandler(t toolkit.Tool) mcpserver.ToolHandlerFunc {
 			params = make(map[string]interface{})
 		}
 
+		// Inject default regionId and workspace from runtime config
+		// when the caller does not provide them explicitly.
+		s.applyRuntimeDefaults(params)
+
 		result, err := handler(ctx, params)
 		if err != nil {
 			slog.Error("server: tool handler error",
@@ -152,6 +156,31 @@ func (s *Server) wrapHandler(t toolkit.Tool) mcpserver.ToolHandlerFunc {
 		}
 
 		return formatResult(result)
+	}
+}
+
+// applyRuntimeDefaults fills in regionId and workspace from the runtime config
+// when the caller has not provided them (empty string or absent).
+func (s *Server) applyRuntimeDefaults(params map[string]interface{}) {
+	defaults := map[string]string{
+		"regionId":  s.cfg.Runtime.Region,
+		"workspace": s.cfg.Runtime.Workspace,
+	}
+	for key, fallback := range defaults {
+		if fallback == "" {
+			continue
+		}
+		val, exists := params[key]
+		if !exists {
+			params[key] = fallback
+			slog.Debug("server: applied runtime default", "param", key, "value", fallback)
+			continue
+		}
+		str, ok := val.(string)
+		if ok && str == "" {
+			params[key] = fallback
+			slog.Debug("server: applied runtime default", "param", key, "value", fallback)
+		}
 	}
 }
 

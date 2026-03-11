@@ -82,10 +82,12 @@ func (r *Registry) List() []Tool {
 }
 
 // RegisterToolkits registers toolkits into the registry based on the given scope.
+// If enabledTools is non-empty, only the listed tools are kept after registration
+// (scope is used to determine which toolkits to load, then the list filters further).
 //   - "paas": registers paas + shared
 //   - "iaas": registers iaas + shared
 //   - "all" or "": registers paas + iaas + shared
-func RegisterToolkits(r *Registry, scope string, paas, iaas, shared Toolkit) {
+func RegisterToolkits(r *Registry, scope string, enabledTools []string, paas, iaas, shared Toolkit) {
 	switch scope {
 	case ScopePaaS:
 		r.Register(paas)
@@ -97,5 +99,26 @@ func RegisterToolkits(r *Registry, scope string, paas, iaas, shared Toolkit) {
 		r.Register(paas)
 		r.Register(iaas)
 		r.Register(shared)
+	}
+
+	if len(enabledTools) > 0 {
+		r.FilterByNames(enabledTools)
+	}
+}
+
+// FilterByNames removes all tools from the registry whose names are not in
+// the given allow-list.
+func (r *Registry) FilterByNames(names []string) {
+	allowed := make(map[string]struct{}, len(names))
+	for _, n := range names {
+		allowed[n] = struct{}{}
+	}
+
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	for name := range r.tools {
+		if _, ok := allowed[name]; !ok {
+			delete(r.tools, name)
+		}
 	}
 }
