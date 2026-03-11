@@ -138,6 +138,11 @@ logging:
 # 工具集配置
 toolkit:
   scope: all                  # all, paas, iaas
+  # 精细化工具选择（可选，非空时仅注册列表中的工具）
+  # enabled_tools:
+  #   - list_workspace
+  #   - umodel_get_entities
+  #   - sls_query_logstore
 
 # 网络配置
 network:
@@ -151,6 +156,25 @@ locale:
   timezone: Asia/Shanghai
   language: zh-CN
 ```
+
+#### 精细化工具选择
+
+默认情况下，`toolkit.scope` 控制按类别启用工具（`all`/`paas`/`iaas`）。如果需要更细粒度的控制，可以使用 `toolkit.enabled_tools` 指定要启用的工具列表：
+
+```yaml
+toolkit:
+  scope: all
+  enabled_tools:
+    - list_workspace
+    - list_domains
+    - umodel_get_entities
+    - umodel_get_metrics
+    - sls_query_logstore
+```
+
+当 `enabled_tools` 非空时，只有列表中的工具会被注册，其余工具不可用。`scope` 仍然决定加载哪些 toolkit 模块，`enabled_tools` 在此基础上进一步过滤。
+
+完整的工具列表及分类说明请参考 `config.yaml` 中的注释模板。
 
 ### CLI 参数
 
@@ -169,6 +193,10 @@ locale:
 | `ALIBABA_CLOUD_WORKSPACE` | 默认工作空间（PaaS 工具需要） | 否 |
 
 凭证优先从 `.env` 文件读取，如未找到则从 shell 环境变量读取。
+
+> **💡 默认值自动填充**
+> 
+> 当设置了 `ALIBABA_CLOUD_REGION` 或 `ALIBABA_CLOUD_WORKSPACE` 时，如果工具调用中未提供 `regionId` 或 `workspace` 参数，服务会自动使用环境变量中的值作为默认值。用户显式传入的值不会被覆盖。
 
 ## AI 工具集成
 
