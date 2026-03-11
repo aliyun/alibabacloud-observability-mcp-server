@@ -3,6 +3,7 @@
 package client
 
 import (
+	"context"
 	"errors"
 	"os"
 )
@@ -20,6 +21,27 @@ type CredentialProvider interface {
 	// GetSecurityToken returns the STS security token. Providers that do
 	// not support STS return an empty string with no error.
 	GetSecurityToken() (string, error)
+}
+
+// --- Context-based credential passing ---
+
+// credentialContextKey is an unexported type used as the context key for
+// per-request credentials. Using a struct type prevents collisions with
+// keys from other packages.
+type credentialContextKey struct{}
+
+// CredentialToContext returns a new context that carries the given
+// CredentialProvider. This is used by the transport layer to inject
+// per-request credentials extracted from HTTP headers.
+func CredentialToContext(ctx context.Context, cred CredentialProvider) context.Context {
+	return context.WithValue(ctx, credentialContextKey{}, cred)
+}
+
+// CredentialFromContext extracts the CredentialProvider stored in ctx.
+// It returns nil if no credential was set on the context.
+func CredentialFromContext(ctx context.Context) CredentialProvider {
+	cred, _ := ctx.Value(credentialContextKey{}).(CredentialProvider)
+	return cred
 }
 
 // --- StaticCredentialProvider ---
