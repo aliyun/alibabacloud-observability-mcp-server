@@ -74,7 +74,6 @@ type sseTransport struct {
 
 func newSSETransport(cfg *config.Config, mcpSrv *mcpserver.MCPServer) *sseTransport {
 	addr := listenAddr(cfg)
-	baseURL := fmt.Sprintf("http://%s", baseURLHost(cfg))
 
 	// Create a healthMux that will delegate to the SSEServer once set.
 	// Addr is left empty so that Start() can set it (avoids conflicts when
@@ -84,9 +83,15 @@ func newSSETransport(cfg *config.Config, mcpSrv *mcpserver.MCPServer) *sseTransp
 		Handler: hm,
 	}
 
+	// Use relative path for message endpoint to avoid origin mismatch issues.
+	// When useFullURLForMessageEndpoint is false, the server returns a relative
+	// path (e.g., "/message?sessionId=xxx") instead of a full URL, allowing
+	// clients to construct the URL using their connection base URL.
+	// This solves the "Endpoint origin does not match connection origin" error
+	// when clients connect via localhost but server returns 127.0.0.1.
 	sse := mcpserver.NewSSEServer(mcpSrv,
-		mcpserver.WithBaseURL(baseURL),
 		mcpserver.WithHTTPServer(httpSrv),
+		mcpserver.WithUseFullURLForMessageEndpoint(false),
 	)
 
 	// Now wire the SSEServer (which implements http.Handler) as the inner handler.

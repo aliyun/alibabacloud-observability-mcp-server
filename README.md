@@ -1,10 +1,18 @@
 # 阿里云可观测 MCP Server（Go 版）
 
-> **版本说明**：当前为 Go 语言重构版本。如需使用原 Python 版本，请切换到 [`v1`](./v1) 目录查看。
-
 <p align="center">
   <a href="./README.md"><img alt="中文" src="https://img.shields.io/badge/简体中文-d9d9d9"></a>
 </p>
+
+---
+
+> **📌 重要提示**
+> 
+> 本项目已使用 **Go 语言重构**。如需使用原 Python 版本，请访问 [`v1`](./v1) 目录：
+> - 📖 [v1/README.md](./v1/README.md) - Python 版本文档
+> - 📦 Python 版本通过 `pip install mcp-server-aliyun-observability` 安装
+
+---
 
 阿里云可观测 MCP Server 的 Go 语言实现，为 AI 模型提供对阿里云日志服务（SLS）和云监控（CMS）的结构化数据访问能力。基于 [Model Context Protocol](https://modelcontextprotocol.io/) 协议，可与 Cursor、Kiro、Cline、Windsurf 等 AI 工具无缝集成。
 
@@ -32,7 +40,7 @@
 make build
 ```
 
-生成的二进制文件位于 `bin/mcp-server`。
+生成的二进制文件位于 `bin/alibabacloud-observability-mcp-serve`。
 
 ### 运行
 
@@ -42,20 +50,20 @@ export ALIBABA_CLOUD_ACCESS_KEY_ID=<your_access_key_id>
 export ALIBABA_CLOUD_ACCESS_KEY_SECRET=<your_access_key_secret>
 
 # 启动（使用 config.yaml 中的配置）
-./bin/mcp-server start
+./bin/alibabacloud-observability-mcp-serve start
 
 # 指定配置文件路径
-./bin/mcp-server start --config /path/to/config.yaml
+./bin/alibabacloud-observability-mcp-serve start --config /path/to/config.yaml
 ```
 
 ### CLI 命令
 
 ```bash
 # 查看版本信息
-./bin/mcp-server version
+./bin/alibabacloud-observability-mcp-serve version
 
 # 列出所有已注册工具（使用 config.yaml 中的 toolkit.scope）
-./bin/mcp-server tools
+./bin/alibabacloud-observability-mcp-serve tools
 ```
 
 ## 配置
@@ -136,7 +144,7 @@ locale:
 1. 配置 `config.yaml`（设置 `server.transport: streamable-http`）
 2. 启动服务：
 ```bash
-./bin/mcp-server start
+./bin/alibabacloud-observability-mcp-serve start
 ```
 
 3. 配置 `mcp.json`：
@@ -158,7 +166,7 @@ locale:
 {
   "mcpServers": {
     "alibaba_cloud_observability": {
-      "command": "./bin/mcp-server",
+      "command": "./bin/alibabacloud-observability-mcp-serve",
       "args": ["start"],
       "env": {
         "ALIBABA_CLOUD_ACCESS_KEY_ID": "<your_access_key_id>",

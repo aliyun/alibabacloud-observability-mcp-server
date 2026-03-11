@@ -7,13 +7,14 @@ server:
   # stdio: 标准输入输出（MCP 客户端启动时使用）
   # sse: Server-Sent Events
   # streamable-http: HTTP 流式传输（推荐生产环境使用）
-  transport: streamable-http
+#transport: streamable-http
+  transport: sse
   
   # 监听地址（仅 sse/streamable-http 模式）
   host: "0.0.0.0"
   
   # 监听端口（仅 sse/streamable-http 模式）
-  port: 8080
+  port: 8180
 
 # 日志配置
 logging:

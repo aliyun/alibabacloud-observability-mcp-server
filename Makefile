@@ -1,6 +1,6 @@
 .PHONY: build test lint run clean build-all build-linux build-darwin build-windows
 
-BINARY_NAME := mcp-server
+BINARY_NAME := alibabacloud-observability-mcp-server
 BUILD_DIR := bin
 VERSION ?= $(shell git describe --tags --always --dirty 2>/dev/null || echo "dev")
 COMMIT  ?= $(shell git rev-parse --short HEAD 2>/dev/null || echo "unknown")
