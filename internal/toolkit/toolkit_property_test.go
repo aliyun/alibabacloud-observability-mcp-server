@@ -210,7 +210,7 @@ func TestProperty_ScopeToolRegistration(t *testing.T) {
 	properties.Property("registered tools match expected set for scope", prop.ForAll(
 		func(scope string) bool {
 			r := toolkit.NewRegistry()
-			toolkit.RegisterToolkits(r, scope, paasToolkit, iaasToolkit, sharedToolkit)
+			toolkit.RegisterToolkits(r, scope, nil, paasToolkit, iaasToolkit, sharedToolkit)
 
 			registered := make(map[string]bool)
 			for _, tool := range r.List() {

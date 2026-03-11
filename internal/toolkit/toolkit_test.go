@@ -112,7 +112,7 @@ func TestRegisterToolkits_ScopePaaS(t *testing.T) {
 	iaas := makeToolkit("iaas", "sls_query")
 	shared := makeToolkit("shared", "list_workspace")
 
-	RegisterToolkits(r, ScopePaaS, paas, iaas, shared)
+	RegisterToolkits(r, ScopePaaS, nil, paas, iaas, shared)
 
 	if _, ok := r.Get("umodel_list"); !ok {
 		t.Error("paas tool should be registered under paas scope")
@@ -131,7 +131,7 @@ func TestRegisterToolkits_ScopeIaaS(t *testing.T) {
 	iaas := makeToolkit("iaas", "sls_query")
 	shared := makeToolkit("shared", "list_workspace")
 
-	RegisterToolkits(r, ScopeIaaS, paas, iaas, shared)
+	RegisterToolkits(r, ScopeIaaS, nil, paas, iaas, shared)
 
 	if _, ok := r.Get("sls_query"); !ok {
 		t.Error("iaas tool should be registered under iaas scope")
@@ -150,7 +150,7 @@ func TestRegisterToolkits_ScopeAll(t *testing.T) {
 	iaas := makeToolkit("iaas", "sls_query")
 	shared := makeToolkit("shared", "list_workspace")
 
-	RegisterToolkits(r, ScopeAll, paas, iaas, shared)
+	RegisterToolkits(r, ScopeAll, nil, paas, iaas, shared)
 
 	for _, name := range []string{"umodel_list", "sls_query", "list_workspace"} {
 		if _, ok := r.Get(name); !ok {
@@ -165,7 +165,7 @@ func TestRegisterToolkits_ScopeEmpty(t *testing.T) {
 	iaas := makeToolkit("iaas", "sls_query")
 	shared := makeToolkit("shared", "list_workspace")
 
-	RegisterToolkits(r, "", paas, iaas, shared)
+	RegisterToolkits(r, "", nil, paas, iaas, shared)
 
 	for _, name := range []string{"umodel_list", "sls_query", "list_workspace"} {
 		if _, ok := r.Get(name); !ok {
@@ -202,5 +202,82 @@ func TestRegistryConcurrentAccess(t *testing.T) {
 
 	for i := 0; i < 4; i++ {
 		<-done
+	}
+}
+
+func TestFilterByNames(t *testing.T) {
+	t.Parallel()
+
+	r := NewRegistry()
+	tk := makeToolkit("all", "tool_a", "tool_b", "tool_c")
+	r.Register(tk)
+
+	r.FilterByNames([]string{"tool_a", "tool_c"})
+
+	if _, ok := r.Get("tool_a"); !ok {
+		t.Error("tool_a should be kept")
+	}
+	if _, ok := r.Get("tool_c"); !ok {
+		t.Error("tool_c should be kept")
+	}
+	if _, ok := r.Get("tool_b"); ok {
+		t.Error("tool_b should be removed")
+	}
+	if got := len(r.List()); got != 2 {
+		t.Errorf("expected 2 tools after filter, got %d", got)
+	}
+}
+
+func TestFilterByNames_EmptyList(t *testing.T) {
+	t.Parallel()
+
+	r := NewRegistry()
+	tk := makeToolkit("all", "tool_a", "tool_b")
+	r.Register(tk)
+
+	r.FilterByNames([]string{})
+
+	if got := len(r.List()); got != 0 {
+		t.Errorf("expected 0 tools after filtering with empty list, got %d", got)
+	}
+}
+
+func TestRegisterToolkits_EnabledToolsFilter(t *testing.T) {
+	t.Parallel()
+
+	r := NewRegistry()
+	p := makeToolkit("paas", "umodel_get_entities", "umodel_get_metrics")
+	i := makeToolkit("iaas", "sls_query_logstore", "cms_query_metric")
+	s := makeToolkit("shared", "list_workspace", "introduction")
+
+	RegisterToolkits(r, ScopeAll, []string{"umodel_get_entities", "sls_query_logstore", "list_workspace"}, p, i, s)
+
+	for _, name := range []string{"umodel_get_entities", "sls_query_logstore", "list_workspace"} {
+		if _, ok := r.Get(name); !ok {
+			t.Errorf("tool %s should be registered", name)
+		}
+	}
+	for _, name := range []string{"umodel_get_metrics", "cms_query_metric", "introduction"} {
+		if _, ok := r.Get(name); ok {
+			t.Errorf("tool %s should NOT be registered when not in enabled_tools", name)
+		}
+	}
+	if got := len(r.List()); got != 3 {
+		t.Errorf("expected 3 tools, got %d", got)
+	}
+}
+
+func TestRegisterToolkits_NilEnabledToolsKeepsAll(t *testing.T) {
+	t.Parallel()
+
+	r := NewRegistry()
+	p := makeToolkit("paas", "umodel_list")
+	i := makeToolkit("iaas", "sls_query")
+	s := makeToolkit("shared", "list_workspace")
+
+	RegisterToolkits(r, ScopeAll, nil, p, i, s)
+
+	if got := len(r.List()); got != 3 {
+		t.Errorf("expected 3 tools when enabled_tools is nil, got %d", got)
 	}
 }

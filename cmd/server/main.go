@@ -122,10 +122,11 @@ func runStart(cmd *cobra.Command, _ []string) error {
 	paasToolkit := paas.NewPaaSToolkit(cmsClient)
 	iaasToolkit := iaas.NewIaaSToolkit(slsClient, cmsClient)
 	sharedToolkit := shared.New(cmsClient)
-	toolkit.RegisterToolkits(registry, cfg.Toolkit.Scope, paasToolkit, iaasToolkit, sharedToolkit)
+	toolkit.RegisterToolkits(registry, cfg.Toolkit.Scope, cfg.Toolkit.EnabledTools, paasToolkit, iaasToolkit, sharedToolkit)
 
 	slog.Info("toolkits registered",
 		"scope", cfg.Toolkit.Scope,
+		"enabled_tools", cfg.Toolkit.EnabledTools,
 		"tool_count", len(registry.List()),
 	)
 
@@ -179,7 +180,7 @@ func runTools(cmd *cobra.Command, _ []string) error {
 	paasToolkit := paas.NewPaaSToolkit(nil)
 	iaasToolkit := iaas.NewIaaSToolkit(nil, nil)
 	sharedToolkit := shared.New(nil)
-	toolkit.RegisterToolkits(registry, cfg.Toolkit.Scope, paasToolkit, iaasToolkit, sharedToolkit)
+	toolkit.RegisterToolkits(registry, cfg.Toolkit.Scope, cfg.Toolkit.EnabledTools, paasToolkit, iaasToolkit, sharedToolkit)
 
 	tools := registry.List()
 	out := cmd.OutOrStdout()

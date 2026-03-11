@@ -36,7 +36,8 @@ type LoggingConfig struct {
 
 // ToolkitConfig 工具集配置
 type ToolkitConfig struct {
-	Scope string `mapstructure:"scope"`
+	Scope        string   `mapstructure:"scope"`
+	EnabledTools []string `mapstructure:"enabled_tools"`
 }
 
 // NetworkConfig 网络配置
@@ -351,6 +352,10 @@ func (c *LoggingConfig) Validate() error {
 
 // Validate 验证工具集配置
 func (c *ToolkitConfig) Validate() error {
+	// 当 enabled_tools 非空时，scope 被忽略，无需校验
+	if len(c.EnabledTools) > 0 {
+		return nil
+	}
 	validScopes := []string{"all", "paas", "iaas"}
 	if !stringSliceContains(validScopes, c.Scope) {
 		return fmt.Errorf("invalid toolkit scope '%s': must be one of %v", c.Scope, validScopes)
