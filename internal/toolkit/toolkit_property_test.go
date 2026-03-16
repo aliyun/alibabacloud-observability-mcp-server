@@ -68,8 +68,8 @@ var _ client.SLSClient = (*stubSLS)(nil)
 
 // --- helpers ---
 
-func newPaaS() toolkit.Toolkit  { return paas.NewPaaSToolkit(&stubCMS{}) }
-func newIaaS() toolkit.Toolkit  { return iaas.NewIaaSToolkit(&stubSLS{}, &stubCMS{}) }
+func newPaaS() toolkit.Toolkit   { return paas.NewPaaSToolkit(&stubCMS{}) }
+func newIaaS() toolkit.Toolkit   { return iaas.NewIaaSToolkit(&stubSLS{}, &stubCMS{}) }
 func newShared() toolkit.Toolkit { return shared.New(&stubCMS{}) }
 
 // sharedToolNames returns the set of tool names from the Shared toolkit.

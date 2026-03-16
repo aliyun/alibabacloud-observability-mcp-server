@@ -198,7 +198,7 @@ func parseEntityIDsToSPLParam(entityIDs string) string {
 	return "[" + strings.Join(quoted, ",") + "]"
 }
 
-// parseStringToSPLParam wraps a value in single quotes, or returns '' if empty.
+// parseStringToSPLParam wraps a value in single quotes, or returns ” if empty.
 func parseStringToSPLParam(value string) string {
 	value = strings.TrimSpace(value)
 	if value == "" {

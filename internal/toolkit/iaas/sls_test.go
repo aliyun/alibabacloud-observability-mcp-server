@@ -18,22 +18,22 @@ import (
 var _ client.SLSClient = (*mockSLSClient)(nil)
 
 type mockSLSClient struct {
-	queryResult      []map[string]interface{}
-	queryErr         error
-	getContextLogsResult map[string]interface{}
-	getContextLogsErr    error
-	listProjectsResult []string
-	listProjectsErr    error
-	listProjectsWithFilterResult []map[string]interface{}
-	listProjectsWithFilterErr    error
-	listLogStoresResult []string
-	listLogStoresErr    error
+	queryResult                   []map[string]interface{}
+	queryErr                      error
+	getContextLogsResult          map[string]interface{}
+	getContextLogsErr             error
+	listProjectsResult            []string
+	listProjectsErr               error
+	listProjectsWithFilterResult  []map[string]interface{}
+	listProjectsWithFilterErr     error
+	listLogStoresResult           []string
+	listLogStoresErr              error
 	listLogStoresWithFilterResult []string
 	listLogStoresWithFilterErr    error
-	listMetricStoresResult []string
-	listMetricStoresErr    error
-	textToSQLResult string
-	textToSQLErr    error
+	listMetricStoresResult        []string
+	listMetricStoresErr           error
+	textToSQLResult               string
+	textToSQLErr                  error
 }
 
 func (m *mockSLSClient) Query(_ context.Context, _, _, _, _ string, _, _ int64) ([]map[string]interface{}, error) {
@@ -671,8 +671,8 @@ func TestQueryMetricstore_Success(t *testing.T) {
 
 func TestQueryMetricstore_MetricStoreNotFound(t *testing.T) {
 	tests := []struct {
-		name    string
-		errMsg  string
+		name   string
+		errMsg string
 	}{
 		{"LogStoreNotExist", "LogStoreNotExist: metricstore my-metrics does not exist"},
 		{"MetricStoreNotExist", "MetricStoreNotExist: my-metrics"},
@@ -1135,7 +1135,6 @@ func TestTextToSPL_Success(t *testing.T) {
 	}
 }
 
-
 func TestLogExplore_Success(t *testing.T) {
 	mock := &mockSLSClient{
 		queryResult: []map[string]interface{}{
@@ -1288,7 +1287,7 @@ func TestLogCompare_WithDifferentPatterns(t *testing.T) {
 			{"cnt": 100}, // First query returns count
 		},
 	}
-	
+
 	tools := SLSTools(mock, &mockCMSClient{})
 	ctx := context.Background()
 

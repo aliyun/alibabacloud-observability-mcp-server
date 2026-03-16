@@ -7,7 +7,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
-	"regexp"
 	"strings"
 	"time"
 
@@ -263,6 +262,7 @@ func isSPLIncompatibleError(err error) bool {
 		strings.Contains(msg, "InvalidSpls") ||
 		strings.Contains(msg, "not support SPL")
 }
+
 // isMetricStoreNotFoundError checks whether the error indicates the metric store does not exist.
 func isMetricStoreNotFoundError(err error) bool {
 	if err == nil {
@@ -1624,202 +1624,18 @@ func (h *slsHandler) handleLogExplore(ctx context.Context, params map[string]int
 
 // LogPattern represents a discovered log pattern
 type LogPattern struct {
-	Pattern    string  `json:"pattern"`
-	Count      int     `json:"count"`
-	Percentage float64 `json:"percentage"`
+	Pattern    string   `json:"pattern"`
+	Count      int      `json:"count"`
+	Percentage float64  `json:"percentage"`
 	Examples   []string `json:"examples"`
 }
 
 // LogExploreResult contains the results of log exploration analysis
 type LogExploreResult struct {
-	Patterns     []LogPattern           `json:"patterns"`
-	TotalLogs    int                    `json:"total_logs"`
-	UniquePatterns int                  `json:"unique_patterns"`
-	Distribution map[string]int         `json:"distribution"`
-}
-
-// analyzeLogPatterns performs pattern recognition and clustering on logs
-func (h *slsHandler) analyzeLogPatterns(logs interface{}, maxPatterns int) LogExploreResult {
-	result := LogExploreResult{
-		Patterns:     make([]LogPattern, 0),
-		Distribution: make(map[string]int),
-	}
-
-	// Convert logs to slice of maps
-	logSlice, ok := logs.([]interface{})
-	if !ok {
-		return result
-	}
-
-	result.TotalLogs = len(logSlice)
-	if result.TotalLogs == 0 {
-		return result
-	}
-
-	// Pattern extraction: group logs by their normalized pattern
-	patternMap := make(map[string]*patternInfo)
-
-	for _, log := range logSlice {
-		logMap, ok := log.(map[string]interface{})
-		if !ok {
-			continue
-		}
-
-		// Extract the main content field (commonly __content__ or message)
-		content := extractLogContent(logMap)
-		if content == "" {
-			continue
-		}
-
-		// Normalize the log to extract pattern
-		pattern := normalizeLogToPattern(content)
-
-		if info, exists := patternMap[pattern]; exists {
-			info.count++
-			if len(info.examples) < 3 {
-				info.examples = append(info.examples, content)
-			}
-		} else {
-			patternMap[pattern] = &patternInfo{
-				pattern:  pattern,
-				count:    1,
-				examples: []string{content},
-			}
-		}
-	}
-
-	// Convert to sorted slice and limit to maxPatterns
-	patterns := make([]LogPattern, 0, len(patternMap))
-	for _, info := range patternMap {
-		percentage := float64(info.count) / float64(result.TotalLogs) * 100
-		patterns = append(patterns, LogPattern{
-			Pattern:    info.pattern,
-			Count:      info.count,
-			Percentage: percentage,
-			Examples:   info.examples,
-		})
-	}
-
-	// Sort by count descending
-	sortPatternsByCount(patterns)
-
-	// Limit to maxPatterns
-	if len(patterns) > maxPatterns {
-		patterns = patterns[:maxPatterns]
-	}
-
-	result.Patterns = patterns
-	result.UniquePatterns = len(patternMap)
-
-	// Build distribution map
-	for _, p := range patterns {
-		result.Distribution[p.Pattern] = p.Count
-	}
-
-	return result
-}
-
-// patternInfo holds intermediate pattern analysis data
-type patternInfo struct {
-	pattern  string
-	count    int
-	examples []string
-}
-
-// extractLogContent extracts the main content from a log entry
-func extractLogContent(logMap map[string]interface{}) string {
-	// Try common content field names
-	contentFields := []string{"__content__", "content", "message", "msg", "log", "body"}
-	for _, field := range contentFields {
-		if v, ok := logMap[field]; ok {
-			if s, ok := v.(string); ok && s != "" {
-				return s
-			}
-		}
-	}
-
-	// If no content field found, concatenate all string values
-	var parts []string
-	for _, v := range logMap {
-		if s, ok := v.(string); ok && s != "" {
-			parts = append(parts, s)
-		}
-	}
-	if len(parts) > 0 {
-		return parts[0] // Return first non-empty string
-	}
-	return ""
-}
-
-// normalizeLogToPattern converts a log message to a pattern by replacing variable parts
-func normalizeLogToPattern(content string) string {
-	pattern := content
-
-	// Replace common variable patterns with placeholders
-	// IP addresses
-	pattern = replacePattern(pattern, `\b\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}\b`, "<IP>")
-	// UUIDs
-	pattern = replacePattern(pattern, `\b[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}\b`, "<UUID>")
-	// Timestamps (various formats)
-	pattern = replacePattern(pattern, `\b\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}:\d{2}(\.\d+)?(Z|[+-]\d{2}:?\d{2})?\b`, "<TIMESTAMP>")
-	// Unix timestamps
-	pattern = replacePattern(pattern, `\b1[0-9]{9,12}\b`, "<UNIX_TS>")
-	// Numbers (standalone)
-	pattern = replacePattern(pattern, `\b\d+\b`, "<NUM>")
-	// Hex strings (8+ chars)
-	pattern = replacePattern(pattern, `\b[0-9a-fA-F]{8,}\b`, "<HEX>")
-	// Email addresses
-	pattern = replacePattern(pattern, `\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b`, "<EMAIL>")
-	// URLs
-	pattern = replacePattern(pattern, `https?://[^\s]+`, "<URL>")
-	// File paths
-	pattern = replacePattern(pattern, `/[^\s:]+`, "<PATH>")
-
-	// Truncate very long patterns
-	if len(pattern) > 200 {
-		pattern = pattern[:200] + "..."
-	}
-
-	return pattern
-}
-
-// replacePattern replaces regex matches with a placeholder
-func replacePattern(s, pattern, replacement string) string {
-	re, err := compileRegex(pattern)
-	if err != nil {
-		return s
-	}
-	return re.ReplaceAllString(s, replacement)
-}
-
-// regexCache caches compiled regular expressions
-var regexCache = make(map[string]*regexpWrapper)
-
-type regexpWrapper struct {
-	re *regexp.Regexp
-}
-
-func compileRegex(pattern string) (*regexp.Regexp, error) {
-	if cached, ok := regexCache[pattern]; ok {
-		return cached.re, nil
-	}
-	re, err := regexp.Compile(pattern)
-	if err != nil {
-		return nil, err
-	}
-	regexCache[pattern] = &regexpWrapper{re: re}
-	return re, nil
-}
-
-// sortPatternsByCount sorts patterns by count in descending order
-func sortPatternsByCount(patterns []LogPattern) {
-	for i := 0; i < len(patterns)-1; i++ {
-		for j := i + 1; j < len(patterns); j++ {
-			if patterns[j].Count > patterns[i].Count {
-				patterns[i], patterns[j] = patterns[j], patterns[i]
-			}
-		}
-	}
+	Patterns       []LogPattern   `json:"patterns"`
+	TotalLogs      int            `json:"total_logs"`
+	UniquePatterns int            `json:"unique_patterns"`
+	Distribution   map[string]int `json:"distribution"`
 }
 
 // extractCount extracts count from query result
@@ -1845,7 +1661,7 @@ func extractCount(result interface{}) int64 {
 			return int64(v)
 		case string:
 			var n int64
-			fmt.Sscanf(v, "%d", &n)
+			_, _ = fmt.Sscanf(v, "%d", &n)
 			return n
 		}
 	}
@@ -1922,7 +1738,7 @@ func formatLogExploreResults(result interface{}, timeBucketSize int64) []map[str
 				histogram := make([]map[string]interface{}, 0)
 				for ts, count := range hist {
 					var tsInt int64
-					fmt.Sscanf(ts, "%d", &tsInt)
+					_, _ = fmt.Sscanf(ts, "%d", &tsInt)
 					histogram = append(histogram, map[string]interface{}{
 						"from_timestamp": tsInt,
 						"to_timestamp":   tsInt + timeBucketSize,
@@ -2411,5 +2227,3 @@ func (h *slsHandler) handleLogCompare(ctx context.Context, params map[string]int
 		"message":  "success",
 	}, nil
 }
-
-

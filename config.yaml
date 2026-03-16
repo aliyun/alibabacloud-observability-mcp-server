@@ -8,7 +8,7 @@ server:
   # sse: Server-Sent Events
   # streamable-http: HTTP 流式传输（推荐生产环境使用）
 #transport: streamable-http
-  transport: streamable-http
+  transport: sse
   
   # 监听地址（仅 sse/streamable-http 模式）
   host: "0.0.0.0"
@@ -48,6 +48,7 @@ toolkit:
   #   # 数据集管理
   #   - umodel_list_data_set      # 列出数据集
   #   - umodel_search_entity_set  # 搜索实体集
+  #   - umodel_get_entity_set    # 获取实体集 Schema 定义
   #   - umodel_list_related_entity_set  # 列出关联实体集
   #   # 数据查询
   #   - umodel_get_metrics        # 获取时序指标
@@ -58,7 +59,6 @@ toolkit:
   #   - umodel_get_traces         # 获取链路详情
   #   - umodel_search_traces      # 搜索链路
   #   - umodel_get_profiling      # 获取性能剖析
-  #   - umodel_compare_metrics    # 指标对比分析
   #   - umodel_data_agent_query   # 自然语言数据查询
   #   ## ── IaaS 工具（SLS/CMS 直接访问） ──
   #   # SLS 工具
@@ -105,6 +105,16 @@ locale:
   
   # 语言（用于错误消息等）
   language: zh-CN
+
+# 运行时默认值配置
+# 当工具调用未提供 regionId 或 workspace 时，使用此处的默认值
+# 优先级: 环境变量 > .env 文件 > config.yaml
+runtime:
+  # 默认区域
+  region: cn-hangzhou
+  
+  # 默认工作空间（PaaS 工具需要）
+  # workspace: ""
 
 # 端点覆盖配置（可选）
 # 用于内网访问或自定义端点

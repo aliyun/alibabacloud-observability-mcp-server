@@ -67,10 +67,11 @@ type CredentialsConfig struct {
 	SecurityToken   string // 可选：STS Token
 }
 
-// RuntimeConfig 运行时参数（从 .env 加载）
+// RuntimeConfig 运行时参数
+// 优先级: 环境变量 > .env 文件 > config.yaml
 type RuntimeConfig struct {
-	Region    string
-	Workspace string
+	Region    string `mapstructure:"region"`
+	Workspace string `mapstructure:"workspace"`
 }
 
 // defaultConfig 内置默认值，用于 stdio 模式下 config.yaml 不存在时的 fallback
@@ -110,7 +111,7 @@ var defaultConfig = Config{
 // - Locale: timezone, language
 // - Endpoints: custom SLS/CMS endpoints
 // - Credentials: AccessKey (from .env)
-// - Runtime: region, workspace (from .env)
+// - Runtime: region, workspace (from config.yaml, overridden by .env/env vars)
 type Config struct {
 	Server      ServerConfig      `mapstructure:"server"`
 	Logging     LoggingConfig     `mapstructure:"logging"`
@@ -119,7 +120,7 @@ type Config struct {
 	Locale      LocaleConfig      `mapstructure:"locale"`
 	Endpoints   EndpointsConfig   `mapstructure:"endpoints"`
 	Credentials CredentialsConfig // 从 .env 加载
-	Runtime     RuntimeConfig     // 从 .env 加载
+	Runtime     RuntimeConfig     `mapstructure:"runtime"` // 优先级: 环境变量 > .env > config.yaml
 }
 
 var (
@@ -190,8 +191,8 @@ func loadCredentials() CredentialsConfig {
 }
 
 // loadRuntime 加载运行时配置
-// 优先级: .env 文件 > shell 环境变量
-func loadRuntime() RuntimeConfig {
+// 优先级: 环境变量 > .env 文件 > config.yaml（yamlDefaults 参数）
+func loadRuntime(yamlDefaults RuntimeConfig) RuntimeConfig {
 	envValues := loadDotEnv()
 
 	// Helper function to get value from .env or shell env
@@ -206,9 +207,20 @@ func loadRuntime() RuntimeConfig {
 		return os.Getenv(envKey)
 	}
 
+	// 环境变量覆盖 config.yaml 的值
+	region := getEnvValue("ALIBABA_CLOUD_REGION")
+	if region == "" {
+		region = yamlDefaults.Region
+	}
+
+	workspace := getEnvValue("ALIBABA_CLOUD_WORKSPACE")
+	if workspace == "" {
+		workspace = yamlDefaults.Workspace
+	}
+
 	return RuntimeConfig{
-		Region:    getEnvValue("ALIBABA_CLOUD_REGION"),
-		Workspace: getEnvValue("ALIBABA_CLOUD_WORKSPACE"),
+		Region:    region,
+		Workspace: workspace,
 	}
 }
 
@@ -279,7 +291,7 @@ func load(configPath string) (*Config, error) {
 
 	// 5. 调用 loadCredentials() 加载凭证
 	cfg.Credentials = loadCredentials()
-	cfg.Runtime = loadRuntime()
+	cfg.Runtime = loadRuntime(cfg.Runtime)
 
 	// 6. 调用 cfg.Validate() 验证配置（不验证凭证）
 	if err := cfg.Validate(); err != nil {

@@ -90,7 +90,7 @@ type fakeToolkit struct {
 	tools []toolkit.Tool
 }
 
-func (f *fakeToolkit) Name() string        { return f.name }
+func (f *fakeToolkit) Name() string          { return f.name }
 func (f *fakeToolkit) Tools() []toolkit.Tool { return f.tools }
 
 func TestNewServer_NilConfig(t *testing.T) {
@@ -478,7 +478,7 @@ func TestWrapHandler_PanicRecovery(t *testing.T) {
 				t.Errorf("panic was not recovered: %v", r)
 			}
 		}()
-		wrappedHandler(context.Background(), mcp.CallToolRequest{})
+		_, _ = wrappedHandler(context.Background(), mcp.CallToolRequest{})
 	}()
 }
 

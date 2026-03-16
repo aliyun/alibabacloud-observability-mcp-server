@@ -161,14 +161,3 @@ func (t *streamableHTTPTransport) Shutdown(ctx context.Context) error {
 func listenAddr(cfg *config.Config) string {
 	return net.JoinHostPort(cfg.Server.Host, fmt.Sprintf("%d", cfg.Server.Port))
 }
-
-// baseURLHost returns a host suitable for constructing client-facing URLs.
-// Wildcard addresses (0.0.0.0, ::, "") are replaced with 127.0.0.1 because
-// clients cannot connect to a wildcard address.
-func baseURLHost(cfg *config.Config) string {
-	host := cfg.Server.Host
-	if host == "" || host == "0.0.0.0" || host == "::" {
-		host = "127.0.0.1"
-	}
-	return net.JoinHostPort(host, fmt.Sprintf("%d", cfg.Server.Port))
-}

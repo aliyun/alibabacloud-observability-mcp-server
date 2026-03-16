@@ -266,11 +266,11 @@ func TestHandleGetMetrics_UnknownEntitySetSkipsValidation(t *testing.T) {
 
 func TestValidateMetricCompatibility(t *testing.T) {
 	tests := []struct {
-		name              string
-		entitySetName     string
-		metricDomainName  string
-		wantEmpty         bool
-		wantContains      string
+		name             string
+		entitySetName    string
+		metricDomainName string
+		wantEmpty        bool
+		wantContains     string
 	}{
 		{
 			name:             "apm.service with apm.metric.service is compatible",
@@ -1240,4 +1240,3 @@ func TestGetProfilesAlias_MissingParams(t *testing.T) {
 		t.Error("expected error=true for missing params")
 	}
 }
-

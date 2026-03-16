@@ -20,11 +20,11 @@ func TestNewCMSResolver(t *testing.T) {
 
 func TestResolve(t *testing.T) {
 	tests := []struct {
-		name      string
-		resolver  *Resolver
-		region    string
-		want      string
-		wantErr   bool
+		name     string
+		resolver *Resolver
+		region   string
+		want     string
+		wantErr  bool
 	}{
 		{
 			name:     "SLS cn-hangzhou",

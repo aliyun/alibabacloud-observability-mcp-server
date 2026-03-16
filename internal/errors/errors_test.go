@@ -20,9 +20,9 @@ type fakeTeaError struct {
 func (e *fakeTeaError) Error() string {
 	return fmt.Sprintf("[%d] %s: %s", e.statusCode, e.code, e.message)
 }
-func (e *fakeTeaError) GetCode() string      { return e.code }
-func (e *fakeTeaError) GetMessage() string    { return e.message }
-func (e *fakeTeaError) GetStatusCode() int    { return e.statusCode }
+func (e *fakeTeaError) GetCode() string    { return e.code }
+func (e *fakeTeaError) GetMessage() string { return e.message }
+func (e *fakeTeaError) GetStatusCode() int { return e.statusCode }
 
 // plainError is a plain error with no structured fields.
 type plainError struct{ msg string }
@@ -282,8 +282,8 @@ func TestLookupKnownError_AllCodes(t *testing.T) {
 
 func TestLookupKnownError_UnauthorizedPatterns(t *testing.T) {
 	tests := []struct {
-		message     string
-		wantDesc    string
+		message  string
+		wantDesc string
 	}{
 		{"The security token you provided is invalid.", "STS Token不合法。"},
 		{"The security token you provided has expired.", "STS Token已经过期。"},

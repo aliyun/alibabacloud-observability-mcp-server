@@ -262,6 +262,7 @@ toolkit:
 |------|------|---------|
 | `umodel_list_data_set` | 列出数据集 | `workspace`、`domain`、`entity_set_name`、`regionId`（必需）；`data_set_types`（可选） |
 | `umodel_search_entity_set` | 搜索实体集合 | `workspace`、`search_text`、`regionId`（必需） |
+| `umodel_get_entity_set` | 获取实体集合 Schema 定义 | `domain`、`entity_set_name`、`workspace`、`regionId`（必需）；`detail`（可选） |
 | `umodel_list_related_entity_set` | 列出关联实体集合 | `workspace`、`domain`、`entity_set_name`、`regionId`（必需） |
 
 #### 数据查询工具
@@ -276,7 +277,6 @@ toolkit:
 | `umodel_get_traces` | 查询链路数据 | `workspace`、`domain`、`entity_set_name`、`trace_set_domain`、`trace_set_name`、`trace_ids`、`regionId`（必需） |
 | `umodel_search_traces` | 搜索链路 | `workspace`、`domain`、`entity_set_name`、`trace_set_domain`、`trace_set_name`、`regionId`（必需）；`conditions`、`limit`（可选） |
 | `umodel_get_profiling` | 查询性能剖析数据 | `workspace`、`domain`、`entity_set_name`、`profile_set_domain`、`profile_set_name`、`entity_ids`、`regionId`（必需） |
-| `umodel_compare_metrics` | 指标对比分析 | `workspace`、`domain`、`entity_set_name`、`metric_domain_name`、`metric`、`regionId`（必需）；`offset`、`time_range`（可选） |
 | `umodel_data_agent_query` | 自然语言数据查询 | `query`、`workspace`、`regionId`（必需）；`time_range`（可选） |
 
 ### IaaS 工具集（SLS/CMS 直接访问）

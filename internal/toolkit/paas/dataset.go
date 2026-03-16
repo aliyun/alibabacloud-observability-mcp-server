@@ -16,6 +16,7 @@ func DatasetTools(cmsClient client.CMSClient) []toolkit.Tool {
 	return []toolkit.Tool{
 		h.listDataSetTool(),
 		h.searchEntitySetTool(),
+		h.getEntitySetTool(),
 		h.listRelatedEntitySetTool(),
 	}
 }
@@ -359,6 +360,108 @@ func (h *datasetHandler) handleListRelatedEntitySet(ctx context.Context, params 
 		slog.ErrorContext(ctx, "umodel_list_related_entity_set failed", "error", err)
 		return buildStandardResponse(nil, query, fromTS, toTS, true,
 			fmt.Sprintf("Failed to list related entity sets: %s", err), "last_1h"), nil
+	}
+
+	data := result["data"]
+	return buildStandardResponse(data, query, fromTS, toTS, false, "", "last_1h"), nil
+}
+
+// ===========================================================================
+// Tool 4: umodel_get_entity_set
+// ===========================================================================
+
+func (h *datasetHandler) getEntitySetTool() toolkit.Tool {
+	return toolkit.Tool{
+		Name: "umodel_get_entity_set",
+		Description: `获取指定实体集合的 Schema 定义，包括字段列表、字段类型等结构信息。
+
+## 功能概述
+
+该工具用于获取特定 EntitySet 的元数据定义（Schema），帮助理解实体的结构和可用字段。
+与 umodel_search_entity_set（全文搜索）不同，本工具通过精确的 domain 和 name 获取单个实体集合的完整定义。
+
+## 使用场景
+
+- **结构理解**: 了解某个实体集合有哪些字段、字段类型，为后续过滤查询提供依据
+- **字段发现**: 获取实体的可用字段列表，用于构建 umodel_get_entities 的过滤条件
+- **元数据查看**: 查看实体集合的完整 Schema 定义
+
+## 参数说明
+
+- domain: 实体域，如 'apm', 'k8s', 'acs' 等
+- entity_set_name: 实体集合名称，如 'apm.service', 'k8s.pod' 等
+- detail: 是否返回完整的详细 JSON Schema，默认 false 返回摘要信息`,
+		InputSchema: map[string]interface{}{
+			"type": "object",
+			"properties": map[string]interface{}{
+				"domain": map[string]interface{}{
+					"type":        "string",
+					"description": "实体域，如 'apm', 'k8s', 'acs'",
+				},
+				"entity_set_name": map[string]interface{}{
+					"type":        "string",
+					"description": "实体集合名称，如 'apm.service', 'k8s.pod'",
+				},
+				"workspace": map[string]interface{}{
+					"type":        "string",
+					"description": "CMS工作空间名称，可通过list_workspace获取",
+				},
+				"detail": map[string]interface{}{
+					"type":        "boolean",
+					"description": "是否返回完整详细的 JSON Schema，默认 false 返回摘要",
+					"default":     false,
+				},
+				"regionId": map[string]interface{}{
+					"type":        "string",
+					"description": "阿里云区域ID，如 'cn-hangzhou'",
+				},
+			},
+			"required": []string{"domain", "entity_set_name", "workspace", "regionId"},
+		},
+		Handler: h.handleGetEntitySet,
+	}
+}
+
+func (h *datasetHandler) handleGetEntitySet(ctx context.Context, params map[string]interface{}) (interface{}, error) {
+	domain := paramString(params, "domain", "")
+	entitySetName := paramString(params, "entity_set_name", "")
+	workspace := paramString(params, "workspace", "")
+	regionID := paramString(params, "regionId", "")
+
+	detail := false
+	if v, ok := params["detail"]; ok && v != nil {
+		if b, ok := v.(bool); ok {
+			detail = b
+		}
+	}
+
+	if domain == "" || entitySetName == "" || workspace == "" || regionID == "" {
+		return buildStandardResponse(nil, "", 0, 0, true,
+			"domain, entity_set_name, workspace and regionId are required", "last_1h"), nil
+	}
+
+	fromTS, toTS, err := parseTimeRange("last_1h")
+	if err != nil {
+		return buildStandardResponse(nil, "", 0, 0, true, err.Error(), "last_1h"), nil
+	}
+
+	detailParam := "false"
+	if detail {
+		detailParam = "true"
+	}
+
+	query := fmt.Sprintf(
+		".entity_set with(domain='%s', name='%s') | entity-call get_entity_set(%s)",
+		domain, entitySetName, detailParam,
+	)
+
+	slog.InfoContext(ctx, "umodel_get_entity_set", "workspace", workspace, "domain", domain, "entity_set_name", entitySetName, "detail", detail, "region", regionID)
+
+	result, err := h.cmsClient.ExecuteSPL(ctx, regionID, workspace, query, fromTS, toTS, 1000)
+	if err != nil {
+		slog.ErrorContext(ctx, "umodel_get_entity_set failed", "error", err)
+		return buildStandardResponse(nil, query, fromTS, toTS, true,
+			fmt.Sprintf("Failed to get entity set schema: %s", err), "last_1h"), nil
 	}
 
 	data := result["data"]

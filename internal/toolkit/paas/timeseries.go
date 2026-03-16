@@ -1,19 +1,14 @@
 package paas
 
 import (
-	"context"
 	"encoding/json"
 	"fmt"
-	"log/slog"
 	"math"
 	"regexp"
 	"sort"
 	"strconv"
 	"strings"
 	"time"
-
-	"github.com/alibabacloud-observability-mcp-server-go/internal/client"
-	"github.com/alibabacloud-observability-mcp-server-go/internal/toolkit"
 )
 
 // ---------------------------------------------------------------------------
@@ -108,7 +103,7 @@ type CompareOutput struct {
 	CompareTimeRange *TimeRangeInfo            `json:"compare_time_range,omitempty"`
 	Offset           string                    `json:"offset"`
 	TotalSeries      int                       `json:"total_series"`
-	Results          []TimeSeriesCompareResult  `json:"results"`
+	Results          []TimeSeriesCompareResult `json:"results"`
 }
 
 // ---------------------------------------------------------------------------
@@ -556,177 +551,6 @@ func BuildCompareOutput(
 		TotalSeries:      len(results),
 		Results:          results,
 	}
-}
-
-// ---------------------------------------------------------------------------
-// MCP Tool: umodel_compare_metrics
-// ---------------------------------------------------------------------------
-
-// TimeseriesTools returns all timeseries comparison tools backed by the given CMS client.
-func TimeseriesTools(cmsClient client.CMSClient) []toolkit.Tool {
-	h := &timeseriesHandler{cmsClient: cmsClient}
-	return []toolkit.Tool{
-		h.compareMetricsTool(),
-	}
-}
-
-// timeseriesHandler holds the CMS client and provides tool constructors and handlers.
-type timeseriesHandler struct {
-	cmsClient client.CMSClient
-}
-
-func (h *timeseriesHandler) compareMetricsTool() toolkit.Tool {
-	return toolkit.Tool{
-		Name: "umodel_compare_metrics",
-		Description: `对比不同时间段的指标数据，发现性能变化趋势和异常。
-
-## 功能概述
-查询当前时段和历史时段（通过 offset 偏移）的指标数据，计算统计信息并进行对比分析。
-结果按差异评分降序排列，优先展示变化最大的指标。
-
-## 参数获取流程
-1. 搜索实体集: umodel_search_entity_set(search_text="apm")
-2. 列出指标集: umodel_list_data_set(data_set_types="metric_set") 获取 metric_domain_name 和 metric
-3. 获取实体ID(可选): umodel_get_entities()
-4. 执行对比查询
-
-## 对比分析内容
-- 统计信息：均值、最大值、最小值、数据点数
-- 变化趋势：up（上升）、down（下降）、stable（稳定）、new（新增）、disappeared（消失）
-- 差异评分：0-1，值越大表示变化越显著
-- 结果按差异评分降序排列`,
-		InputSchema: map[string]interface{}{
-			"type": "object",
-			"properties": map[string]interface{}{
-				"domain": map[string]interface{}{
-					"type":        "string",
-					"description": "实体域名，如'apm'、'host'。不能为'*'，可通过 umodel_search_entity_set 获取",
-				},
-				"entity_set_name": map[string]interface{}{
-					"type":        "string",
-					"description": "实体类型名称，如'apm.service'。不能为'*'，可通过 umodel_search_entity_set 获取",
-				},
-				"metric_domain_name": map[string]interface{}{
-					"type":        "string",
-					"description": "指标域名称，如'apm.metric.jvm'。可通过 umodel_list_data_set(data_set_types='metric_set') 获取",
-				},
-				"metric": map[string]interface{}{
-					"type":        "string",
-					"description": "指标名称，如'cpu_usage'。可通过 umodel_list_data_set 返回的 fields 获取",
-				},
-				"workspace": map[string]interface{}{
-					"type":        "string",
-					"description": "CMS工作空间名称，可通过 list_workspace 获取",
-				},
-				"regionId": map[string]interface{}{
-					"type":        "string",
-					"description": "阿里云区域ID，如 'cn-hangzhou'",
-				},
-				"entity_ids": map[string]interface{}{
-					"type":        "string",
-					"description": "实体ID列表，逗号分隔，如'id1,id2,id3'。可通过 umodel_get_entities 获取",
-				},
-				"time_range": map[string]interface{}{
-					"type":        "string",
-					"description": timeRangeDescription,
-					"default":     "last_1h",
-				},
-				"offset": map[string]interface{}{
-					"type":        "string",
-					"description": "对比时间偏移量，如 '1d'（1天前）、'1w'（1周前）、'1h'（1小时前）。支持 s/m/h/d/w 单位",
-					"default":     "1d",
-				},
-			},
-			"required": []string{"domain", "entity_set_name", "metric_domain_name", "metric", "workspace", "regionId"},
-		},
-		Handler: h.handleCompareMetrics,
-	}
-}
-
-func (h *timeseriesHandler) handleCompareMetrics(ctx context.Context, params map[string]interface{}) (interface{}, error) {
-	domain := paramString(params, "domain", "")
-	entitySetName := paramString(params, "entity_set_name", "")
-	metricDomainName := paramString(params, "metric_domain_name", "")
-	metric := paramString(params, "metric", "")
-	workspace := paramString(params, "workspace", "")
-	regionID := paramString(params, "regionId", "")
-	entityIDs := paramString(params, "entity_ids", "")
-	timeRange := paramString(params, "time_range", "last_1h")
-	offset := paramString(params, "offset", "1d")
-
-	if domain == "" || entitySetName == "" || metricDomainName == "" || metric == "" || workspace == "" || regionID == "" {
-		return buildStandardResponse(nil, "", 0, 0, true,
-			"domain, entity_set_name, metric_domain_name, metric, workspace and regionId are required", timeRange), nil
-	}
-
-	// Pre-validate metric_domain_name / entity_set_name compatibility.
-	if hint := validateMetricCompatibility(entitySetName, metricDomainName); hint != "" {
-		slog.WarnContext(ctx, "umodel_compare_metrics: incompatible metric/entity combination",
-			"entity_set_name", entitySetName, "metric_domain_name", metricDomainName)
-		return buildStandardResponse(nil, "", 0, 0, true, hint, timeRange), nil
-	}
-
-	// Parse current time range
-	fromTS, toTS, err := parseTimeRange(timeRange)
-	if err != nil {
-		return buildStandardResponse(nil, "", 0, 0, true, err.Error(), timeRange), nil
-	}
-
-	// Parse offset
-	offsetSeconds := ParseDurationToSeconds(offset)
-	if offsetSeconds <= 0 {
-		return buildStandardResponse(nil, "", 0, 0, true,
-			fmt.Sprintf("invalid offset '%s', use format like '1d', '1w', '1h'", offset), timeRange), nil
-	}
-
-	// Calculate compare period
-	compareFrom := fromTS - offsetSeconds
-	compareTo := toTS - offsetSeconds
-
-	entityIDsParam := buildEntityIDsParam(entityIDs)
-
-	// Build SPL query for metrics
-	query := fmt.Sprintf(
-		".entity_set with(domain='%s', name='%s'%s) | entity-call get_metric('%s', '%s', 'range', '', '', true)",
-		domain, entitySetName, entityIDsParam,
-		metricDomainName, metric,
-	)
-
-	slog.InfoContext(ctx, "umodel_compare_metrics",
-		"workspace", workspace, "domain", domain, "metric", metric,
-		"region", regionID, "offset", offset)
-
-	// Query current period
-	currentResult, err := h.cmsClient.ExecuteSPL(ctx, regionID, workspace, query, fromTS, toTS, 1000)
-	if err != nil {
-		slog.ErrorContext(ctx, "umodel_compare_metrics current query failed", "error", err)
-		return buildStandardResponse(nil, query, fromTS, toTS, true,
-			fmt.Sprintf("Failed to query current period metrics: %s", err), timeRange), nil
-	}
-
-	// Query compare period
-	compareResult, err := h.cmsClient.ExecuteSPL(ctx, regionID, workspace, query, compareFrom, compareTo, 1000)
-	if err != nil {
-		slog.ErrorContext(ctx, "umodel_compare_metrics compare query failed", "error", err)
-		return buildStandardResponse(nil, query, fromTS, toTS, true,
-			fmt.Sprintf("Failed to query compare period metrics: %s", err), timeRange), nil
-	}
-
-	// Parse time series data
-	currentDataRaw, _ := toInterfaceSlice(currentResult["data"])
-	compareDataRaw, _ := toInterfaceSlice(compareResult["data"])
-
-	currentData := ParseTimeSeriesData(currentDataRaw, KeyTypeMetrics)
-	compareData := ParseTimeSeriesData(compareDataRaw, KeyTypeMetrics)
-
-	// Build comparison output
-	output := BuildCompareOutput(
-		currentData, compareData,
-		fromTS, toTS, compareFrom, compareTo,
-		offsetSeconds,
-	)
-
-	return buildStandardResponse(output, query, fromTS, toTS, false, "", timeRange), nil
 }
 
 // toInterfaceSlice attempts to convert an interface{} to []interface{}.

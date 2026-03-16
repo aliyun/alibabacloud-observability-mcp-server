@@ -17,12 +17,12 @@ import (
 var _ client.CMSClient = (*mockCMSClient)(nil)
 
 type mockCMSClient struct {
-	executeSPLResult   map[string]interface{}
-	executeSPLErr      error
+	executeSPLResult     map[string]interface{}
+	executeSPLErr        error
 	listWorkspacesResult []map[string]interface{}
 	listWorkspacesErr    error
-	queryMetricResult  []map[string]interface{}
-	queryMetricErr     error
+	queryMetricResult    []map[string]interface{}
+	queryMetricErr       error
 }
 
 func (m *mockCMSClient) ExecuteSPL(_ context.Context, _, _, _ string, _, _ int64, _ int) (map[string]interface{}, error) {
