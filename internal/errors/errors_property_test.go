@@ -16,10 +16,10 @@ type teaError struct {
 	statusCode int
 }
 
-func (e *teaError) Error() string       { return fmt.Sprintf("%s: %s", e.code, e.message) }
-func (e *teaError) GetCode() string     { return e.code }
-func (e *teaError) GetMessage() string  { return e.message }
-func (e *teaError) GetStatusCode() int  { return e.statusCode }
+func (e *teaError) Error() string      { return fmt.Sprintf("%s: %s", e.code, e.message) }
+func (e *teaError) GetCode() string    { return e.code }
+func (e *teaError) GetMessage() string { return e.message }
+func (e *teaError) GetStatusCode() int { return e.statusCode }
 
 // TestProperty_TeaExceptionMappingCompleteness verifies that for any known error
 // code in the mapping table, MapTeaException returns an APIError with non-empty

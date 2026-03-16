@@ -24,6 +24,7 @@ func DataTools(cmsClient client.CMSClient) []toolkit.Tool {
 		h.getProfilesAliasTool(), // Alias for Python compatibility
 	}
 }
+
 // metricCompatibilityMap defines known compatible metric_domain_name values
 // for each entity_set_name. This is used for pre-validation to give users
 // a helpful hint before the API returns a cryptic "NoRelatedDataSetFound" error.
@@ -1510,4 +1511,3 @@ func (h *dataHandler) handleSearchTraces(ctx context.Context, params map[string]
 	data := result["data"]
 	return buildStandardResponse(data, query, fromTS, toTS, false, "", timeRange), nil
 }
-

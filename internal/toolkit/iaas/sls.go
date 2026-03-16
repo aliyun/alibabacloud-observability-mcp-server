@@ -263,6 +263,7 @@ func isSPLIncompatibleError(err error) bool {
 		strings.Contains(msg, "InvalidSpls") ||
 		strings.Contains(msg, "not support SPL")
 }
+
 // isMetricStoreNotFoundError checks whether the error indicates the metric store does not exist.
 func isMetricStoreNotFoundError(err error) bool {
 	if err == nil {
@@ -1624,18 +1625,18 @@ func (h *slsHandler) handleLogExplore(ctx context.Context, params map[string]int
 
 // LogPattern represents a discovered log pattern
 type LogPattern struct {
-	Pattern    string  `json:"pattern"`
-	Count      int     `json:"count"`
-	Percentage float64 `json:"percentage"`
+	Pattern    string   `json:"pattern"`
+	Count      int      `json:"count"`
+	Percentage float64  `json:"percentage"`
 	Examples   []string `json:"examples"`
 }
 
 // LogExploreResult contains the results of log exploration analysis
 type LogExploreResult struct {
-	Patterns     []LogPattern           `json:"patterns"`
-	TotalLogs    int                    `json:"total_logs"`
-	UniquePatterns int                  `json:"unique_patterns"`
-	Distribution map[string]int         `json:"distribution"`
+	Patterns       []LogPattern   `json:"patterns"`
+	TotalLogs      int            `json:"total_logs"`
+	UniquePatterns int            `json:"unique_patterns"`
+	Distribution   map[string]int `json:"distribution"`
 }
 
 // analyzeLogPatterns performs pattern recognition and clustering on logs
@@ -2411,5 +2412,3 @@ func (h *slsHandler) handleLogCompare(ctx context.Context, params map[string]int
 		"message":  "success",
 	}, nil
 }
-
-

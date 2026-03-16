@@ -90,7 +90,7 @@ type fakeToolkit struct {
 	tools []toolkit.Tool
 }
 
-func (f *fakeToolkit) Name() string        { return f.name }
+func (f *fakeToolkit) Name() string          { return f.name }
 func (f *fakeToolkit) Tools() []toolkit.Tool { return f.tools }
 
 func TestNewServer_NilConfig(t *testing.T) {

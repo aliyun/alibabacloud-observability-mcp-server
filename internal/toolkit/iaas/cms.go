@@ -366,7 +366,6 @@ func (h *cmsHandler) handleExecutePromQL(ctx context.Context, params map[string]
 	}, false, ""), nil
 }
 
-
 // ===========================================================================
 // Tool 5: cms_execute_promql (Alias for Python compatibility)
 // ===========================================================================
@@ -429,7 +428,6 @@ func (h *cmsHandler) cmsExecutePromQLTool() toolkit.Tool {
 		Handler: h.handleExecutePromQL, // Reuse the same handler
 	}
 }
-
 
 // ===========================================================================
 // Tool 6: cms_text_to_promql (Alias for sls_text_to_promql for Python compatibility)

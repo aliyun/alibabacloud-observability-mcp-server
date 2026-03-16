@@ -13,8 +13,8 @@ import (
 
 func TestDatasetTools_Count(t *testing.T) {
 	tools := DatasetTools(&mockCMSClient{})
-	if got := len(tools); got != 3 {
-		t.Fatalf("DatasetTools() returned %d tools, want 3", got)
+	if got := len(tools); got != 4 {
+		t.Fatalf("DatasetTools() returned %d tools, want 4", got)
 	}
 }
 
@@ -23,6 +23,7 @@ func TestDatasetTools_Names(t *testing.T) {
 	expected := []string{
 		"umodel_list_data_set",
 		"umodel_search_entity_set",
+		"umodel_get_entity_set",
 		"umodel_list_related_entity_set",
 	}
 	for i, tool := range tools {
@@ -251,9 +252,128 @@ func TestHandleSearchEntitySet_WithDomainFilter(t *testing.T) {
 // umodel_list_related_entity_set handler tests
 // ---------------------------------------------------------------------------
 
-func TestHandleListRelatedEntitySet_MissingParams(t *testing.T) {
+func TestHandleGetEntitySet_MissingParams(t *testing.T) {
 	tools := DatasetTools(&mockCMSClient{})
 	handler := tools[2].Handler
+
+	result, err := handler(context.Background(), map[string]interface{}{})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	resp := result.(map[string]interface{})
+	if resp["error"] != true {
+		t.Error("expected error=true for missing params")
+	}
+}
+
+func TestHandleGetEntitySet_Success(t *testing.T) {
+	var capturedQuery string
+	mock := &mockCMSClient{
+		executeSPLFn: func(_ context.Context, _, _, query string, _, _ int64, _ int) (map[string]interface{}, error) {
+			capturedQuery = query
+			return map[string]interface{}{
+				"data": []interface{}{
+					map[string]interface{}{"name": "apm.service", "fields": []interface{}{"field1"}},
+				},
+			}, nil
+		},
+	}
+
+	tools := DatasetTools(mock)
+	handler := tools[2].Handler
+
+	result, err := handler(context.Background(), map[string]interface{}{
+		"domain":          "apm",
+		"entity_set_name": "apm.service",
+		"workspace":       "test-ws",
+		"regionId":        "cn-hangzhou",
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	resp := result.(map[string]interface{})
+	if resp["error"] != false {
+		t.Errorf("expected error=false, got message: %v", resp["message"])
+	}
+	if !strings.Contains(capturedQuery, "get_entity_set") {
+		t.Errorf("query should contain get_entity_set, got %q", capturedQuery)
+	}
+	if !strings.Contains(capturedQuery, "domain='apm'") {
+		t.Errorf("query should contain domain='apm', got %q", capturedQuery)
+	}
+	if !strings.Contains(capturedQuery, "name='apm.service'") {
+		t.Errorf("query should contain name='apm.service', got %q", capturedQuery)
+	}
+	if !strings.Contains(capturedQuery, "false") {
+		t.Errorf("query should contain detail=false by default, got %q", capturedQuery)
+	}
+}
+
+func TestHandleGetEntitySet_WithDetail(t *testing.T) {
+	var capturedQuery string
+	mock := &mockCMSClient{
+		executeSPLFn: func(_ context.Context, _, _, query string, _, _ int64, _ int) (map[string]interface{}, error) {
+			capturedQuery = query
+			return map[string]interface{}{"data": []interface{}{}}, nil
+		},
+	}
+
+	tools := DatasetTools(mock)
+	handler := tools[2].Handler
+
+	result, err := handler(context.Background(), map[string]interface{}{
+		"domain":          "apm",
+		"entity_set_name": "apm.service",
+		"workspace":       "test-ws",
+		"detail":          true,
+		"regionId":        "cn-hangzhou",
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	resp := result.(map[string]interface{})
+	if resp["error"] != false {
+		t.Errorf("expected error=false, got message: %v", resp["message"])
+	}
+	if !strings.Contains(capturedQuery, "true") {
+		t.Errorf("query should contain detail=true, got %q", capturedQuery)
+	}
+}
+
+func TestHandleGetEntitySet_SPLError(t *testing.T) {
+	mock := &mockCMSClient{
+		executeSPLFn: func(_ context.Context, _, _, _ string, _, _ int64, _ int) (map[string]interface{}, error) {
+			return nil, fmt.Errorf("connection refused")
+		},
+	}
+
+	tools := DatasetTools(mock)
+	handler := tools[2].Handler
+
+	result, err := handler(context.Background(), map[string]interface{}{
+		"domain":          "apm",
+		"entity_set_name": "apm.service",
+		"workspace":       "test-ws",
+		"regionId":        "cn-hangzhou",
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	resp := result.(map[string]interface{})
+	if resp["error"] != true {
+		t.Error("expected error=true when SPL call fails")
+	}
+}
+
+// ---------------------------------------------------------------------------
+// umodel_list_related_entity_set handler tests
+// ---------------------------------------------------------------------------
+
+func TestHandleListRelatedEntitySet_MissingParams(t *testing.T) {
+	tools := DatasetTools(&mockCMSClient{})
+	handler := tools[3].Handler
 
 	result, err := handler(context.Background(), map[string]interface{}{})
 	if err != nil {
@@ -279,7 +399,7 @@ func TestHandleListRelatedEntitySet_Success(t *testing.T) {
 	}
 
 	tools := DatasetTools(mock)
-	handler := tools[2].Handler
+	handler := tools[3].Handler
 
 	result, err := handler(context.Background(), map[string]interface{}{
 		"domain":          "apm",
@@ -313,7 +433,7 @@ func TestHandleListRelatedEntitySet_WithOptions(t *testing.T) {
 	}
 
 	tools := DatasetTools(mock)
-	handler := tools[2].Handler
+	handler := tools[3].Handler
 
 	result, err := handler(context.Background(), map[string]interface{}{
 		"domain":          "apm",
@@ -351,7 +471,7 @@ func TestHandleListRelatedEntitySet_SPLError(t *testing.T) {
 	}
 
 	tools := DatasetTools(mock)
-	handler := tools[2].Handler
+	handler := tools[3].Handler
 
 	result, err := handler(context.Background(), map[string]interface{}{
 		"domain":          "apm",
