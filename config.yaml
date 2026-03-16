@@ -106,6 +106,16 @@ locale:
   # 语言（用于错误消息等）
   language: zh-CN
 
+# 运行时默认值配置
+# 当工具调用未提供 regionId 或 workspace 时，使用此处的默认值
+# 优先级: 环境变量 > .env 文件 > config.yaml
+runtime:
+  # 默认区域
+  region: cn-hangzhou
+  
+  # 默认工作空间（PaaS 工具需要）
+  # workspace: ""
+
 # 端点覆盖配置（可选）
 # 用于内网访问或自定义端点
 # endpoints:
