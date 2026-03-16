@@ -32,13 +32,6 @@ func genNonEmptyFloat64Slice() gopter.Gen {
 	})
 }
 
-// genTimeSeriesStats generates a valid TimeSeriesStats with Count > 0.
-func genTimeSeriesStats() gopter.Gen {
-	return genNonEmptyFloat64Slice().Map(func(values []float64) TimeSeriesStats {
-		return ComputeStats(values, nil)
-	})
-}
-
 // ---------------------------------------------------------------------------
 // Property 15: 时序统计量数学不变量
 // ---------------------------------------------------------------------------

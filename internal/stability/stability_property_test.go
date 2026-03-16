@@ -190,7 +190,7 @@ func TestProperty_CircuitBreakerStateTransition(t *testing.T) {
 
 			// Accumulate N-1 failures (one short of tripping)
 			for i := 0; i < maxFailures-1; i++ {
-				cb.Execute(ctx, failFn)
+				_ = cb.Execute(ctx, failFn)
 			}
 
 			// A success should reset the counter
@@ -207,7 +207,7 @@ func TestProperty_CircuitBreakerStateTransition(t *testing.T) {
 
 			// Now N-1 more failures should NOT trip the breaker
 			for i := 0; i < maxFailures-1; i++ {
-				cb.Execute(ctx, failFn)
+				_ = cb.Execute(ctx, failFn)
 			}
 
 			if cb.State() != StateClosed {

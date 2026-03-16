@@ -478,7 +478,7 @@ func TestWrapHandler_PanicRecovery(t *testing.T) {
 				t.Errorf("panic was not recovered: %v", r)
 			}
 		}()
-		wrappedHandler(context.Background(), mcp.CallToolRequest{})
+		_, _ = wrappedHandler(context.Background(), mcp.CallToolRequest{})
 	}()
 }
 

@@ -140,7 +140,7 @@ func TestHealthEndpoint_SSE(t *testing.T) {
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
-	tr.Shutdown(ctx)
+	_ = tr.Shutdown(ctx)
 }
 
 func TestHealthEndpoint_StreamableHTTP(t *testing.T) {
@@ -179,7 +179,7 @@ func TestHealthEndpoint_StreamableHTTP(t *testing.T) {
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
-	tr.Shutdown(ctx)
+	_ = tr.Shutdown(ctx)
 }
 
 func TestHealthHandler_Direct(t *testing.T) {
