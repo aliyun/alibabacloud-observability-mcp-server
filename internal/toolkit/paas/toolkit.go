@@ -19,7 +19,6 @@ func NewPaaSToolkit(cmsClient client.CMSClient) *PaaSToolkit {
 	var tools []toolkit.Tool
 	tools = append(tools, EntityTools(cmsClient)...)
 	tools = append(tools, DataTools(cmsClient)...)
-	tools = append(tools, TimeseriesTools(cmsClient)...)
 	tools = append(tools, DatasetTools(cmsClient)...)
 	tools = append(tools, DataAgentTools(cmsClient)...)
 	return &PaaSToolkit{tools: tools}
