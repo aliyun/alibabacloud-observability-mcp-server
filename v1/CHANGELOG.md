@@ -1,5 +1,14 @@
 # 版本更新
 
+## 1.0.8 (2026-03-17)
+### 新功能
+- `TimeRangeParser` 支持 datetime 字符串格式解析（如 `"2026-03-06 17:30:00"`）
+  - 兼容标准日期时间字符串输入，自动识别并转换为时间戳
+  - 新增对应单元测试覆盖
+
+### 改进
+- `umodel_list_data_set` 工具新增 `entity_ids` 参数，支持按实体 ID 过滤数据集
+
 ## 1.0.7 (2026-02-03)
 ### 修复
 - `umodel_get_metrics` 工具 basic 模式查询添加 `aggregate=false` 参数

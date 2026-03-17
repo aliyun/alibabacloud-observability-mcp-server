@@ -23,7 +23,7 @@ from rich import box
 console = Console()
 
 # Version info
-__version__ = "1.0.0"
+__version__ = "1.0.8"
 
 # Tool categories and their descriptions
 TOOLKIT_CATEGORIES = {
