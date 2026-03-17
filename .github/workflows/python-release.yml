@@ -1,0 +1,146 @@
+name: Python Package Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: '发布版本号 (如 1.0.9)'
+        required: true
+        type: string
+      pr_numbers:
+        description: '包含的 PR 编号，逗号分隔 (如 48,49,50)，留空则自动收集上次 release 以来的所有合并 PR'
+        required: false
+        type: string
+      dry_run:
+        description: '试运行 (不实际发布到 PyPI)'
+        required: false
+        type: boolean
+        default: false
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: read
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+
+      - name: Install build tools
+        run: pip install build twine
+
+      - name: Collect PR changelog
+        id: changelog
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          VERSION="${{ inputs.version }}"
+          PR_NUMBERS="${{ inputs.pr_numbers }}"
+
+          echo "## ${VERSION} ($(date +%Y-%m-%d))" > /tmp/changelog_entry.md
+
+          if [ -n "$PR_NUMBERS" ]; then
+            # 使用指定的 PR 编号
+            for pr in $(echo "$PR_NUMBERS" | tr ',' ' '); do
+              PR_TITLE=$(gh pr view "$pr" --json title --jq '.title' 2>/dev/null || echo "PR #$pr")
+              PR_AUTHOR=$(gh pr view "$pr" --json author --jq '.author.login' 2>/dev/null || echo "unknown")
+              echo "- ${PR_TITLE} (#${pr}) @${PR_AUTHOR}" >> /tmp/changelog_entry.md
+            done
+          else
+            # 自动收集上次 release tag 以来合并的 PR
+            LAST_TAG=$(git tag --list 'python/v*' --sort=-version:refname | head -n1)
+            if [ -z "$LAST_TAG" ]; then
+              SINCE=""
+            else
+              SINCE="--search merged:>=$(git log -1 --format=%aI $LAST_TAG)"
+            fi
+            gh pr list --state merged --base master --limit 50 --json number,title,author,mergedAt \
+              --jq '.[] | "- \(.title) (#\(.number)) @\(.author.login)"' >> /tmp/changelog_entry.md
+          fi
+
+          echo "" >> /tmp/changelog_entry.md
+
+          # 输出 changelog
+          echo "changelog<<EOF" >> $GITHUB_OUTPUT
+          cat /tmp/changelog_entry.md >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+
+          cat /tmp/changelog_entry.md
+
+      - name: Bump version
+        run: |
+          VERSION="${{ inputs.version }}"
+
+          # 更新 pyproject.toml
+          sed -i "s/^version = \".*\"/version = \"${VERSION}\"/" v1/pyproject.toml
+
+          # 更新 cli.py
+          sed -i "s/__version__ = \".*\"/__version__ = \"${VERSION}\"/" v1/src/mcp_server_aliyun_observability/cli.py
+
+          echo "Version bumped to ${VERSION}"
+          grep "^version" v1/pyproject.toml
+          grep "__version__" v1/src/mcp_server_aliyun_observability/cli.py
+
+      - name: Update CHANGELOG.md
+        run: |
+          VERSION="${{ inputs.version }}"
+          CHANGELOG_FILE="v1/CHANGELOG.md"
+
+          # 在 "# 版本更新" 之后插入新版本记录
+          ENTRY=$(cat /tmp/changelog_entry.md)
+          sed -i "/^# 版本更新$/a\\
+          \\
+          ${ENTRY}" "$CHANGELOG_FILE"
+
+          echo "--- CHANGELOG preview ---"
+          head -30 "$CHANGELOG_FILE"
+
+      - name: Build package
+        working-directory: v1
+        run: python -m build
+
+      - name: Verify package
+        working-directory: v1
+        run: |
+          twine check dist/*
+          echo "--- Built packages ---"
+          ls -la dist/
+
+      - name: Publish to PyPI
+        if: ${{ !inputs.dry_run }}
+        working-directory: v1
+        env:
+          TWINE_USERNAME: __token__
+          TWINE_PASSWORD: ${{ secrets.PYPI_API_TOKEN }}
+        run: twine upload dist/*
+
+      - name: Commit version bump
+        if: ${{ !inputs.dry_run }}
+        run: |
+          VERSION="${{ inputs.version }}"
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add v1/pyproject.toml v1/src/mcp_server_aliyun_observability/cli.py v1/CHANGELOG.md
+          git commit -m "chore: release python v${VERSION}"
+          git tag "python/v${VERSION}"
+          git push origin master --tags
+
+      - name: Create GitHub Release
+        if: ${{ !inputs.dry_run }}
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          VERSION="${{ inputs.version }}"
+          gh release create "python/v${VERSION}" \
+            --title "Python v${VERSION}" \
+            --notes "${{ steps.changelog.outputs.changelog }}" \
+            v1/dist/*
