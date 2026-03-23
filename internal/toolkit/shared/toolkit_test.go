@@ -41,6 +41,10 @@ func (m *mockCMSClient) TextToSQL(ctx context.Context, region, project, logStore
 	return "", nil
 }
 
+func (m *mockCMSClient) ChatWithSkill(_ context.Context, _, _, _, _, _ string) (string, error) {
+	return "", nil
+}
+
 func (m *mockCMSClient) DataAgentQuery(_ context.Context, _, _, _ string, _, _ int64) (*client.DataAgentResult, error) {
 	return &client.DataAgentResult{}, nil
 }
@@ -102,7 +106,7 @@ func TestHandleListWorkspace_Success(t *testing.T) {
 	ctx := context.Background()
 
 	result, err := tk.handleListWorkspace(ctx, map[string]interface{}{
-		"regionId": "cn-hangzhou",
+		"regionId": "cn-hongkong",
 	})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -115,8 +119,8 @@ func TestHandleListWorkspace_Success(t *testing.T) {
 	if m["total_count"] != 2 {
 		t.Errorf("total_count = %v, want 2", m["total_count"])
 	}
-	if m["region"] != "cn-hangzhou" {
-		t.Errorf("region = %v, want cn-hangzhou", m["region"])
+	if m["region"] != "cn-hongkong" {
+		t.Errorf("region = %v, want cn-hongkong", m["region"])
 	}
 }
 
@@ -163,8 +167,8 @@ func TestHandleListDomains_Success(t *testing.T) {
 			if workspace != "my-ws" {
 				t.Errorf("workspace = %q, want %q", workspace, "my-ws")
 			}
-			if region != "cn-hangzhou" {
-				t.Errorf("region = %q, want %q", region, "cn-hangzhou")
+			if region != "cn-hongkong" {
+				t.Errorf("region = %q, want %q", region, "cn-hongkong")
 			}
 			return map[string]interface{}{
 				"data": []interface{}{
@@ -178,7 +182,7 @@ func TestHandleListDomains_Success(t *testing.T) {
 
 	result, err := tk.handleListDomains(ctx, map[string]interface{}{
 		"workspace": "my-ws",
-		"regionId":  "cn-hangzhou",
+		"regionId":  "cn-hongkong",
 	})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -205,7 +209,7 @@ func TestHandleListDomains_MissingParams(t *testing.T) {
 		params map[string]interface{}
 	}{
 		{"missing both", map[string]interface{}{}},
-		{"missing workspace", map[string]interface{}{"regionId": "cn-hangzhou"}},
+		{"missing workspace", map[string]interface{}{"regionId": "cn-hongkong"}},
 		{"missing regionId", map[string]interface{}{"workspace": "ws"}},
 	}
 
@@ -234,7 +238,7 @@ func TestHandleListDomains_CMSError(t *testing.T) {
 
 	result, err := tk.handleListDomains(ctx, map[string]interface{}{
 		"workspace": "ws",
-		"regionId":  "cn-hangzhou",
+		"regionId":  "cn-hongkong",
 	})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)

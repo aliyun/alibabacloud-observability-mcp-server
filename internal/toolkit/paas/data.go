@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"strings"
 
 	"github.com/alibabacloud-observability-mcp-server-go/internal/client"
 	"github.com/alibabacloud-observability-mcp-server-go/internal/toolkit"
@@ -21,7 +22,6 @@ func DataTools(cmsClient client.CMSClient) []toolkit.Tool {
 		h.getTracesTool(),
 		h.searchTracesTool(),
 		h.getProfilingTool(),
-		h.getProfilesAliasTool(), // Alias for Python compatibility
 	}
 }
 
@@ -33,8 +33,9 @@ func DataTools(cmsClient client.CMSClient) []toolkit.Tool {
 // An entity_set_name not present in the map is not validated (pass-through).
 var metricCompatibilityMap = map[string]map[string]bool{
 	"apm.service": {
-		"apm.metric.exception": true,
-		"apm.metric.service":   true,
+		"apm.metric.exception":   true,
+		"apm.metric.service":     true,
+		"apm.metric.apm.service": true,
 	},
 	"apm.instance": {
 		"apm.metric.jvm":       true,
@@ -48,10 +49,11 @@ var metricCompatibilityMap = map[string]map[string]bool{
 // metricSuggestedEntitySet maps a metric_domain_name to the entity_set_name
 // that is typically compatible with it. Used to suggest corrections.
 var metricSuggestedEntitySet = map[string]string{
-	"apm.metric.jvm":       "apm.instance",
-	"apm.metric.exception": "apm.instance", // also works with apm.service
-	"apm.metric.service":   "apm.service",
-	"k8s.metric.pod":       "k8s.pod",
+	"apm.metric.jvm":         "apm.instance",
+	"apm.metric.exception":   "apm.instance", // also works with apm.service
+	"apm.metric.service":     "apm.service",
+	"apm.metric.apm.service": "apm.service",
+	"k8s.metric.pod":         "k8s.pod",
 }
 
 // validateMetricCompatibility checks whether the given metric_domain_name is
@@ -91,14 +93,6 @@ func validateMetricCompatibility(entitySetName, metricDomainName string) string 
 	return msg
 }
 
-// getProfilesAliasTool returns an alias tool for umodel_get_profiling
-// to maintain compatibility with Python MCP server which uses "umodel_get_profiles"
-func (h *dataHandler) getProfilesAliasTool() toolkit.Tool {
-	tool := h.getProfilingTool()
-	tool.Name = "umodel_get_profiles"
-	return tool
-}
-
 // dataHandler holds the CMS client and provides tool constructors and handlers.
 type dataHandler struct {
 	cmsClient client.CMSClient
@@ -111,84 +105,84 @@ type dataHandler struct {
 func (h *dataHandler) getMetricsTool() toolkit.Tool {
 	return toolkit.Tool{
 		Name: "umodel_get_metrics",
-		Description: `获取实体的时序指标数据，支持多种分析模式。
+		Description: `Retrieve time-series metric data for entities, supporting multiple analysis modes.
 
-## 功能概述
-查询指定实体集的时序指标数据，支持多种分析模式：
-- basic: 返回原始时序数据（默认），支持时序对比
-- cluster: K-Means 聚类分析
-- forecast: 时序预测
-- anomaly_detection: 异常检测
+## Overview
+Query time-series metric data for a specified entity set, supporting multiple analysis modes:
+- basic: Returns raw time-series data (default), supports time-series comparison
+- cluster: K-Means clustering analysis
+- forecast: Time-series forecasting
+- anomaly_detection: Anomaly detection
 
-## 参数获取流程
-1. 搜索实体集: umodel_search_entity_set(search_text="apm")
-2. 列出指标集: umodel_list_data_set(data_set_types="metric_set") 获取 metric_domain_name 和 metric
-3. 获取实体ID(可选): umodel_get_entities()
-4. 执行查询
+## Parameter Discovery Flow
+1. Search entity sets: umodel_search_entity_set(search_text="apm")
+2. List metric sets: umodel_list_data_set(data_set_types="metric_set") to get metric_domain_name and metric
+3. Get entity IDs (optional): umodel_get_entities()
+4. Execute query
 
-## 分析模式说明
-- basic: 原始时序数据，支持 offset 参数进行时序对比
-- cluster: 使用 K-Means 算法对时序数据进行聚类分析
-- forecast: 基于历史数据进行时序预测，需指定 forecast_duration
-- anomaly_detection: 检测时序数据中的异常点
+## Analysis Modes
+- basic: Raw time-series data, supports offset parameter for time-series comparison
+- cluster: K-Means clustering analysis on time-series data
+- forecast: Time-series forecasting based on historical data, requires forecast_duration
+- anomaly_detection: Detect anomalies in time-series data
 
-## 使用场景
-- 查询服务的CPU使用率、请求延迟等时序指标
-- 对比不同时间段的指标数据（basic + offset）
-- 发现指标数据的聚类模式（cluster）
-- 预测未来指标趋势（forecast）
-- 检测异常指标值（anomaly_detection）`,
+## Use Cases
+- Query service CPU usage, request latency, and other time-series metrics
+- Compare metric data across different time periods (basic + offset)
+- Discover clustering patterns in metric data (cluster)
+- Predict future metric trends (forecast)
+- Detect anomalous metric values (anomaly_detection)`,
 		InputSchema: map[string]interface{}{
 			"type": "object",
 			"properties": map[string]interface{}{
 				"domain": map[string]interface{}{
 					"type":        "string",
-					"description": "实体域名，如'apm'、'host'。不能为'*'，可通过 umodel_search_entity_set 获取",
+					"description": "Entity domain, e.g. 'apm', 'host'. Cannot be '*', obtainable via umodel_search_entity_set",
 				},
 				"entity_set_name": map[string]interface{}{
 					"type":        "string",
-					"description": "实体类型名称，如'apm.service'。不能为'*'，可通过 umodel_search_entity_set 获取",
+					"description": "Entity set name, e.g. 'apm.service'. Cannot be '*', obtainable via umodel_search_entity_set",
 				},
 				"metric_domain_name": map[string]interface{}{
 					"type":        "string",
-					"description": "指标域名称，如'apm.metric.jvm'。可通过 umodel_list_data_set(data_set_types='metric_set') 获取",
+					"description": "Metric domain name, e.g. 'apm.metric.jvm'. Obtainable via umodel_list_data_set(data_set_types='metric_set')",
 				},
 				"metric": map[string]interface{}{
 					"type":        "string",
-					"description": "指标名称，如'cpu_usage'。可通过 umodel_list_data_set 返回的 fields 获取",
+					"description": "Metric name, e.g. 'cpu_usage'. Obtainable from the fields returned by umodel_list_data_set",
 				},
 				"workspace": map[string]interface{}{
 					"type":        "string",
-					"description": "CMS工作空间名称，可通过 list_workspace 获取",
+					"description": "CMS workspace name, obtainable via list_workspace",
 				},
 				"entity_ids": map[string]interface{}{
 					"type":        "string",
-					"description": "实体ID列表，逗号分隔，如'id1,id2,id3'。可通过 umodel_get_entities 获取",
+					"description": "Comma-separated entity IDs, e.g. 'id1,id2,id3'. Obtainable via umodel_get_entities",
 				},
 				"query_type": map[string]interface{}{
 					"type":        "string",
-					"description": "查询类型: range(范围查询) 或 instant(即时查询)",
+					"description": "Query type: range (range query) or instant (instant query)",
 					"default":     "range",
 					"enum":        []string{"range", "instant"},
 				},
 				"aggregate": map[string]interface{}{
 					"type":        "boolean",
-					"description": "是否聚合结果，默认true",
+					"description": "Whether to aggregate results, default true",
 					"default":     true,
 				},
 				"analysis_mode": map[string]interface{}{
 					"type":        "string",
-					"description": "分析模式: basic(原始数据), cluster(K-Means聚类), forecast(时序预测), anomaly_detection(异常检测)。默认: basic",
+					"description": "Analysis mode: basic (raw data), cluster (K-Means clustering), forecast (time-series forecasting), anomaly_detection (anomaly detection). Default: basic",
 					"default":     "basic",
 					"enum":        []string{"basic", "cluster", "forecast", "anomaly_detection"},
 				},
 				"forecast_duration": map[string]interface{}{
 					"type":        "string",
-					"description": "预测时长，仅在 analysis_mode='forecast' 时有效。如 '1h'（预测未来1小时）、'30m'（预测未来30分钟）。支持 s/m/h/d 单位",
+					"description": "Forecast duration, only valid when analysis_mode='forecast'. E.g. '1h' (forecast next 1 hour), '30m' (forecast next 30 minutes). Supports s/m/h/d units",
 				},
 				"offset": map[string]interface{}{
 					"type":        "string",
-					"description": "对比时间偏移量，仅在 analysis_mode='basic' 时有效。如 '1d'（与1天前对比）、'1w'（与1周前对比）。支持 s/m/h/d/w 单位",
+					"description": "Comparison time offset, only valid when analysis_mode='basic'. E.g. '1d' (compare with 1 day ago), '1w' (compare with 1 week ago). Supports s/m/h/d/w units",
 				},
 				"time_range": map[string]interface{}{
 					"type":        "string",
@@ -197,7 +191,7 @@ func (h *dataHandler) getMetricsTool() toolkit.Tool {
 				},
 				"regionId": map[string]interface{}{
 					"type":        "string",
-					"description": "阿里云区域ID，如 'cn-hangzhou'",
+					"description": "Alibaba Cloud region ID, e.g. 'cn-hongkong'",
 				},
 			},
 			"required": []string{"domain", "entity_set_name", "metric_domain_name", "metric", "workspace", "regionId"},
@@ -272,10 +266,11 @@ func (h *dataHandler) handleGetMetrics(ctx context.Context, params map[string]in
 	}
 
 	// Build base query for getting metrics
+	// SPL format: get_metric(domain, metric_domain_name, metric, query_type, step, aggregate)
 	baseQuery := fmt.Sprintf(
 		".entity_set with(domain='%s', name='%s'%s) | entity-call get_metric('%s', '%s', '%s', '%s', %s, %s)",
 		domain, entitySetName, entityIDsParam,
-		metricDomainName, metric, queryType, stepParam, stepParam, aggregateParam,
+		domain, metricDomainName, metric, queryType, stepParam, aggregateParam,
 	)
 
 	var query string
@@ -420,55 +415,55 @@ func (h *dataHandler) handleGetMetrics(ctx context.Context, params map[string]in
 func (h *dataHandler) getGoldenMetricsTool() toolkit.Tool {
 	return toolkit.Tool{
 		Name: "umodel_get_golden_metrics",
-		Description: `获取实体的黄金指标（关键性能指标）数据，支持时序对比。
+		Description: `Retrieve golden metrics (key performance indicators) for entities, with time-shift comparison support.
 
-## 功能概述
-查询指定实体集的黄金指标数据，黄金指标是衡量服务健康状况的关键指标：
-- 延迟(Latency): 请求响应时间
-- 吞吐量(Throughput): 请求处理速率
-- 错误率(Error Rate): 失败请求比例
-- 饱和度(Saturation): 资源使用程度
+## Overview
+Query golden metrics for a specified entity set. Golden metrics measure service health:
+- Latency: Request response time
+- Throughput: Request processing rate
+- Error Rate: Failed request ratio
+- Saturation: Resource utilization level
 
-## 参数获取流程
-1. 搜索实体集: umodel_search_entity_set(search_text="apm")
-2. 获取实体ID(可选): umodel_get_entities()
-3. 执行查询
+## Parameter Discovery
+1. Search entity sets: umodel_search_entity_set(search_text="apm")
+2. Get entity IDs (optional): umodel_get_entities()
+3. Execute query
 
-## 对比功能
-支持 offset 参数进行时序对比，如 '1d' 表示与1天前的数据对比。
+## Comparison
+Supports offset parameter for time-shift comparison, e.g. '1d' compares with data from 1 day ago.
 
-## 使用场景
-- 快速了解服务的整体健康状况
-- 监控服务的关键性能指标
-- 对比不同时间段的性能变化`,
+## Use Cases
+- Quickly assess overall service health
+- Monitor key performance indicators
+- Compare performance across different time periods`,
 		InputSchema: map[string]interface{}{
 			"type": "object",
 			"properties": map[string]interface{}{
 				"domain": map[string]interface{}{
 					"type":        "string",
-					"description": "实体域名，如'apm'、'host'。不能为'*'，可通过 umodel_search_entity_set 获取",
+					"description": "Entity domain, e.g. 'apm', 'host'. Must not be '*'. Obtain via umodel_search_entity_set",
 				},
 				"entity_set_name": map[string]interface{}{
 					"type":        "string",
-					"description": "实体类型名称，如'apm.service'。不能为'*'，可通过 umodel_search_entity_set 获取",
+					"description": "Entity set name, e.g. 'apm.service'. Must not be '*'. Obtain via umodel_search_entity_set",
 				},
 				"workspace": map[string]interface{}{
 					"type":        "string",
-					"description": "CMS工作空间名称，可通过 list_workspace 获取",
+					"description": "CMS workspace name. Obtain via list_workspace",
 				},
 				"entity_ids": map[string]interface{}{
 					"type":        "string",
-					"description": "实体ID列表，逗号分隔，如'id1,id2,id3'。可通过 umodel_get_entities 获取",
+					"description": "Comma-separated entity IDs, e.g. 'id1,id2,id3'. Obtain via umodel_get_entities",
 				},
 				"query_type": map[string]interface{}{
 					"type":        "string",
-					"description": "查询类型: range(范围查询，返回时序数据) 或 instant(即时查询，返回最新值)",
+					"description": "Query type: range (range query, returns time-series data) or instant (instant query, returns latest value)",
 					"default":     "range",
 					"enum":        []string{"range", "instant"},
 				},
 				"aggregate": map[string]interface{}{
 					"type":        "boolean",
-					"description": "是否聚合结果，true 表示聚合所有实体的结果，false 表示返回每个实体的独立结果",
+					"description": "Whether to aggregate results. true aggregates all entities, false returns per-entity results",
 					"default":     true,
 				},
 				"time_range": map[string]interface{}{
@@ -478,11 +473,11 @@ func (h *dataHandler) getGoldenMetricsTool() toolkit.Tool {
 				},
 				"offset": map[string]interface{}{
 					"type":        "string",
-					"description": "对比偏移量，如'1h','1d','1w'。启用后会执行两次查询（当前时段和对比时段），返回对比分析结果",
+					"description": "Comparison offset, e.g. '1h', '1d', '1w'. When set, two queries are executed (current and comparison periods) and a comparison analysis is returned",
 				},
 				"regionId": map[string]interface{}{
 					"type":        "string",
-					"description": "阿里云区域ID，如 'cn-hangzhou'",
+					"description": "Alibaba Cloud region ID, e.g. 'cn-hongkong'",
 				},
 			},
 			"required": []string{"domain", "entity_set_name", "workspace", "regionId"},
@@ -607,83 +602,83 @@ func (h *dataHandler) handleGetGoldenMetrics(ctx context.Context, params map[str
 func (h *dataHandler) getRelationMetricsTool() toolkit.Tool {
 	return toolkit.Tool{
 		Name: "umodel_get_relation_metrics",
-		Description: `获取实体间关系级别的指标数据。
+		Description: `Retrieve relation-level metric data between entities.
 
-## 功能概述
-查询指定实体集之间关系的指标数据，如服务间调用的延迟、吞吐量等。
-支持上游、下游和双向关系查询。
+## Overview
+Query metric data for relationships between entity sets, such as inter-service call latency and throughput.
+Supports upstream, downstream, and bidirectional relationship queries.
 
-## 参数获取流程
-1. 搜索实体集: umodel_search_entity_set(search_text="apm")
-2. 列出指标集: umodel_list_data_set(data_set_types="metric_set") 获取 metric_set_domain 和 metric
-3. 获取实体ID(可选): umodel_get_entities()
-4. 执行查询
+## Parameter Discovery
+1. Search entity sets: umodel_search_entity_set(search_text="apm")
+2. List metric sets: umodel_list_data_set(data_set_types="metric_set") to get metric_set_domain and metric
+3. Get entity IDs (optional): umodel_get_entities()
+4. Execute query
 
-## 方向说明
-- "upstream": 上游关系（调用方）
-- "downstream": 下游关系（被调用方）
-- "both": 双向关系（默认）
+## Direction
+- "upstream": Upstream relationship (caller)
+- "downstream": Downstream relationship (callee)
+- "both": Bidirectional (default)
 
-## 使用场景
-- 查询服务间调用的延迟指标
-- 分析上下游依赖的性能数据
-- 监控服务间通信的健康状况`,
+## Use Cases
+- Query inter-service call latency metrics
+- Analyze upstream/downstream dependency performance
+- Monitor inter-service communication health`,
 		InputSchema: map[string]interface{}{
 			"type": "object",
 			"properties": map[string]interface{}{
 				"src_domain": map[string]interface{}{
 					"type":        "string",
-					"description": "源实体域名，如'apm'、'host'。不能为'*'，可通过 umodel_search_entity_set 获取",
+					"description": "Source entity domain, e.g. 'apm', 'host'. Must not be '*'. Obtain via umodel_search_entity_set",
 				},
 				"src_entity_set_name": map[string]interface{}{
 					"type":        "string",
-					"description": "源实体类型名称，如'apm.service'。不能为'*'，可通过 umodel_search_entity_set 获取",
+					"description": "Source entity set name, e.g. 'apm.service'. Must not be '*'. Obtain via umodel_search_entity_set",
 				},
 				"src_entity_ids": map[string]interface{}{
 					"type":        "string",
-					"description": "源实体ID列表，逗号分隔，如'id1,id2,id3'。可通过 umodel_get_entities 获取",
+					"description": "Comma-separated source entity IDs, e.g. 'id1,id2,id3'. Obtain via umodel_get_entities",
 				},
 				"relation_type": map[string]interface{}{
 					"type":        "string",
-					"description": "关系类型，如'calls'。用于自动拼接 metric_set_name",
+					"description": "Relation type, e.g. 'calls'. Used to auto-generate metric_set_name",
 				},
 				"direction": map[string]interface{}{
 					"type":        "string",
-					"description": "关系方向: upstream(上游), downstream(下游), both(双向)。默认: both",
-					"default":     "both",
-					"enum":        []string{"upstream", "downstream", "both"},
+					"description": "Relation direction: 'out' (src->dest) or 'in' (dest->src). Default: out",
+					"default":     "out",
+					"enum":        []string{"in", "out"},
 				},
 				"metric_set_domain": map[string]interface{}{
 					"type":        "string",
-					"description": "指标集域名，如'apm'。可通过 umodel_list_data_set(data_set_types='metric_set') 获取",
+					"description": "Metric set domain, e.g. 'apm'. Obtain via umodel_list_data_set(data_set_types='metric_set')",
 				},
 				"metric_set_name": map[string]interface{}{
 					"type":        "string",
-					"description": "指标集名称。如果不提供，将自动拼接为 relation_type + '.' + src_entity_set_name",
+					"description": "Metric set name. If not provided, auto-generated as relation_type + '.' + src_entity_set_name",
 				},
 				"metric": map[string]interface{}{
 					"type":        "string",
-					"description": "指标名称，如'latency'、'throughput'。可通过 umodel_list_data_set 返回的 fields 获取",
+					"description": "Metric name, e.g. 'latency', 'throughput'. Obtain from the fields returned by umodel_list_data_set",
 				},
 				"workspace": map[string]interface{}{
 					"type":        "string",
-					"description": "CMS工作空间名称，可通过 list_workspace 获取",
+					"description": "CMS workspace name. Obtain via list_workspace",
 				},
 				"dest_domain": map[string]interface{}{
 					"type":        "string",
-					"description": "目标实体域名（可选），用于过滤特定目标域",
+					"description": "Destination entity domain (optional), used to filter by target domain",
 				},
 				"dest_entity_set_name": map[string]interface{}{
 					"type":        "string",
-					"description": "目标实体类型名称（可选），用于过滤特定目标类型",
+					"description": "Destination entity set name (optional), used to filter by target type",
 				},
 				"dest_entity_ids": map[string]interface{}{
 					"type":        "string",
-					"description": "目标实体ID列表（可选），逗号分隔",
+					"description": "Comma-separated destination entity IDs (optional)",
 				},
 				"query_type": map[string]interface{}{
 					"type":        "string",
-					"description": "查询类型: range(范围查询) 或 instant(即时查询)",
+					"description": "Query type: range (range query) or instant (instant query)",
 					"default":     "range",
 					"enum":        []string{"range", "instant"},
 				},
@@ -694,7 +689,7 @@ func (h *dataHandler) getRelationMetricsTool() toolkit.Tool {
 				},
 				"regionId": map[string]interface{}{
 					"type":        "string",
-					"description": "阿里云区域ID，如 'cn-hangzhou'",
+					"description": "Alibaba Cloud region ID, e.g. 'cn-hongkong'",
 				},
 			},
 			"required": []string{"src_domain", "src_entity_set_name", "relation_type", "metric_set_domain", "metric", "workspace", "regionId"},
@@ -708,7 +703,7 @@ func (h *dataHandler) handleGetRelationMetrics(ctx context.Context, params map[s
 	srcEntitySetName := paramString(params, "src_entity_set_name", "")
 	srcEntityIDs := paramString(params, "src_entity_ids", "")
 	relationType := paramString(params, "relation_type", "")
-	direction := paramString(params, "direction", "both")
+	direction := paramString(params, "direction", "out")
 	metricSetDomain := paramString(params, "metric_set_domain", "")
 	metricSetName := paramString(params, "metric_set_name", "")
 	metric := paramString(params, "metric", "")
@@ -727,10 +722,10 @@ func (h *dataHandler) handleGetRelationMetrics(ctx context.Context, params map[s
 	}
 
 	// Validate direction parameter
-	validDirections := map[string]bool{"upstream": true, "downstream": true, "both": true}
+	validDirections := map[string]bool{"in": true, "out": true}
 	if !validDirections[direction] {
 		return buildStandardResponse(nil, "", 0, 0, true,
-			fmt.Sprintf("invalid direction '%s', must be one of: upstream, downstream, both", direction), timeRange), nil
+			fmt.Sprintf("invalid direction '%s', must be one of: in, out", direction), timeRange), nil
 	}
 
 	// Validate query_type parameter
@@ -744,9 +739,25 @@ func (h *dataHandler) handleGetRelationMetrics(ctx context.Context, params map[s
 		return buildStandardResponse(nil, "", 0, 0, true, err.Error(), timeRange), nil
 	}
 
-	// Auto-generate metric_set_name if not provided: relation_type + "." + src_entity_set_name
+	// Auto-generate metric_set_name if not provided.
+	// Format: {metric_set_domain}.metric.{src_entity_set_name}_{relation_type}_{dest_entity_set_name}
+	// Example: apm.metric.apm.service_calls_apm.external.nosql
 	if metricSetName == "" {
-		metricSetName = relationType + "." + srcEntitySetName
+		if destEntitySetName == "" {
+			return buildStandardResponse(nil, "", 0, 0, true,
+				"metric_set_name is required when dest_entity_set_name is not provided. "+
+					"Either provide metric_set_name directly, or provide dest_entity_set_name to auto-generate it. "+
+					"Use umodel_list_related_entity_set to find valid relation_data_sets names", timeRange), nil
+		}
+		metricSetName = metricSetDomain + ".metric." + srcEntitySetName + "_" + relationType + "_" + destEntitySetName
+	}
+
+	// Auto-infer dest_domain from dest_entity_set_name prefix if not provided.
+	// e.g. "apm.external.nosql" → "apm", "k8s.deployment" → "k8s"
+	if destDomain == "" && destEntitySetName != "" {
+		if idx := strings.Index(destEntitySetName, "."); idx > 0 {
+			destDomain = destEntitySetName[:idx]
+		}
 	}
 
 	// Build source entity IDs parameter
@@ -761,13 +772,17 @@ func (h *dataHandler) handleGetRelationMetrics(ctx context.Context, params map[s
 	}
 
 	// Build SPL query: .entity_set with(...) | entity-call get_relation_metric(...)
-	// Parameters: metric_set_domain, metric_set_name, metric, query_type, step, dest_domain, dest_name, dest_ids, direction
-	stepParam := "''" // Auto step
+	// Parameters (per CMS API): dest_domain, dest_name, dest_ids, filter, relation_type, direction,
+	//   metric_set_domain, metric_set_name, metric, query_type, step, aggregate_labels
+	stepParam := "''"            // Auto step
+	aggregateLabelsParam := "[]" // No aggregation by default
+	relationTypeParam := parseStringToSPLParam(relationType)
+	directionParam := parseStringToSPLParam(direction)
 	query := fmt.Sprintf(
-		".entity_set with(domain='%s', name='%s'%s) | entity-call get_relation_metric('%s', '%s', '%s', '%s', %s, %s, %s, %s, '%s')",
+		".entity_set with(domain='%s', name='%s'%s) | entity-call get_relation_metric(%s, %s, %s, '', %s, %s, '%s', '%s', '%s', '%s', %s, %s)",
 		srcDomain, srcEntitySetName, srcEntityIDsParam,
-		metricSetDomain, metricSetName, metric, queryType, stepParam,
-		destDomainParam, destEntitySetNameParam, destEntityIDsParam, direction,
+		destDomainParam, destEntitySetNameParam, destEntityIDsParam, relationTypeParam, directionParam,
+		metricSetDomain, metricSetName, metric, queryType, stepParam, aggregateLabelsParam,
 	)
 
 	slog.InfoContext(ctx, "umodel_get_relation_metrics",
@@ -792,66 +807,66 @@ func (h *dataHandler) handleGetRelationMetrics(ctx context.Context, params map[s
 func (h *dataHandler) getLogsTool() toolkit.Tool {
 	return toolkit.Tool{
 		Name: "umodel_get_logs",
-		Description: `获取实体相关的日志数据，支持原始日志查询和日志聚类分析。
+		Description: `Retrieve log data for entities, supporting raw log queries and log clustering analysis.
 
-## 功能概述
-查询指定实体集的日志数据，支持原始日志查询和基于字段的日志聚类分析。
-日志聚类可自动识别日志模式，将相似日志归类，帮助快速发现问题。
+## Overview
+Query log data for a specified entity set, supporting raw log queries and field-based log clustering.
+Log clustering automatically identifies log patterns, groups similar logs, and helps quickly discover issues.
 
-## 参数获取流程
-1. 搜索实体集: umodel_search_entity_set(search_text="apm")
-2. 列出日志集: umodel_list_data_set(data_set_types="log_set") 获取 log_set_domain 和 log_set_name
-3. 获取实体ID(可选但推荐): umodel_get_entities()
-4. 执行查询
+## Parameter Discovery
+1. Search entity sets: umodel_search_entity_set(search_text="apm")
+2. List log sets: umodel_list_data_set(data_set_types="log_set") to get log_set_domain and log_set_name
+3. Get entity IDs (optional but recommended): umodel_get_entities()
+4. Execute query
 
-## 日志聚类说明
-当提供 to_cluster_content_field 参数时，启用日志聚类分析：
-- 系统会自动识别日志模式，将相似日志归类
-- 返回每个模式的统计信息：模式ID、模式模板、事件数量、时间范围、样本数据
-- 可选提供 to_cluster_aggregate_field 进一步按字段分组
+## Log Clustering
+When to_cluster_content_field is provided, log clustering analysis is enabled:
+- Automatically identifies log patterns and groups similar logs
+- Returns statistics per pattern: pattern ID, pattern template, event count, time range, sample data
+- Optionally provide to_cluster_aggregate_field for further grouping by field
 
-## 使用场景
-- 查询服务的错误日志
-- 日志聚类分析，发现异常模式
-- 故障诊断和性能分析`,
+## Use Cases
+- Query service error logs
+- Log clustering analysis to discover anomalous patterns
+- Fault diagnosis and performance analysis`,
 		InputSchema: map[string]interface{}{
 			"type": "object",
 			"properties": map[string]interface{}{
 				"domain": map[string]interface{}{
 					"type":        "string",
-					"description": "实体域名，如'apm'、'host'。不能为'*'",
+					"description": "Entity domain, e.g. 'apm', 'host'. Cannot be '*'",
 				},
 				"entity_set_name": map[string]interface{}{
 					"type":        "string",
-					"description": "实体类型名称，如'apm.service'。不能为'*'",
+					"description": "Entity set name, e.g. 'apm.service'. Cannot be '*'",
 				},
 				"log_set_domain": map[string]interface{}{
 					"type":        "string",
-					"description": "日志集域名，如'apm'。可通过 umodel_list_data_set(data_set_types='log_set') 获取",
+					"description": "Log set domain, e.g. 'apm'. Obtainable via umodel_list_data_set(data_set_types='log_set')",
 				},
 				"log_set_name": map[string]interface{}{
 					"type":        "string",
-					"description": "日志集名称，如'apm.log.apm.service'。可通过 umodel_list_data_set 获取",
+					"description": "Log set name, e.g. 'apm.log.apm.service'. Obtainable via umodel_list_data_set",
 				},
 				"workspace": map[string]interface{}{
 					"type":        "string",
-					"description": "CMS工作空间名称，可通过 list_workspace 获取",
+					"description": "CMS workspace name, obtainable via list_workspace",
 				},
 				"entity_ids": map[string]interface{}{
 					"type":        "string",
-					"description": "实体ID列表，逗号分隔。可通过 umodel_get_entities 获取（强烈推荐提供）",
+					"description": "Comma-separated entity IDs, obtainable via umodel_get_entities (strongly recommended)",
 				},
 				"to_cluster_content_field": map[string]interface{}{
 					"type":        "string",
-					"description": "日志聚类字段，如'content'、'message'。提供此参数时启用日志聚类分析，返回日志模式而非原始日志",
+					"description": "Log clustering field, e.g. 'content', 'message'. When provided, enables log clustering analysis and returns log patterns instead of raw logs",
 				},
 				"to_cluster_aggregate_field": map[string]interface{}{
 					"type":        "string",
-					"description": "聚类聚合字段，如'severity'、'level'。用于在聚类结果中按此字段进一步分组统计",
+					"description": "Clustering aggregation field, e.g. 'severity', 'level'. Used for further grouping in clustering results",
 				},
 				"limit": map[string]interface{}{
 					"type":        "integer",
-					"description": "返回的最大日志记录数量，默认100",
+					"description": "Maximum number of log records to return, default 100",
 					"default":     100,
 					"minimum":     1,
 					"maximum":     1000,
@@ -863,7 +878,7 @@ func (h *dataHandler) getLogsTool() toolkit.Tool {
 				},
 				"regionId": map[string]interface{}{
 					"type":        "string",
-					"description": "阿里云区域ID",
+					"description": "Alibaba Cloud region ID",
 				},
 			},
 			"required": []string{"domain", "entity_set_name", "log_set_domain", "log_set_name", "workspace", "regionId"},
@@ -947,52 +962,52 @@ func (h *dataHandler) handleGetLogs(ctx context.Context, params map[string]inter
 func (h *dataHandler) getEventsTool() toolkit.Tool {
 	return toolkit.Tool{
 		Name: "umodel_get_events",
-		Description: `获取指定实体集的事件数据。
+		Description: `Retrieve event data for a specified entity set.
 
-## 功能概述
-查询指定实体集的事件数据，事件是离散记录，如部署、告警、配置更改等。
-用于关联分析系统行为变化。
+## Overview
+Query event data for a specified entity set. Events are discrete records such as deployments, alerts, and configuration changes.
+Used for correlating system behavior changes.
 
-## 参数获取流程
-1. 搜索实体集: umodel_search_entity_set(search_text="apm")
-2. 列出事件集: umodel_list_data_set(data_set_types="event_set") 或使用默认值 "default"/"default.event.common"
-3. 获取实体ID(可选): umodel_get_entities()
-4. 执行查询
+## Parameter Discovery
+1. Search entity sets: umodel_search_entity_set(search_text="apm")
+2. List event sets: umodel_list_data_set(data_set_types="event_set") or use defaults "default"/"default.event.common"
+3. Get entity IDs (optional): umodel_get_entities()
+4. Execute query
 
-## 使用场景
-- 查看服务的部署事件
-- 关联告警事件与指标异常
-- 分析配置变更对系统的影响`,
+## Use Cases
+- View service deployment events
+- Correlate alert events with metric anomalies
+- Analyze the impact of configuration changes on the system`,
 		InputSchema: map[string]interface{}{
 			"type": "object",
 			"properties": map[string]interface{}{
 				"domain": map[string]interface{}{
 					"type":        "string",
-					"description": "实体域名，如'apm'、'host'。不能为'*'",
+					"description": "Entity domain, e.g. 'apm', 'host'. Cannot be '*'",
 				},
 				"entity_set_name": map[string]interface{}{
 					"type":        "string",
-					"description": "实体类型名称，如'apm.service'。不能为'*'",
+					"description": "Entity set name, e.g. 'apm.service'. Cannot be '*'",
 				},
 				"event_set_domain": map[string]interface{}{
 					"type":        "string",
-					"description": "事件集域名，如'default'。可通过 umodel_list_data_set(data_set_types='event_set') 获取",
+					"description": "Event set domain, e.g. 'default'. Obtainable via umodel_list_data_set(data_set_types='event_set')",
 				},
 				"event_set_name": map[string]interface{}{
 					"type":        "string",
-					"description": "事件集名称，如'default.event.common'。可通过 umodel_list_data_set 获取",
+					"description": "Event set name, e.g. 'default.event.common'. Obtainable via umodel_list_data_set",
 				},
 				"workspace": map[string]interface{}{
 					"type":        "string",
-					"description": "CMS工作空间名称，可通过 list_workspace 获取",
+					"description": "CMS workspace name, obtainable via list_workspace",
 				},
 				"entity_ids": map[string]interface{}{
 					"type":        "string",
-					"description": "实体ID列表，逗号分隔。可通过 umodel_get_entities 获取",
+					"description": "Comma-separated entity IDs, obtainable via umodel_get_entities",
 				},
 				"limit": map[string]interface{}{
 					"type":        "integer",
-					"description": "返回的最大事件记录数量，默认100",
+					"description": "Maximum number of event records to return, default 100",
 					"default":     100,
 					"minimum":     1,
 					"maximum":     1000,
@@ -1004,7 +1019,7 @@ func (h *dataHandler) getEventsTool() toolkit.Tool {
 				},
 				"regionId": map[string]interface{}{
 					"type":        "string",
-					"description": "阿里云区域ID",
+					"description": "Alibaba Cloud region ID",
 				},
 			},
 			"required": []string{"domain", "entity_set_name", "event_set_domain", "event_set_name", "workspace", "regionId"},
@@ -1034,19 +1049,63 @@ func (h *dataHandler) handleGetEvents(ctx context.Context, params map[string]int
 		return buildStandardResponse(nil, "", 0, 0, true, err.Error(), timeRange), nil
 	}
 
-	entityIDsParam := buildEntityIDsParam(entityIDs)
+	// Two query modes based on event set type (matching umodel-mcp implementation):
+	// 1. Default event set (default/default.event.common): table-style query via .event_set with SQL conditions
+	// 2. Custom event set: entity-call via .entity_set
+	var query string
+	if eventSetDomain == "default" && eventSetName == "default.event.common" {
+		// Build SQL conditions for default event set
+		conditions := fmt.Sprintf(`"resource.entity.domain" = '%s' and "resource.entity.entity_type" = '%s'`,
+			domain, entitySetName)
 
-	query := fmt.Sprintf(
-		".entity_set with(domain='%s', name='%s'%s) | entity-call get_event('%s', '%s')",
-		domain, entitySetName, entityIDsParam,
-		eventSetDomain, eventSetName,
-	)
+		// Add entity ID filter if specified
+		if entityIDs != "" {
+			parts := strings.Split(entityIDs, ",")
+			quoted := make([]string, 0, len(parts))
+			for _, id := range parts {
+				id = strings.TrimSpace(id)
+				if id != "" {
+					quoted = append(quoted, "'"+id+"'")
+				}
+			}
+			if len(quoted) > 0 {
+				conditions += fmt.Sprintf(` and "resource.entity.entity_id" in (%s)`, strings.Join(quoted, ","))
+			}
+		}
+
+		query = fmt.Sprintf(".event_set with(domain='%s', name='%s', query=`%s`) | limit 0, %d",
+			eventSetDomain, eventSetName, conditions, limit)
+	} else {
+		// Custom event set: use entity-call get_event
+		entityIDsParam := buildEntityIDsParam(entityIDs)
+		query = fmt.Sprintf(
+			".entity_set with(domain='%s', name='%s'%s) | entity-call get_event('%s', '%s') | limit 0, %d",
+			domain, entitySetName, entityIDsParam,
+			eventSetDomain, eventSetName, limit,
+		)
+	}
 
 	slog.InfoContext(ctx, "umodel_get_events",
 		"workspace", workspace, "domain", domain, "event_set_name", eventSetName, "region", regionID)
 
 	result, err := h.cmsClient.ExecuteSPL(ctx, regionID, workspace, query, fromTS, toTS, limit)
 	if err != nil {
+		// Auto-retry on MultipleStorageFound: parse storage ID components and retry
+		// using Table mode (.event_set with storage_domain/storage_kind/storage_name)
+		if storage := parseMultipleStorageID(err.Error()); storage != nil {
+			slog.InfoContext(ctx, "umodel_get_events retrying with storage (table mode)",
+				"storage_domain", storage.Domain, "storage_kind", storage.Kind, "storage_name", storage.Name)
+			retryQuery := buildEventQueryWithStorage(eventSetDomain, eventSetName, storage, entityIDs, limit)
+			result, err = h.cmsClient.ExecuteSPL(ctx, regionID, workspace, retryQuery, fromTS, toTS, limit)
+			if err != nil {
+				slog.ErrorContext(ctx, "umodel_get_events retry failed", "error", err)
+				return buildStandardResponse(nil, retryQuery, fromTS, toTS, true,
+					fmt.Sprintf("Failed to get events (retry with storage): %s", err), timeRange), nil
+			}
+			data := result["data"]
+			return buildStandardResponse(data, retryQuery, fromTS, toTS, false, "", timeRange), nil
+		}
+
 		slog.ErrorContext(ctx, "umodel_get_events failed", "error", err)
 		return buildStandardResponse(nil, query, fromTS, toTS, true,
 			fmt.Sprintf("Failed to get events: %s", err), timeRange), nil
@@ -1056,6 +1115,76 @@ func (h *dataHandler) handleGetEvents(ctx context.Context, params map[string]int
 	return buildStandardResponse(data, query, fromTS, toTS, false, "", timeRange), nil
 }
 
+// storageInfo holds parsed storage components from a storage ID.
+// Storage ID format: "domain@kind@name", e.g. "k8s@sls_logstore@k8s-log-xxx/k8s-event".
+type storageInfo struct {
+	Domain string
+	Kind   string
+	Name   string
+}
+
+// parseMultipleStorageID extracts the first storage ID from a MultipleStorageFound error message
+// and parses it into domain/kind/name components.
+func parseMultipleStorageID(errMsg string) *storageInfo {
+	if !strings.Contains(errMsg, "MultipleStorageFound") {
+		return nil
+	}
+	marker := "available storage IDs: ["
+	idx := strings.Index(errMsg, marker)
+	if idx < 0 {
+		return nil
+	}
+	rest := errMsg[idx+len(marker):]
+	end := strings.Index(rest, "]")
+	if end < 0 {
+		return nil
+	}
+	ids := rest[:end]
+	parts := strings.SplitN(ids, ",", 2)
+	if len(parts) == 0 {
+		return nil
+	}
+	raw := strings.TrimSpace(parts[0])
+	return parseStorageID(raw)
+}
+
+// parseStorageID parses a storage ID string "domain@kind@name" into components.
+func parseStorageID(id string) *storageInfo {
+	// Format: domain@kind@name (e.g. "k8s@sls_logstore@k8s-log-xxx/k8s-event")
+	parts := strings.SplitN(id, "@", 3)
+	if len(parts) != 3 {
+		return nil
+	}
+	return &storageInfo{Domain: parts[0], Kind: parts[1], Name: parts[2]}
+}
+
+// buildEventQueryWithStorage builds an event query using Table mode (.event_set with)
+// with explicit storage_domain/storage_kind/storage_name parameters.
+// This is used as a fallback when Object mode entity-call fails with MultipleStorageFound.
+func buildEventQueryWithStorage(eventSetDomain, eventSetName string, storage *storageInfo, entityIDs string, limit int) string {
+	var queryParam string
+	if entityIDs != "" {
+		// 将 entity_ids 转为过滤条件
+		parts := strings.Split(entityIDs, ",")
+		quoted := make([]string, 0, len(parts))
+		for _, id := range parts {
+			id = strings.TrimSpace(id)
+			if id != "" {
+				quoted = append(quoted, "'"+id+"'")
+			}
+		}
+		if len(quoted) > 0 {
+			queryParam = fmt.Sprintf(", query=`\"resource.entity.entity_id\" in (%s)`", strings.Join(quoted, ","))
+		}
+	}
+	return fmt.Sprintf(
+		".event_set with(domain='%s', name='%s', storage_domain='%s', storage_kind='%s', storage_name='%s'%s) | limit 0, %d",
+		eventSetDomain, eventSetName,
+		storage.Domain, storage.Kind, storage.Name,
+		queryParam, limit,
+	)
+}
+
 // ===========================================================================
 // Tool 5: umodel_get_traces
 // ===========================================================================
@@ -1063,52 +1192,52 @@ func (h *dataHandler) handleGetEvents(ctx context.Context, params map[string]int
 func (h *dataHandler) getTracesTool() toolkit.Tool {
 	return toolkit.Tool{
 		Name: "umodel_get_traces",
-		Description: `获取指定trace ID的详细trace数据，包括所有span和元数据。
+		Description: `Retrieve detailed trace data for specified trace IDs, including all spans and metadata.
 
-## 功能概述
-根据trace ID获取详细的trace数据，包括所有span、耗时和元数据。
-用于深入分析慢trace和错误trace。
+## Overview
+Retrieve detailed trace data by trace ID, including all spans, durations, and metadata.
+Used for in-depth analysis of slow and error traces.
 
-## 参数获取流程
-1. 搜索实体集: umodel_search_entity_set(search_text="apm")
-2. 列出TraceSet: umodel_list_data_set(data_set_types="trace_set") 获取 trace_set_domain 和 trace_set_name
-3. 获取trace ID: 通常从 umodel_search_traces 工具输出中获得
-4. 执行查询
+## Parameter Discovery Flow
+1. Search entity sets: umodel_search_entity_set(search_text="apm")
+2. List TraceSets: umodel_list_data_set(data_set_types="trace_set") to get trace_set_domain and trace_set_name
+3. Get trace IDs: Typically obtained from umodel_search_traces output
+4. Execute query
 
-## 输出字段说明
-- duration_ms: span总耗时（毫秒）
-- exclusive_duration_ms: span独占耗时（毫秒）
+## Output Fields
+- duration_ms: Total span duration (milliseconds)
+- exclusive_duration_ms: Exclusive span duration (milliseconds)
 
-## 使用场景
-- 分析慢请求的调用链路
-- 定位错误trace的根因
-- 查看span级别的详细信息`,
+## Use Cases
+- Analyze call chains of slow requests
+- Locate root causes of error traces
+- View span-level details`,
 		InputSchema: map[string]interface{}{
 			"type": "object",
 			"properties": map[string]interface{}{
 				"domain": map[string]interface{}{
 					"type":        "string",
-					"description": "实体域名，如'apm'、'host'。不能为'*'",
+					"description": "Entity domain, e.g. 'apm', 'host'. Cannot be '*'",
 				},
 				"entity_set_name": map[string]interface{}{
 					"type":        "string",
-					"description": "实体类型名称，如'apm.service'。不能为'*'",
+					"description": "Entity set name, e.g. 'apm.service'. Cannot be '*'",
 				},
 				"trace_set_domain": map[string]interface{}{
 					"type":        "string",
-					"description": "TraceSet域名，如'apm'。可通过 umodel_list_data_set(data_set_types='trace_set') 获取",
+					"description": "TraceSet domain, e.g. 'apm'. Obtainable via umodel_list_data_set(data_set_types='trace_set')",
 				},
 				"trace_set_name": map[string]interface{}{
 					"type":        "string",
-					"description": "TraceSet名称，如'apm.trace.common'。可通过 umodel_list_data_set 获取",
+					"description": "TraceSet name, e.g. 'apm.trace.common'. Obtainable via umodel_list_data_set",
 				},
 				"trace_ids": map[string]interface{}{
 					"type":        "string",
-					"description": "逗号分隔的trace ID列表，如'trace1,trace2'。通常从 umodel_search_traces 获取",
+					"description": "Comma-separated trace IDs, e.g. 'trace1,trace2'. Typically obtained from umodel_search_traces",
 				},
 				"workspace": map[string]interface{}{
 					"type":        "string",
-					"description": "CMS工作空间名称，可通过 list_workspace 获取",
+					"description": "CMS workspace name, obtainable via list_workspace",
 				},
 				"time_range": map[string]interface{}{
 					"type":        "string",
@@ -1117,7 +1246,7 @@ func (h *dataHandler) getTracesTool() toolkit.Tool {
 				},
 				"regionId": map[string]interface{}{
 					"type":        "string",
-					"description": "阿里云区域ID",
+					"description": "Alibaba Cloud region ID",
 				},
 			},
 			"required": []string{"domain", "entity_set_name", "trace_set_domain", "trace_set_name", "trace_ids", "workspace", "regionId"},
@@ -1199,58 +1328,58 @@ $trace_data | join $trace_data_with_time on $trace_data_with_time.__trace_id__ =
 }
 
 // ===========================================================================
-// Tool 6: umodel_get_profiling
+// Tool 6: umodel_get_profiles
 // ===========================================================================
 
 func (h *dataHandler) getProfilingTool() toolkit.Tool {
 	return toolkit.Tool{
-		Name: "umodel_get_profiling",
-		Description: `获取指定实体集的性能剖析数据。
+		Name: "umodel_get_profiles",
+		Description: `Retrieve profiling data for a specified entity set.
 
-## 功能概述
-查询指定实体集的性能剖析数据，包括CPU使用、内存分配、方法调用堆栈等。
-用于性能瓶颈分析和代码级优化。
+## Overview
+Query profiling data for a specified entity set, including CPU usage, memory allocation, method call stacks, etc.
+Used for performance bottleneck analysis and code-level optimization.
 
-## 参数获取流程
-1. 搜索实体集: umodel_search_entity_set(search_text="apm")
-2. 列出ProfileSet: umodel_list_data_set(data_set_types="profile_set") 获取 profile_set_domain 和 profile_set_name
-3. 获取实体ID(必须): umodel_get_entities()
-4. 执行查询
+## Parameter Discovery Flow
+1. Search entity sets: umodel_search_entity_set(search_text="apm")
+2. List ProfileSets: umodel_list_data_set(data_set_types="profile_set") to get profile_set_domain and profile_set_name
+3. Get entity IDs (required): umodel_get_entities()
+4. Execute query
 
-## 使用场景
-- 分析CPU密集型代码路径
-- 发现内存泄漏和高内存消耗点
-- 分析调用链和热点函数`,
+## Use Cases
+- Analyze CPU-intensive code paths
+- Discover memory leaks and high memory consumption points
+- Analyze call chains and hotspot functions`,
 		InputSchema: map[string]interface{}{
 			"type": "object",
 			"properties": map[string]interface{}{
 				"domain": map[string]interface{}{
 					"type":        "string",
-					"description": "实体域名，如'apm'、'host'。不能为'*'",
+					"description": "Entity domain, e.g. 'apm', 'host'. Cannot be '*'",
 				},
 				"entity_set_name": map[string]interface{}{
 					"type":        "string",
-					"description": "实体类型名称，如'apm.service'。不能为'*'",
+					"description": "Entity set name, e.g. 'apm.service'. Cannot be '*'",
 				},
 				"profile_set_domain": map[string]interface{}{
 					"type":        "string",
-					"description": "ProfileSet域名，如'default'。可通过 umodel_list_data_set(data_set_types='profile_set') 获取",
+					"description": "ProfileSet domain, e.g. 'default'. Obtainable via umodel_list_data_set(data_set_types='profile_set')",
 				},
 				"profile_set_name": map[string]interface{}{
 					"type":        "string",
-					"description": "ProfileSet名称，如'default.profile.common'。可通过 umodel_list_data_set 获取",
+					"description": "ProfileSet name, e.g. 'default.profile.common'. Obtainable via umodel_list_data_set",
 				},
 				"workspace": map[string]interface{}{
 					"type":        "string",
-					"description": "CMS工作空间名称，可通过 list_workspace 获取",
+					"description": "CMS workspace name, obtainable via list_workspace",
 				},
 				"entity_ids": map[string]interface{}{
 					"type":        "string",
-					"description": "实体ID列表，逗号分隔（必填，数据量大需指定精确实体）。可通过 umodel_get_entities 获取",
+					"description": "Comma-separated entity IDs (required, specify exact entities for large datasets). Obtainable via umodel_get_entities",
 				},
 				"limit": map[string]interface{}{
 					"type":        "integer",
-					"description": "返回的最大性能剖析记录数量，默认100",
+					"description": "Maximum number of profiling records to return, default 100",
 					"default":     100,
 					"minimum":     1,
 					"maximum":     1000,
@@ -1262,7 +1391,7 @@ func (h *dataHandler) getProfilingTool() toolkit.Tool {
 				},
 				"regionId": map[string]interface{}{
 					"type":        "string",
-					"description": "阿里云区域ID",
+					"description": "Alibaba Cloud region ID",
 				},
 			},
 			"required": []string{"domain", "entity_set_name", "profile_set_domain", "profile_set_name", "workspace", "entity_ids", "regionId"},
@@ -1300,12 +1429,12 @@ func (h *dataHandler) handleGetProfiling(ctx context.Context, params map[string]
 		profileSetDomain, profileSetName,
 	)
 
-	slog.InfoContext(ctx, "umodel_get_profiling",
+	slog.InfoContext(ctx, "umodel_get_profiles",
 		"workspace", workspace, "domain", domain, "profile_set_name", profileSetName, "region", regionID)
 
 	result, err := h.cmsClient.ExecuteSPL(ctx, regionID, workspace, query, fromTS, toTS, limit)
 	if err != nil {
-		slog.ErrorContext(ctx, "umodel_get_profiling failed", "error", err)
+		slog.ErrorContext(ctx, "umodel_get_profiles failed", "error", err)
 		return buildStandardResponse(nil, query, fromTS, toTS, true,
 			fmt.Sprintf("Failed to get profiling data: %s", err), timeRange), nil
 	}
@@ -1321,69 +1450,69 @@ func (h *dataHandler) handleGetProfiling(ctx context.Context, params map[string]
 func (h *dataHandler) searchTracesTool() toolkit.Tool {
 	return toolkit.Tool{
 		Name: "umodel_search_traces",
-		Description: `基于过滤条件搜索trace并返回摘要信息。
+		Description: `Search traces based on filter conditions and return summary information.
 
-## 功能概述
-支持按持续时间、错误状态、实体ID过滤，返回traceID用于详细分析。
-搜索结果包含trace摘要信息：traceId、duration_ms、span_count、error_span_count。
+## Overview
+Supports filtering by duration, error status, and entity IDs. Returns trace IDs for detailed analysis.
+Search results contain trace summary: traceId, duration_ms, span_count, error_span_count.
 
-## 参数获取流程
-1. 搜索实体集: umodel_search_entity_set(search_text="apm")
-2. 列出TraceSet: umodel_list_data_set(data_set_types="trace_set") 获取 trace_set_domain 和 trace_set_name
-3. 获取实体ID(可选): umodel_get_entities()
-4. 执行搜索
+## Parameter Discovery Flow
+1. Search entity sets: umodel_search_entity_set(search_text="apm")
+2. List TraceSets: umodel_list_data_set(data_set_types="trace_set") to get trace_set_domain and trace_set_name
+3. Get entity IDs (optional): umodel_get_entities()
+4. Execute search
 
-## 过滤条件
-- min_duration_ms: 最小trace持续时间（毫秒），用于过滤慢trace
-- max_duration_ms: 最大trace持续时间（毫秒），用于过滤快trace
-- has_error: 按错误状态过滤（true表示错误trace）
+## Filter Conditions
+- min_duration_ms: Minimum trace duration (ms), for filtering slow traces
+- max_duration_ms: Maximum trace duration (ms), for filtering fast traces
+- has_error: Filter by error status (true for error traces)
 
-## 使用场景
-- 搜索慢trace（持续时间超过阈值）
-- 搜索错误trace
-- 搜索特定实体的trace`,
+## Use Cases
+- Search for slow traces (duration exceeding threshold)
+- Search for error traces
+- Search for traces of specific entities`,
 		InputSchema: map[string]interface{}{
 			"type": "object",
 			"properties": map[string]interface{}{
 				"domain": map[string]interface{}{
 					"type":        "string",
-					"description": "实体域名，如'apm'、'host'。不能为'*'",
+					"description": "Entity domain, e.g. 'apm', 'host'. Cannot be '*'",
 				},
 				"entity_set_name": map[string]interface{}{
 					"type":        "string",
-					"description": "实体类型名称，如'apm.service'。不能为'*'",
+					"description": "Entity set name, e.g. 'apm.service'. Cannot be '*'",
 				},
 				"trace_set_domain": map[string]interface{}{
 					"type":        "string",
-					"description": "TraceSet域名，如'apm'。可通过 umodel_list_data_set(data_set_types='trace_set') 获取",
+					"description": "TraceSet domain, e.g. 'apm'. Obtainable via umodel_list_data_set(data_set_types='trace_set')",
 				},
 				"trace_set_name": map[string]interface{}{
 					"type":        "string",
-					"description": "TraceSet名称，如'apm.trace.common'。可通过 umodel_list_data_set 获取",
+					"description": "TraceSet name, e.g. 'apm.trace.common'. Obtainable via umodel_list_data_set",
 				},
 				"workspace": map[string]interface{}{
 					"type":        "string",
-					"description": "CMS工作空间名称，可通过 list_workspace 获取",
+					"description": "CMS workspace name, obtainable via list_workspace",
 				},
 				"entity_ids": map[string]interface{}{
 					"type":        "string",
-					"description": "实体ID列表，逗号分隔，如'id1,id2,id3'。可通过 umodel_get_entities 获取",
+					"description": "Comma-separated entity IDs, e.g. 'id1,id2,id3'. Obtainable via umodel_get_entities",
 				},
 				"min_duration_ms": map[string]interface{}{
 					"type":        "number",
-					"description": "最小trace持续时间（毫秒），用于过滤慢trace",
+					"description": "Minimum trace duration in milliseconds, for filtering slow traces",
 				},
 				"max_duration_ms": map[string]interface{}{
 					"type":        "number",
-					"description": "最大trace持续时间（毫秒），用于过滤快trace",
+					"description": "Maximum trace duration in milliseconds, for filtering fast traces",
 				},
 				"has_error": map[string]interface{}{
 					"type":        "boolean",
-					"description": "按错误状态过滤（true表示错误trace，false表示成功trace）",
+					"description": "Filter by error status (true for error traces, false for successful traces)",
 				},
 				"limit": map[string]interface{}{
 					"type":        "integer",
-					"description": "返回的最大trace摘要数量，默认100",
+					"description": "Maximum number of trace summaries to return, default 100",
 					"default":     100,
 					"minimum":     1,
 					"maximum":     1000,
@@ -1395,7 +1524,7 @@ func (h *dataHandler) searchTracesTool() toolkit.Tool {
 				},
 				"regionId": map[string]interface{}{
 					"type":        "string",
-					"description": "阿里云区域ID",
+					"description": "Alibaba Cloud region ID",
 				},
 			},
 			"required": []string{"domain", "entity_set_name", "trace_set_domain", "trace_set_name", "workspace", "regionId"},

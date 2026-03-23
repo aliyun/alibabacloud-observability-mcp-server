@@ -150,7 +150,7 @@ func TestLoad_CredentialsFromEnv(t *testing.T) {
 	t.Setenv("ALIBABA_CLOUD_ACCESS_KEY_ID", "test-ak-id")
 	t.Setenv("ALIBABA_CLOUD_ACCESS_KEY_SECRET", "test-ak-secret")
 	t.Setenv("ALIBABA_CLOUD_SECURITY_TOKEN", "test-token")
-	t.Setenv("ALIBABA_CLOUD_REGION", "cn-hangzhou")
+	t.Setenv("ALIBABA_CLOUD_REGION", "cn-hongkong")
 	t.Setenv("ALIBABA_CLOUD_WORKSPACE", "test-workspace")
 
 	cfg, err := Load("")
@@ -167,8 +167,8 @@ func TestLoad_CredentialsFromEnv(t *testing.T) {
 	if cfg.Credentials.SecurityToken != "test-token" {
 		t.Errorf("Credentials.SecurityToken = %q, want %q", cfg.Credentials.SecurityToken, "test-token")
 	}
-	if cfg.Runtime.Region != "cn-hangzhou" {
-		t.Errorf("Runtime.Region = %q, want %q", cfg.Runtime.Region, "cn-hangzhou")
+	if cfg.Runtime.Region != "cn-hongkong" {
+		t.Errorf("Runtime.Region = %q, want %q", cfg.Runtime.Region, "cn-hongkong")
 	}
 	if cfg.Runtime.Workspace != "test-workspace" {
 		t.Errorf("Runtime.Workspace = %q, want %q", cfg.Runtime.Workspace, "test-workspace")

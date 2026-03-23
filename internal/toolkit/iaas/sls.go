@@ -20,11 +20,8 @@ import (
 func SLSTools(slsClient client.SLSClient, cmsClient client.CMSClient) []toolkit.Tool {
 	h := &slsHandler{slsClient: slsClient, cmsClient: cmsClient}
 	return []toolkit.Tool{
-		h.queryLogstoreTool(),
-		h.queryMetricstoreTool(),
 		h.listProjectsTool(),
 		h.listLogstoresTool(),
-		h.listMetricstoresTool(),
 		h.textToSQLTool(),
 		h.textToSQLOldTool(), // Deprecated alias for Python compatibility
 		h.textToPromQLTool(),
@@ -107,20 +104,21 @@ func buildResponse(data interface{}, isError bool, message string) map[string]in
 }
 
 // parseTimeParam parses a time parameter (string or numeric) into a Unix timestamp.
-func parseTimeParam(params map[string]interface{}, key, defaultVal string) (int64, error) {
+// parseTimeParamAt 与 parseTimeParam 相同，但使用调用方提供的 now 时刻，
+// 避免多次调用之间因 time.Now() 不同导致的时间漂移。
+func parseTimeParamAt(params map[string]interface{}, key, defaultVal string, now time.Time) (int64, error) {
 	v, ok := params[key]
 	if !ok || v == nil {
-		return timeparse.ParseTimeExpression(defaultVal, time.Now())
+		return timeparse.ParseTimeExpression(defaultVal, now)
 	}
 	switch val := v.(type) {
 	case string:
 		if val == "" {
-			return timeparse.ParseTimeExpression(defaultVal, time.Now())
+			return timeparse.ParseTimeExpression(defaultVal, now)
 		}
-		return timeparse.ParseTimeExpression(val, time.Now())
+		return timeparse.ParseTimeExpression(val, now)
 	case float64:
 		ts := int64(val)
-		// 13-digit timestamps are milliseconds
 		if ts > 9999999999 {
 			ts = ts / 1000
 		}
@@ -137,130 +135,12 @@ func parseTimeParam(params map[string]interface{}, key, defaultVal string) (int6
 		}
 		return ts, nil
 	default:
-		return timeparse.ParseTimeExpression(defaultVal, time.Now())
+		return 0, fmt.Errorf("unsupported type %T for parameter %s", v, key)
 	}
 }
 
-// ===========================================================================
-// Tool 1: sls_query_logstore
-// ===========================================================================
-
-func (h *slsHandler) queryLogstoreTool() toolkit.Tool {
-	return toolkit.Tool{
-		Name: "sls_query_logstore",
-		Description: `执行SLS日志查询。
-
-## 功能概述
-
-该工具用于在指定的SLS项目和日志库上执行查询语句，并返回查询结果。
-
-## 使用场景
-
-- 当需要根据特定条件查询日志数据时
-- 当需要分析特定时间范围内的日志信息时
-- 当需要检索日志中的特定事件或错误时
-- 当需要统计日志数据的聚合信息时
-
-## 查询语法
-
-查询必须使用SLS有效的查询语法，而非自然语言。如果不了解日志库的结构，可以先使用sls_list_logstores工具获取索引信息。
-
-## 时间范围
-
-- from_time: 开始时间，支持Unix时间戳（秒/毫秒）或相对时间表达式（如 'now-1h'）
-- to_time: 结束时间，支持Unix时间戳（秒/毫秒）或相对时间表达式（如 'now'）`,
-		InputSchema: map[string]interface{}{
-			"type": "object",
-			"properties": map[string]interface{}{
-				"project": map[string]interface{}{
-					"type":        "string",
-					"description": "SLS项目名称",
-				},
-				"logStore": map[string]interface{}{
-					"type":        "string",
-					"description": "SLS日志库名称",
-				},
-				"query": map[string]interface{}{
-					"type":        "string",
-					"description": "SLS查询语句",
-				},
-				"from_time": map[string]interface{}{
-					"type":        "string",
-					"description": "开始时间，支持Unix时间戳或相对时间如 'now-5m'",
-					"default":     "now-5m",
-				},
-				"to_time": map[string]interface{}{
-					"type":        "string",
-					"description": "结束时间，支持Unix时间戳或相对时间如 'now'",
-					"default":     "now",
-				},
-				"limit": map[string]interface{}{
-					"type":        "integer",
-					"description": "返回结果的最大数量，范围1-100，默认10",
-					"default":     10,
-				},
-				"regionId": map[string]interface{}{
-					"type":        "string",
-					"description": "阿里云区域ID，如 'cn-hangzhou'",
-				},
-			},
-			"required": []string{"project", "logStore", "query", "regionId"},
-		},
-		Handler: h.handleQueryLogstore,
-	}
-}
-
-func (h *slsHandler) handleQueryLogstore(ctx context.Context, params map[string]interface{}) (interface{}, error) {
-	project := paramString(params, "project", "")
-	logStore := paramString(params, "logStore", "")
-	query := paramString(params, "query", "")
-	regionID := paramString(params, "regionId", "")
-
-	if project == "" || logStore == "" || query == "" || regionID == "" {
-		return buildResponse(nil, true, "project, logStore, query and regionId are required"), nil
-	}
-
-	fromTS, err := parseTimeParam(params, "from_time", "now-5m")
-	if err != nil {
-		return buildResponse(nil, true, fmt.Sprintf("invalid from_time: %s", err)), nil
-	}
-	toTS, err := parseTimeParam(params, "to_time", "now")
-	if err != nil {
-		return buildResponse(nil, true, fmt.Sprintf("invalid to_time: %s", err)), nil
-	}
-
-	slog.InfoContext(ctx, "sls_query_logstore",
-		"project", project, "logStore", logStore, "region", regionID)
-
-	results, err := h.slsClient.Query(ctx, regionID, project, logStore, query, fromTS, toTS)
-	if err != nil {
-		slog.ErrorContext(ctx, "sls_query_logstore failed", "error", err)
-
-		if isSPLIncompatibleError(err) {
-			slog.WarnContext(ctx, "sls_query_logstore: logstore may not support SPL format",
-				"project", project, "logStore", logStore, "query", query)
-			return buildResponse(nil, true, fmt.Sprintf(
-				"Query failed: %s\n\nThis logstore may not support SPL query format. "+
-					"Please try using SQL format instead, e.g.: '* | select count(1) as cnt' or '* | select * limit 10'. "+
-					"You can also use the sls_execute_sql tool for SQL queries, or sls_execute_spl for SPL queries on supported logstores.",
-				err)), nil
-		}
-
-		return buildResponse(nil, true, fmt.Sprintf("Query failed: %s", err)), nil
-	}
-
-	return buildResponse(results, false, ""), nil
-}
-
-// isSPLIncompatibleError checks whether the error indicates the logstore does not support SPL format.
-func isSPLIncompatibleError(err error) bool {
-	if err == nil {
-		return false
-	}
-	msg := err.Error()
-	return strings.Contains(msg, "InvalidSPLFormat") ||
-		strings.Contains(msg, "InvalidSpls") ||
-		strings.Contains(msg, "not support SPL")
+func parseTimeParam(params map[string]interface{}, key, defaultVal string) (int64, error) {
+	return parseTimeParamAt(params, key, defaultVal, time.Now())
 }
 
 // isMetricStoreNotFoundError checks whether the error indicates the metric store does not exist.
@@ -275,157 +155,53 @@ func isMetricStoreNotFoundError(err error) bool {
 }
 
 // ===========================================================================
-// Tool 2: sls_query_metricstore
-// ===========================================================================
-
-func (h *slsHandler) queryMetricstoreTool() toolkit.Tool {
-	return toolkit.Tool{
-		Name: "sls_query_metricstore",
-		Description: `执行PromQL指标查询。
-
-## 功能概述
-
-该工具用于在指定的SLS项目和指标库上执行PromQL查询语句，并返回时序指标数据。
-
-## 使用场景
-
-- 当需要查询时序指标数据时
-- 当需要分析系统性能指标时
-- 当需要监控业务指标趋势时
-
-## 查询语法
-
-查询必须使用有效的PromQL语法。
-
-## 时间范围
-
-- from_time: 开始时间，支持Unix时间戳（秒/毫秒）或相对时间表达式
-- to_time: 结束时间，支持Unix时间戳（秒/毫秒）或相对时间表达式`,
-		InputSchema: map[string]interface{}{
-			"type": "object",
-			"properties": map[string]interface{}{
-				"project": map[string]interface{}{
-					"type":        "string",
-					"description": "SLS项目名称",
-				},
-				"metricStore": map[string]interface{}{
-					"type":        "string",
-					"description": "SLS指标库名称",
-				},
-				"query": map[string]interface{}{
-					"type":        "string",
-					"description": "PromQL查询语句",
-				},
-				"from_time": map[string]interface{}{
-					"type":        "string",
-					"description": "开始时间，支持Unix时间戳或相对时间如 'now-5m'",
-					"default":     "now-5m",
-				},
-				"to_time": map[string]interface{}{
-					"type":        "string",
-					"description": "结束时间，支持Unix时间戳或相对时间如 'now'",
-					"default":     "now",
-				},
-				"regionId": map[string]interface{}{
-					"type":        "string",
-					"description": "阿里云区域ID，如 'cn-hangzhou'",
-				},
-			},
-			"required": []string{"project", "metricStore", "query", "regionId"},
-		},
-		Handler: h.handleQueryMetricstore,
-	}
-}
-
-func (h *slsHandler) handleQueryMetricstore(ctx context.Context, params map[string]interface{}) (interface{}, error) {
-	project := paramString(params, "project", "")
-	metricStore := paramString(params, "metricStore", "")
-	query := paramString(params, "query", "")
-	regionID := paramString(params, "regionId", "")
-
-	if project == "" || metricStore == "" || query == "" || regionID == "" {
-		return buildResponse(nil, true, "project, metricStore, query and regionId are required"), nil
-	}
-
-	fromTS, err := parseTimeParam(params, "from_time", "now-5m")
-	if err != nil {
-		return buildResponse(nil, true, fmt.Sprintf("invalid from_time: %s", err)), nil
-	}
-	toTS, err := parseTimeParam(params, "to_time", "now")
-	if err != nil {
-		return buildResponse(nil, true, fmt.Sprintf("invalid to_time: %s", err)), nil
-	}
-
-	slog.InfoContext(ctx, "sls_query_metricstore",
-		"project", project, "metricStore", metricStore, "region", regionID)
-
-	// Use the SLS Query method against the metric store
-	results, err := h.slsClient.Query(ctx, regionID, project, metricStore, query, fromTS, toTS)
-	if err != nil {
-		slog.ErrorContext(ctx, "sls_query_metricstore failed", "error", err)
-		if isMetricStoreNotFoundError(err) {
-			msg := fmt.Sprintf(
-				"Metric store '%s' does not exist in project '%s'. "+
-					"Please use sls_list_metricstores to check available metric stores. "+
-					"Alternatively, you can use cms_query_metric to query CMS metrics directly.",
-				metricStore, project,
-			)
-			return buildResponse(nil, true, msg), nil
-		}
-		return buildResponse(nil, true, fmt.Sprintf("Query failed: %s", err)), nil
-	}
-
-	return buildResponse(results, false, ""), nil
-}
-
-// ===========================================================================
-// Tool 3: sls_list_projects
+// Tool 1: sls_list_projects
 // ===========================================================================
 
 func (h *slsHandler) listProjectsTool() toolkit.Tool {
 	return toolkit.Tool{
 		Name: "sls_list_projects",
-		Description: `列出阿里云日志服务中的所有项目。
+		Description: `List all projects in Alibaba Cloud Log Service.
 
-## 功能概述
+## Overview
 
-该工具可以列出指定区域中的所有SLS项目，支持通过项目名进行模糊搜索。
-如果不提供项目名称，则返回该区域的所有项目。
+Lists all SLS projects in a specified region, with optional fuzzy search by project name.
+If no project name is provided, all projects in the region are returned.
 
-## 使用场景
+## Use Cases
 
-- 当需要查找特定项目是否存在时
-- 当需要获取某个区域下所有可用的SLS项目列表时
-- 当需要根据项目名称的部分内容查找相关项目时
+- Check whether a specific project exists
+- List all available SLS projects in a region
+- Search for projects by partial name match
 
-## 返回数据结构
+## Response Structure
 
-返回的项目信息包含：
-- project_name: 项目名称
-- description: 项目描述
-- region_id: 项目所在区域
+Each project includes:
+- project_name: Project name
+- description: Project description
+- region_id: Region where the project resides
 
-## 查询示例
+## Examples
 
-- "有没有叫 XXX 的 project"
-- "列出所有SLS项目"`,
+- "Is there a project named XXX"
+- "List all SLS projects"`,
 		InputSchema: map[string]interface{}{
 			"type": "object",
 			"properties": map[string]interface{}{
 				"projectName": map[string]interface{}{
 					"type":        "string",
-					"description": "项目名称查询字符串，支持模糊搜索",
+					"description": "Project name query string, supports fuzzy search",
 				},
 				"limit": map[string]interface{}{
 					"type":        "integer",
-					"description": "返回结果的最大数量，范围1-100，默认50",
+					"description": "Maximum number of results, range 1-100, default 50",
 					"default":     50,
 					"minimum":     1,
 					"maximum":     100,
 				},
 				"regionId": map[string]interface{}{
 					"type":        "string",
-					"description": "阿里云区域ID，如 'cn-hangzhou'",
+					"description": "Alibaba Cloud region ID, e.g. 'cn-hongkong'",
 				},
 			},
 			"required": []string{"regionId"},
@@ -453,7 +229,7 @@ func (h *slsHandler) handleListProjects(ctx context.Context, params map[string]i
 
 	return buildResponse(map[string]interface{}{
 		"projects": projects,
-		"message":  fmt.Sprintf("当前最多支持查询%d个项目，为防止返回数据过长，如果需要查询更多项目，您可以提供 project 的关键词来模糊查询", limit),
+		"message":  fmt.Sprintf("Currently limited to %d projects to prevent excessive response size. To find more projects, provide a keyword to filter by project name.", limit),
 	}, false, ""), nil
 }
 
@@ -464,54 +240,54 @@ func (h *slsHandler) handleListProjects(ctx context.Context, params map[string]i
 func (h *slsHandler) listLogstoresTool() toolkit.Tool {
 	return toolkit.Tool{
 		Name: "sls_list_logstores",
-		Description: `列出SLS项目中的日志库。
+		Description: `List logstores in an SLS project.
 
-## 功能概述
+## Overview
 
-该工具可以列出指定SLS项目中的所有日志库，如果不选，则默认为日志库类型。
-支持通过日志库名称进行模糊搜索。如果不提供日志库名称，则返回项目中的所有日志库。
+Lists all logstores in a specified SLS project. Defaults to logstore type if not specified.
+Supports fuzzy search by logstore name. If no logstore name is provided, all logstores in the project are returned.
 
-## 使用场景
+## Use Cases
 
-- 当需要查找特定项目下是否存在某个日志库时
-- 当需要获取项目中所有可用的日志库列表时
-- 当需要根据日志库名称的部分内容查找相关日志库时
-- 如果从上下文未指定 project参数，除非用户说了遍历，则可使用 sls_list_projects 工具获取项目列表
+- Check whether a specific logstore exists in a project
+- List all available logstores in a project
+- Search for logstores by partial name match
+- If the project parameter is not available from context, use sls_list_projects to get the project list (unless the user explicitly asks to iterate)
 
-## 是否指标库
+## Metric Store
 
-如果需要查找指标或者时序相关的库，请将isMetricStore参数设置为True
+To search for metric or time-series stores, set the isMetricStore parameter to true.
 
-## 查询示例
+## Examples
 
-- "我想查询有没有 XXX 的日志库"
-- "某个 project 有哪些 logstore"`,
+- "Is there a logstore named XXX"
+- "What logstores does a project have"`,
 		InputSchema: map[string]interface{}{
 			"type": "object",
 			"properties": map[string]interface{}{
 				"project": map[string]interface{}{
 					"type":        "string",
-					"description": "SLS项目名称，必须精确匹配，不能包含中文字符",
+					"description": "SLS project name, must be an exact match, cannot contain Chinese characters",
 				},
 				"logStore": map[string]interface{}{
 					"type":        "string",
-					"description": "日志库名称，支持模糊搜索",
+					"description": "Logstore name, supports fuzzy search",
 				},
 				"limit": map[string]interface{}{
 					"type":        "integer",
-					"description": "返回结果的最大数量，范围1-100，默认10",
+					"description": "Maximum number of results, range 1-100, default 10",
 					"default":     10,
 					"minimum":     1,
 					"maximum":     100,
 				},
 				"isMetricStore": map[string]interface{}{
 					"type":        "boolean",
-					"description": "是否查询指标库，默认为false。仅当需要查找指标库时设置为true",
+					"description": "Whether to query metric stores, default false. Set to true only when searching for metric stores",
 					"default":     false,
 				},
 				"regionId": map[string]interface{}{
 					"type":        "string",
-					"description": "阿里云区域ID，如 'cn-hangzhou'",
+					"description": "Alibaba Cloud region ID, e.g. 'cn-hongkong'",
 				},
 			},
 			"required": []string{"project", "regionId"},
@@ -549,7 +325,7 @@ func (h *slsHandler) handleListLogstores(ctx context.Context, params map[string]
 	}
 
 	total := len(logstores)
-	message := fmt.Sprintf("当前最多支持查询%d个日志库，为防止返回数据过长，如果需要查询更多日志库，您可以提供 logstore 的关键词来模糊查询", limit)
+	message := fmt.Sprintf("Currently limited to %d logstores to prevent excessive response size. To find more logstores, provide a keyword to filter by logstore name.", limit)
 	if total == 0 {
 		message = "Sorry not found logstore, please make sure your project and region or logstore name is correct, if you want to find metric store, please check isMetricStore parameter"
 	}
@@ -562,112 +338,56 @@ func (h *slsHandler) handleListLogstores(ctx context.Context, params map[string]
 }
 
 // ===========================================================================
-// Tool 5: sls_list_metricstores
-// ===========================================================================
-
-func (h *slsHandler) listMetricstoresTool() toolkit.Tool {
-	return toolkit.Tool{
-		Name: "sls_list_metricstores",
-		Description: `列出SLS项目中的指标库。
-
-## 功能概述
-
-该工具可以列出指定SLS项目中的所有指标库（Metric Store）。
-
-## 使用场景
-
-- 当需要查找特定项目下的指标库时
-- 当需要获取项目中所有可用的指标库列表时`,
-		InputSchema: map[string]interface{}{
-			"type": "object",
-			"properties": map[string]interface{}{
-				"project": map[string]interface{}{
-					"type":        "string",
-					"description": "SLS项目名称，必须精确匹配",
-				},
-				"regionId": map[string]interface{}{
-					"type":        "string",
-					"description": "阿里云区域ID，如 'cn-hangzhou'",
-				},
-			},
-			"required": []string{"project", "regionId"},
-		},
-		Handler: h.handleListMetricstores,
-	}
-}
-
-func (h *slsHandler) handleListMetricstores(ctx context.Context, params map[string]interface{}) (interface{}, error) {
-	project := paramString(params, "project", "")
-	regionID := paramString(params, "regionId", "")
-
-	if project == "" || regionID == "" {
-		return buildResponse(nil, true, "project and regionId are required"), nil
-	}
-
-	slog.InfoContext(ctx, "sls_list_metricstores", "project", project, "region", regionID)
-
-	metricstores, err := h.slsClient.ListMetricStores(ctx, regionID, project)
-	if err != nil {
-		slog.ErrorContext(ctx, "sls_list_metricstores failed", "error", err)
-		return buildResponse(nil, true, fmt.Sprintf("Failed to list metric stores: %s", err)), nil
-	}
-
-	return buildResponse(map[string]interface{}{
-		"metricstores": metricstores,
-	}, false, ""), nil
-}
-
-// ===========================================================================
-// Tool 6: sls_text_to_sql
+// Tool 3: sls_text_to_sql
 // ===========================================================================
 
 func (h *slsHandler) textToSQLTool() toolkit.Tool {
 	return toolkit.Tool{
 		Name: "sls_text_to_sql",
-		Description: `将自然语言转换为SLS查询语句。当用户有明确的logstore查询需求，必须优先使用该工具来生成查询语句。
+		Description: `Convert natural language to an SLS query statement. When the user has a clear logstore query requirement, this tool must be used first to generate the query.
 
-## 功能概述
+## Overview
 
-该工具可以将自然语言描述转换为有效的SLS查询语句，便于用户使用自然语言表达查询需求。
+Converts a natural language description into a valid SLS query statement, allowing users to express query requirements in plain language.
 
-## 使用场景
+## Use Cases
 
-- 当用户不熟悉SLS查询语法时
-- 当需要快速构建复杂查询时
-- 当需要从自然语言描述中提取查询意图时
+- When the user is unfamiliar with SLS query syntax
+- When a complex query needs to be built quickly
+- When query intent needs to be extracted from a natural language description
 
-## 使用限制
+## Limitations
 
-- 仅支持生成SLS查询，不支持其他数据库的SQL
-- 生成的是查询语句，而非查询结果，需要配合sls_query_logstore工具使用
+- Only supports generating SLS queries, not SQL for other databases
+- Generates a query statement, not query results; use with sls_query_logstore to execute
 
-## 最佳实践
+## Best Practices
 
-- 提供清晰简洁的自然语言描述
-- 不要在描述中包含项目或日志库名称
+- Provide a clear and concise natural language description
+- Do not include project or logstore names in the description
 
-## 查询示例
+## Examples
 
-- "帮我生成下 XXX 的日志查询语句"
-- "查找最近一小时内的错误日志"`,
+- "Generate a log query for XXX"
+- "Find error logs in the last hour"`,
 		InputSchema: map[string]interface{}{
 			"type": "object",
 			"properties": map[string]interface{}{
 				"text": map[string]interface{}{
 					"type":        "string",
-					"description": "用于生成查询的自然语言文本",
+					"description": "Natural language text for query generation",
 				},
 				"project": map[string]interface{}{
 					"type":        "string",
-					"description": "SLS项目名称",
+					"description": "SLS project name",
 				},
 				"logStore": map[string]interface{}{
 					"type":        "string",
-					"description": "SLS日志库名称",
+					"description": "SLS logstore name",
 				},
 				"regionId": map[string]interface{}{
 					"type":        "string",
-					"description": "阿里云区域ID，如 'cn-hangzhou'",
+					"description": "Alibaba Cloud region ID, e.g. 'cn-hongkong'",
 				},
 			},
 			"required": []string{"text", "project", "logStore", "regionId"},
@@ -709,28 +429,28 @@ func (h *slsHandler) textToSQLOldTool() toolkit.Tool {
 	baseTool := h.textToSQLTool()
 	return toolkit.Tool{
 		Name: "sls_text_to_sql_old",
-		Description: `⚠️ [已废弃] 将自然语言转换为SLS查询语句（旧版API）。
+		Description: `⚠️ [Deprecated] Convert natural language to an SLS query statement (legacy API).
 
-## 废弃说明
+## Deprecation Notice
 
-此工具已废弃，请优先使用 sls_text_to_sql 工具。
+This tool is deprecated. Please use sls_text_to_sql instead.
 
-新版 sls_text_to_sql 工具使用 CMS Chat API，提供更智能的 SQL 生成能力，
-包括更好的上下文理解、更准确的查询生成和更详细的解释说明。
+The new sls_text_to_sql tool uses the CMS Chat API, providing smarter SQL generation
+with better context understanding, more accurate query generation, and more detailed explanations.
 
-## 功能概述
+## Overview
 
-该工具使用旧版SLS CallAiTools API将自然语言描述转换为有效的SLS查询语句。
+This tool uses the legacy SLS CallAiTools API to convert natural language descriptions into valid SLS query statements.
 
-## 使用场景
+## Use Cases
 
-- 仅当新版 sls_text_to_sql 工具不可用时作为备选方案
+- Only as a fallback when the new sls_text_to_sql tool is unavailable
 
-## 使用限制
+## Limitations
 
-- 仅支持生成SLS查询，不支持其他数据库的SQL
-- 生成的是查询语句，而非查询结果，需要配合sls_query_logstore工具使用
-- 需要对应的 logstore 已经设定了索引信息`,
+- Only supports generating SLS queries, not SQL for other databases
+- Generates a query statement, not query results; use with sls_query_logstore to execute
+- Requires the target logstore to have index configuration`,
 		InputSchema: baseTool.InputSchema,
 		Handler:     h.handleTextToSQL, // Reuse the same handler
 	}
@@ -743,49 +463,49 @@ func (h *slsHandler) textToSQLOldTool() toolkit.Tool {
 func (h *slsHandler) textToPromQLTool() toolkit.Tool {
 	return toolkit.Tool{
 		Name: "sls_text_to_promql",
-		Description: `将自然语言转换为PromQL查询语句。
+		Description: `Convert natural language to a PromQL query statement.
 
-## 功能概述
+## Overview
 
-该工具可以将自然语言描述转换为有效的PromQL查询语句，便于用户使用自然语言表达查询需求。
+Converts a natural language description into a valid PromQL query statement, allowing users to express query requirements in plain language.
 
-## 使用场景
+## Use Cases
 
-- 当用户不熟悉PromQL查询语法时
-- 当需要快速构建复杂查询时
+- When the user is unfamiliar with PromQL query syntax
+- When a complex query needs to be built quickly
 
-## 使用限制
+## Limitations
 
-- 仅支持生成PromQL查询
-- 生成的是查询语句，而非查询结果
+- Only supports generating PromQL queries
+- Generates a query statement, not query results
 
-## 最佳实践
+## Best Practices
 
-- 提供清晰简洁的自然语言描述
-- 不要在描述中包含项目或时序库名称
+- Provide a clear and concise natural language description
+- Do not include project or metric store names in the description
 
-## 查询示例
+## Examples
 
-- "帮我生成 XXX 的PromQL查询语句"
-- "查询每个namespace下的Pod数量"`,
+- "Generate a PromQL query for XXX"
+- "Query the number of Pods per namespace"`,
 		InputSchema: map[string]interface{}{
 			"type": "object",
 			"properties": map[string]interface{}{
 				"text": map[string]interface{}{
 					"type":        "string",
-					"description": "用于生成PromQL的自然语言文本",
+					"description": "Natural language text for PromQL generation",
 				},
 				"project": map[string]interface{}{
 					"type":        "string",
-					"description": "SLS项目名称",
+					"description": "SLS project name",
 				},
 				"metricStore": map[string]interface{}{
 					"type":        "string",
-					"description": "SLS指标库名称",
+					"description": "SLS metric store name",
 				},
 				"regionId": map[string]interface{}{
 					"type":        "string",
-					"description": "阿里云区域ID，如 'cn-hangzhou'",
+					"description": "Alibaba Cloud region ID, e.g. 'cn-hongkong'",
 				},
 			},
 			"required": []string{"text", "project", "metricStore", "regionId"},
@@ -826,41 +546,41 @@ func (h *slsHandler) handleTextToPromQL(ctx context.Context, params map[string]i
 func (h *slsHandler) sopTool() toolkit.Tool {
 	return toolkit.Tool{
 		Name: "sls_sop",
-		Description: `SLS SOP (Standard Operating Procedure) 智能运维助手。
+		Description: `SLS SOP (Standard Operating Procedure) intelligent operations assistant.
 
-## 功能概述
+## Overview
 
-该工具是一个智能助手，用于回答关于SLS使用方法、功能介绍、操作步骤等方面的问题。
+An intelligent assistant that answers questions about SLS usage, features, and operational procedures.
 
-## 使用场景
+## Use Cases
 
-- 当用户不知道如何使用某个SLS功能时
-- 当用户需要了解SLS的概念或术语时
-- 当用户遇到操作问题需要指引时
+- When the user does not know how to use a specific SLS feature
+- When the user needs to understand SLS concepts or terminology
+- When the user encounters operational issues and needs guidance
 
-## 示例用法
+## Examples
 
-- "如何创建新的数据加工"
-- "什么是 Project"
-- "怎么配置告警"`,
+- "How to create a new data transformation"
+- "What is a Project"
+- "How to configure alerts"`,
 		InputSchema: map[string]interface{}{
 			"type": "object",
 			"properties": map[string]interface{}{
 				"text": map[string]interface{}{
 					"type":        "string",
-					"description": "用户关于SLS使用或SOP的问题",
+					"description": "User question about SLS usage or SOP",
 				},
 				"regionId": map[string]interface{}{
 					"type":        "string",
-					"description": "阿里云区域ID",
+					"description": "Alibaba Cloud region ID",
 				},
 				"project": map[string]interface{}{
 					"type":        "string",
-					"description": "SLS项目名称（可选）",
+					"description": "SLS project name (optional)",
 				},
 				"logStore": map[string]interface{}{
 					"type":        "string",
-					"description": "SLS日志库名称（可选）",
+					"description": "SLS logstore name (optional)",
 				},
 			},
 			"required": []string{"text", "regionId"},
@@ -882,8 +602,8 @@ func (h *slsHandler) handleSOP(ctx context.Context, params map[string]interface{
 	slog.InfoContext(ctx, "sls_sop",
 		"region", regionID, "project", project, "logStore", logStore)
 
-	// SOP uses TextToSQL as the underlying AI mechanism with the question as input
-	answer, err := h.slsClient.TextToSQL(ctx, regionID, project, logStore, text)
+	// SOP uses CMS Chat API with "sop" skill for operations Q&A
+	answer, err := h.cmsClient.ChatWithSkill(ctx, regionID, project, logStore, text, "sop")
 	if err != nil {
 		slog.ErrorContext(ctx, "sls_sop failed", "error", err)
 		return buildResponse(nil, true, fmt.Sprintf("SOP query failed: %s", err)), nil
@@ -901,70 +621,70 @@ func (h *slsHandler) handleSOP(ctx context.Context, params map[string]interface{
 func (h *slsHandler) executeSQLTool() toolkit.Tool {
 	return toolkit.Tool{
 		Name: "sls_execute_sql",
-		Description: `执行SLS日志查询。
+		Description: `Execute an SLS log query.
 
-## 功能概述
+## Overview
 
-该工具用于在指定的SLS项目和日志库上执行查询语句，并返回查询结果。
+Executes a query on a specified SLS project and logstore, and returns the results.
 
-## 使用场景
+## Use Cases
 
-- 当需要根据特定条件查询日志数据时
-- 当需要分析特定时间范围内的日志信息时
-- 当需要检索日志中的特定事件或错误时
-- 当需要统计日志数据的聚合信息时
+- Query log data based on specific conditions
+- Analyze log information within a specific time range
+- Search for specific events or errors in logs
+- Compute aggregated statistics from log data
 
-## 查询语法
+## Query Syntax
 
-查询必须使用SLS有效的查询语法，而非自然语言。如果不了解日志库的结构，可以先使用sls_list_logstores工具获取索引信息。
+Queries must use valid SLS query syntax, not natural language. If you are unfamiliar with the logstore schema, use sls_list_logstores first to retrieve index information.
 
-## 时间范围
+## Time Range
 
-- from_time: 开始时间，支持Unix时间戳（秒/毫秒）或相对时间表达式（如 'now-1h'）
-- to_time: 结束时间，支持Unix时间戳（秒/毫秒）或相对时间表达式（如 'now'）`,
+- from_time: Start time. Supports Unix timestamps (seconds/milliseconds) or relative expressions (e.g. 'now-1h')
+- to_time: End time. Supports Unix timestamps (seconds/milliseconds) or relative expressions (e.g. 'now')`,
 		InputSchema: map[string]interface{}{
 			"type": "object",
 			"properties": map[string]interface{}{
 				"project": map[string]interface{}{
 					"type":        "string",
-					"description": "SLS项目名称",
+					"description": "SLS project name",
 				},
 				"logStore": map[string]interface{}{
 					"type":        "string",
-					"description": "SLS日志库名称",
+					"description": "SLS logstore name",
 				},
 				"query": map[string]interface{}{
 					"type":        "string",
-					"description": "SLS查询语句",
+					"description": "SLS query statement",
 				},
 				"from_time": map[string]interface{}{
 					"type":        "string",
-					"description": "开始时间，支持Unix时间戳或相对时间如 'now-5m'",
+					"description": "Start time. Unix timestamp or relative expression, e.g. 'now-5m'",
 					"default":     "now-5m",
 				},
 				"to_time": map[string]interface{}{
 					"type":        "string",
-					"description": "结束时间，支持Unix时间戳或相对时间如 'now'",
+					"description": "End time. Unix timestamp or relative expression, e.g. 'now'",
 					"default":     "now",
 				},
 				"limit": map[string]interface{}{
 					"type":        "integer",
-					"description": "返回结果的最大数量，范围1-100，默认10",
+					"description": "Maximum number of results, range 1-100, default 10",
 					"default":     10,
 				},
 				"offset": map[string]interface{}{
 					"type":        "integer",
-					"description": "查询开始偏移量，用于分页，默认0",
+					"description": "Query start offset for pagination, default 0",
 					"default":     0,
 				},
 				"reverse": map[string]interface{}{
 					"type":        "boolean",
-					"description": "是否按时间戳降序返回，默认false",
+					"description": "Whether to return results in descending timestamp order, default false",
 					"default":     false,
 				},
 				"regionId": map[string]interface{}{
 					"type":        "string",
-					"description": "阿里云区域ID，如 'cn-hangzhou'",
+					"description": "Alibaba Cloud region ID, e.g. 'cn-hongkong'",
 				},
 			},
 			"required": []string{"project", "logStore", "query", "regionId"},
@@ -1015,67 +735,52 @@ func (h *slsHandler) handleExecuteSQL(ctx context.Context, params map[string]int
 func (h *slsHandler) executeSPLTool() toolkit.Tool {
 	return toolkit.Tool{
 		Name: "sls_execute_spl",
-		Description: `执行原生SPL查询语句。
+		Description: `Execute a native SPL query statement.
 
-## 功能概述
+## Overview
 
-该工具允许直接执行原生SPL（Search Processing Language）查询语句，
-为高级用户提供最大的灵活性和功能。支持复杂的数据操作和分析。
+Allows direct execution of native SPL (Search Processing Language) query statements via CMS workspace,
+providing maximum flexibility and functionality for advanced users. Supports complex data operations and analysis.
 
-## 两种模式
+## Use Cases
 
-1. **CMS模式**（推荐）：提供 workspace 参数，使用 CMS 工作空间执行 SPL
-2. **SLS模式**：提供 project 和 logStore 参数，使用 SLS 日志库执行查询
+- Complex data analysis and statistical computation beyond standard API coverage
+- Custom data aggregation and transformation operations
+- Cross-entity-set join queries and correlation analysis
+- Advanced data mining and machine learning analysis
 
-两种模式互斥，优先使用 workspace 模式。
+## Notes
 
-## 使用场景
-
-- 复杂的数据分析和统计计算，超出标准API的覆盖范围
-- 自定义的数据聚合和转换操作
-- 跨多个实体集合的联合查询和关联分析
-- 高级的数据挖掘和机器学习分析
-
-## 注意事项
-
-- 需要对SPL语法有一定的了解
-- 请确保查询语句的正确性，错误的查询可能导致无结果或错误
-- 复杂查询可能消耗较多的计算资源和时间`,
+- Requires familiarity with SPL syntax
+- Ensure query correctness; invalid queries may return no results or errors
+- Complex queries may consume significant compute resources and time`,
 		InputSchema: map[string]interface{}{
 			"type": "object",
 			"properties": map[string]interface{}{
 				"query": map[string]interface{}{
 					"type":        "string",
-					"description": "原生SPL查询语句",
+					"description": "Native SPL query statement",
 				},
 				"workspace": map[string]interface{}{
 					"type":        "string",
-					"description": "CMS工作空间名称，可通过list_workspace获取（与 project/logStore 互斥，优先使用）",
-				},
-				"project": map[string]interface{}{
-					"type":        "string",
-					"description": "SLS项目名称（与 workspace 互斥）",
-				},
-				"logStore": map[string]interface{}{
-					"type":        "string",
-					"description": "SLS日志库名称（与 workspace 互斥）",
+					"description": "CMS workspace name, obtainable via list_workspace",
 				},
 				"from_time": map[string]interface{}{
 					"type":        "string",
-					"description": "开始时间，支持Unix时间戳或相对时间如 'now-5m'",
+					"description": "Start time. Unix timestamp or relative expression, e.g. 'now-5m'",
 					"default":     "now-5m",
 				},
 				"to_time": map[string]interface{}{
 					"type":        "string",
-					"description": "结束时间，支持Unix时间戳或相对时间如 'now'",
+					"description": "End time. Unix timestamp or relative expression, e.g. 'now'",
 					"default":     "now",
 				},
 				"regionId": map[string]interface{}{
 					"type":        "string",
-					"description": "阿里云区域ID，如 'cn-hangzhou'",
+					"description": "Alibaba Cloud region ID, e.g. 'cn-hongkong'",
 				},
 			},
-			"required": []string{"query", "regionId"},
+			"required": []string{"query", "workspace", "regionId"},
 		},
 		Handler: h.handleExecuteSPL,
 	}
@@ -1084,12 +789,10 @@ func (h *slsHandler) executeSPLTool() toolkit.Tool {
 func (h *slsHandler) handleExecuteSPL(ctx context.Context, params map[string]interface{}) (interface{}, error) {
 	query := paramString(params, "query", "")
 	workspace := paramString(params, "workspace", "")
-	project := paramString(params, "project", "")
-	logStore := paramString(params, "logStore", "")
 	regionID := paramString(params, "regionId", "")
 
-	if query == "" || regionID == "" {
-		return buildResponse(nil, true, "query and regionId are required"), nil
+	if query == "" || workspace == "" || regionID == "" {
+		return buildResponse(nil, true, "query, workspace and regionId are required"), nil
 	}
 
 	fromTS, err := parseTimeParam(params, "from_time", "now-5m")
@@ -1101,36 +804,19 @@ func (h *slsHandler) handleExecuteSPL(ctx context.Context, params map[string]int
 		return buildResponse(nil, true, fmt.Sprintf("invalid to_time: %s", err)), nil
 	}
 
-	// Determine which mode to use: workspace (CMS) or project/logStore (SLS)
-	if workspace != "" {
-		// CMS mode: use workspace
-		return h.executeCMSSPL(ctx, workspace, query, regionID, fromTS, toTS, params)
-	}
-
-	if project != "" && logStore != "" {
-		// SLS mode: use project/logStore
-		return h.executeSLSSPL(ctx, project, logStore, query, regionID, fromTS, toTS, params)
-	}
-
-	return buildResponse(nil, true, "workspace or (project + logStore) is required"), nil
-}
-
-// executeCMSSPL executes SPL query using CMS client (workspace mode)
-func (h *slsHandler) executeCMSSPL(ctx context.Context, workspace, query, regionID string, fromTS, toTS int64, params map[string]interface{}) (interface{}, error) {
-	slog.InfoContext(ctx, "sls_execute_spl (CMS mode)",
+	slog.InfoContext(ctx, "sls_execute_spl",
 		"workspace", workspace, "region", regionID,
 		"from", fromTS, "to", toTS)
 
 	result, err := h.cmsClient.ExecuteSPL(ctx, regionID, workspace, query, fromTS, toTS, 1000)
 	if err != nil {
-		slog.ErrorContext(ctx, "sls_execute_spl (CMS mode) failed", "error", err)
+		slog.ErrorContext(ctx, "sls_execute_spl failed", "error", err)
 		return buildResponse(nil, true, fmt.Sprintf("SPL query failed: %s", err)), nil
 	}
 
 	data := result["data"]
 
-	// Build enhanced response with query and time_range information
-	response := map[string]interface{}{
+	return map[string]interface{}{
 		"error":   false,
 		"data":    data,
 		"message": "SPL query executed successfully",
@@ -1142,39 +828,7 @@ func (h *slsHandler) executeCMSSPL(ctx context.Context, workspace, query, region
 			"to_readable":   time.Unix(toTS, 0).Format(time.RFC3339),
 			"expression":    fmt.Sprintf("%s ~ %s", paramString(params, "from_time", "now-5m"), paramString(params, "to_time", "now")),
 		},
-	}
-
-	return response, nil
-}
-
-// executeSLSSPL executes SPL query using SLS client (project/logStore mode)
-func (h *slsHandler) executeSLSSPL(ctx context.Context, project, logStore, query, regionID string, fromTS, toTS int64, params map[string]interface{}) (interface{}, error) {
-	slog.InfoContext(ctx, "sls_execute_spl (SLS mode)",
-		"project", project, "logStore", logStore, "region", regionID,
-		"from", fromTS, "to", toTS)
-
-	results, err := h.slsClient.Query(ctx, regionID, project, logStore, query, fromTS, toTS)
-	if err != nil {
-		slog.ErrorContext(ctx, "sls_execute_spl (SLS mode) failed", "error", err)
-		return buildResponse(nil, true, fmt.Sprintf("SPL query failed: %s", err)), nil
-	}
-
-	// Build enhanced response with query and time_range information
-	response := map[string]interface{}{
-		"error":   false,
-		"data":    results,
-		"message": "SPL query executed successfully",
-		"query":   query,
-		"time_range": map[string]interface{}{
-			"from":          fromTS,
-			"to":            toTS,
-			"from_readable": time.Unix(fromTS, 0).Format(time.RFC3339),
-			"to_readable":   time.Unix(toTS, 0).Format(time.RFC3339),
-			"expression":    fmt.Sprintf("%s ~ %s", paramString(params, "from_time", "now-5m"), paramString(params, "to_time", "now")),
-		},
-	}
-
-	return response, nil
+	}, nil
 }
 
 // ===========================================================================
@@ -1184,63 +838,65 @@ func (h *slsHandler) executeSLSSPL(ctx context.Context, project, logStore, query
 func (h *slsHandler) getContextLogsTool() toolkit.Tool {
 	return toolkit.Tool{
 		Name: "sls_get_context_logs",
-		Description: `查询指定日志前后的上下文日志。
+		Description: `Query context logs around a specified log entry.
 
-## 功能概述
+## Overview
 
-该工具用于根据"起始日志"的 pack_id 与 pack_meta，查询该日志前（上文）后（下文）的若干条上下文日志。
+Queries logs before (backward) and after (forward) a given starting log entry, using its pack_id and pack_meta.
 
-说明：上下文查询的时间范围固定为起始日志的前后一天（由SLS服务端限制）。
+Note: The time range for context queries is fixed to one day before and after the starting log (enforced by the SLS service).
 
-## 如何获取 pack_id 与 pack_meta
+## How to Obtain pack_id and pack_meta
 
-先使用 sls_execute_sql 获取目标日志，并在查询语句末尾追加 |with_pack_meta，
-使查询结果携带内部字段：
-- __pack_id__：对应本工具的 pack_id
-- __pack_meta__：对应本工具的 pack_meta
+First use sls_execute_sql to query the target log, appending |with_pack_meta to the query statement.
+The results will include internal fields:
+- __pack_id__: corresponds to this tool's pack_id
+- __pack_meta__: corresponds to this tool's pack_meta
 
-然后选定你要作为起始点的那条日志，将上述两个字段值传入本工具即可。
+Then select the log entry you want as the starting point and pass these two field values to this tool.
 
-## 参数说明
+Note: Some logstores (e.g. monitoring logstores) may not return __pack_id__. In that case, context log queries are not supported for that logstore.
 
-- back_lines / forward_lines：范围 0~100，且两者至少一个大于 0。
+## Parameters
 
-## 返回结果
+- back_lines / forward_lines: Range 0-100, and at least one must be greater than 0.
 
-返回结构与SLS OpenAPI一致，其中 logs 内每条日志会包含：
-- __index_number__：相对起始日志的位置（负数为上文，0 为起始日志，正数为下文）`,
+## Response
+
+The response structure matches the SLS OpenAPI. Each log in the logs array includes:
+- __index_number__: Position relative to the starting log (negative = before, 0 = starting log, positive = after)`,
 		InputSchema: map[string]interface{}{
 			"type": "object",
 			"properties": map[string]interface{}{
 				"project": map[string]interface{}{
 					"type":        "string",
-					"description": "SLS项目名称",
+					"description": "SLS project name",
 				},
 				"logStore": map[string]interface{}{
 					"type":        "string",
-					"description": "SLS日志库名称",
+					"description": "SLS logstore name",
 				},
 				"pack_id": map[string]interface{}{
 					"type":        "string",
-					"description": "起始日志的 pack_id",
+					"description": "pack_id of the starting log entry",
 				},
 				"pack_meta": map[string]interface{}{
 					"type":        "string",
-					"description": "起始日志的 pack_meta",
+					"description": "pack_meta of the starting log entry",
 				},
 				"back_lines": map[string]interface{}{
 					"type":        "integer",
-					"description": "向前查询的日志行数，范围0-100，默认10",
+					"description": "Number of log lines to query backward, range 0-100, default 10",
 					"default":     10,
 				},
 				"forward_lines": map[string]interface{}{
 					"type":        "integer",
-					"description": "向后查询的日志行数，范围0-100，默认10",
+					"description": "Number of log lines to query forward, range 0-100, default 10",
 					"default":     10,
 				},
 				"regionId": map[string]interface{}{
 					"type":        "string",
-					"description": "阿里云区域ID，如 'cn-hangzhou'",
+					"description": "Alibaba Cloud region ID, e.g. 'cn-hongkong'",
 				},
 			},
 			"required": []string{"project", "logStore", "pack_id", "pack_meta", "regionId"},
@@ -1268,11 +924,11 @@ func isInvalidPackValue(v string) bool {
 
 // packValueHint is the user-facing message returned when pack_id / pack_meta
 // look invalid.
-const packValueHint = "pack_id 和 pack_meta 必须来自之前的日志查询结果。" +
-	"请先使用 sls_execute_sql 或 sls_query_logstore 查询日志，" +
-	"并在查询语句末尾追加 |with_pack_meta，" +
-	"查询结果中将包含 __pack_id__ 和 __pack_meta__ 字段，" +
-	"将这两个字段的值传入本工具即可。"
+const packValueHint = "pack_id and pack_meta must come from a previous log query result. " +
+	"First use sls_execute_sql or sls_query_logstore to query logs, " +
+	"appending |with_pack_meta at the end of the query statement. " +
+	"The results will contain __pack_id__ and __pack_meta__ fields. " +
+	"Pass those field values to this tool."
 
 func (h *slsHandler) handleGetContextLogs(ctx context.Context, params map[string]interface{}) (interface{}, error) {
 	project := paramString(params, "project", "")
@@ -1290,12 +946,12 @@ func (h *slsHandler) handleGetContextLogs(ctx context.Context, params map[string
 	// Validate pack_id and pack_meta — reject obviously placeholder values.
 	if isInvalidPackValue(packID) || isInvalidPackValue(packMeta) {
 		return buildResponse(nil, true, fmt.Sprintf(
-			"pack_id 或 pack_meta 的值无效（当前值: pack_id=%q, pack_meta=%q）。%s",
+			"Invalid pack_id or pack_meta value (current: pack_id=%q, pack_meta=%q). %s",
 			packID, packMeta, packValueHint)), nil
 	}
 
 	if backLines == 0 && forwardLines == 0 {
-		return buildResponse(nil, true, "back_lines 与 forward_lines 不能同时为 0，至少一个需要大于 0"), nil
+		return buildResponse(nil, true, "back_lines and forward_lines cannot both be 0; at least one must be greater than 0"), nil
 	}
 
 	slog.InfoContext(ctx, "sls_get_context_logs",
@@ -1307,7 +963,7 @@ func (h *slsHandler) handleGetContextLogs(ctx context.Context, params map[string
 	if err != nil {
 		slog.ErrorContext(ctx, "sls_get_context_logs failed", "error", err)
 		return buildResponse(nil, true, fmt.Sprintf(
-			"Get context logs failed: %s\n\n提示: %s", err, packValueHint)), nil
+			"Get context logs failed: %s\n\nHint: %s", err, packValueHint)), nil
 	}
 
 	return buildResponse(result, false, ""), nil
@@ -1320,47 +976,47 @@ func (h *slsHandler) handleGetContextLogs(ctx context.Context, params map[string
 func (h *slsHandler) textToSPLTool() toolkit.Tool {
 	return toolkit.Tool{
 		Name: "sls_text_to_spl",
-		Description: `将自然语言转换为SLS SPL查询语句。
+		Description: `Convert natural language to an SLS SPL query statement.
 
-## 功能概述
+## Overview
 
-该工具可以将自然语言描述转换为有效的SLS SPL查询语句。
-注意：SPL (Search Processing Language) 是SLS的一种管道式查询语句，主要用于数据加工、过滤、提取等场景，与标准SQL不同。
+Converts a natural language description into a valid SLS SPL query statement.
+Note: SPL (Search Processing Language) is a pipeline-style query language in SLS, primarily used for data transformation, filtering, and extraction, distinct from standard SQL.
 
-## 使用场景
+## Use Cases
 
-- 当用户需要对日志数据进行结构化提取时
-- 当需要从非结构化文本中解析字段时
+- When the user needs to perform structured extraction from log data
+- When fields need to be parsed from unstructured text
 
-## 注意事项
+## Notes
 
-- 本工具会基于提供的 data_sample 直接执行生成的 SPL 并返回结果
-- 返回结果中包含生成的 query 和基于样例数据的执行结果 data`,
+- This tool executes the generated SPL against the provided data_sample and returns the results
+- The response includes the generated query and execution results (data) based on the sample data`,
 		InputSchema: map[string]interface{}{
 			"type": "object",
 			"properties": map[string]interface{}{
 				"text": map[string]interface{}{
 					"type":        "string",
-					"description": "用于生成SPL的自然语言描述",
+					"description": "Natural language description for SPL generation",
 				},
 				"project": map[string]interface{}{
 					"type":        "string",
-					"description": "SLS项目名称",
+					"description": "SLS project name",
 				},
 				"logStore": map[string]interface{}{
 					"type":        "string",
-					"description": "SLS日志库名称",
+					"description": "SLS logstore name",
 				},
 				"data_sample": map[string]interface{}{
 					"type":        "array",
-					"description": "样例日志数据，用于SPL生成",
+					"description": "Sample log data for SPL generation",
 					"items": map[string]interface{}{
 						"type": "object",
 					},
 				},
 				"regionId": map[string]interface{}{
 					"type":        "string",
-					"description": "阿里云区域ID，如 'cn-hangzhou'",
+					"description": "Alibaba Cloud region ID, e.g. 'cn-hongkong'",
 				},
 			},
 			"required": []string{"text", "project", "logStore", "data_sample", "regionId"},
@@ -1382,8 +1038,8 @@ func (h *slsHandler) handleTextToSPL(ctx context.Context, params map[string]inte
 	slog.InfoContext(ctx, "sls_text_to_spl",
 		"project", project, "logStore", logStore, "region", regionID)
 
-	// Use TextToSQL as the underlying mechanism for SPL generation
-	spl, err := h.slsClient.TextToSQL(ctx, regionID, project, logStore, text)
+	// Use CMS Chat API with "spl_intent_recognition" skill for SPL generation
+	spl, err := h.cmsClient.ChatWithSkill(ctx, regionID, project, logStore, text, "spl_intent_recognition")
 	if err != nil {
 		slog.ErrorContext(ctx, "sls_text_to_spl failed", "error", err)
 		return buildResponse(nil, true, fmt.Sprintf("Text to SPL failed: %s", err)), nil
@@ -1401,56 +1057,56 @@ func (h *slsHandler) handleTextToSPL(ctx context.Context, params map[string]inte
 func (h *slsHandler) logExploreTool() toolkit.Tool {
 	return toolkit.Tool{
 		Name: "sls_log_explore",
-		Description: `查看阿里云日志服务中某个日志库的日志数据聚合分析结果，提供日志数据概览信息。
+		Description: `View aggregated analysis results of log data in an Alibaba Cloud Log Service logstore, providing a log data overview.
 
-## 功能概述
+## Overview
 
-该工具可以给出指定日志库中日志数据的概览信息。给出日志数据中典型的日志模板，以及各个日志模板对应日志数量分布。
+Provides an overview of log data in a specified logstore, including typical log patterns and the distribution of log counts per pattern.
 
-## 使用场景
+## Use Cases
 
-- 当需要查看日志库中日志的概览信息和数据分布时
+- When you need to view log overview information and data distribution in a logstore
 
-## 查询实例
+## Examples
 
-- "查询某个 project 的某个 logstore 中的日志数据分布"
-- "某个 project 的某个 logstore 中不同风险等级的日志有哪些"`,
+- "Query the log data distribution in a specific project's logstore"
+- "What are the logs at different severity levels in a specific project's logstore"`,
 		InputSchema: map[string]interface{}{
 			"type": "object",
 			"properties": map[string]interface{}{
 				"project": map[string]interface{}{
 					"type":        "string",
-					"description": "SLS项目名称，必须精确匹配，不能包含中文字符",
+					"description": "SLS project name, must be an exact match, cannot contain Chinese characters",
 				},
 				"logStore": map[string]interface{}{
 					"type":        "string",
-					"description": "SLS日志库名称，必须精确匹配，不能包含中文字符",
+					"description": "SLS logstore name, must be an exact match, cannot contain Chinese characters",
 				},
 				"from_time": map[string]interface{}{
 					"type":        "string",
-					"description": "开始时间: Unix时间戳(秒/毫秒)或相对时间(now-5m)",
+					"description": "Start time: Unix timestamp (seconds/milliseconds) or relative expression (now-5m)",
 					"default":     "now-1h",
 				},
 				"to_time": map[string]interface{}{
 					"type":        "string",
-					"description": "结束时间: Unix时间戳(秒/毫秒)或相对时间(now)",
+					"description": "End time: Unix timestamp (seconds/milliseconds) or relative expression (now)",
 					"default":     "now",
 				},
 				"regionId": map[string]interface{}{
 					"type":        "string",
-					"description": "阿里云区域ID",
+					"description": "Alibaba Cloud region ID",
 				},
 				"logField": map[string]interface{}{
 					"type":        "string",
-					"description": "包含日志消息的字段名称",
+					"description": "Field name containing the log message",
 				},
 				"filter_query": map[string]interface{}{
 					"type":        "string",
-					"description": "过滤查询语句，必须是有效的SLS查询语句，用于过滤日志数据",
+					"description": "Filter query statement, must be a valid SLS query, used to filter log data",
 				},
 				"groupField": map[string]interface{}{
 					"type":        "string",
-					"description": "包含日志消息分组标识的字段名称",
+					"description": "Field name containing the log message group identifier",
 				},
 			},
 			"required": []string{"project", "logStore", "regionId", "logField"},
@@ -1639,19 +1295,11 @@ type LogExploreResult struct {
 }
 
 // extractCount extracts count from query result
-func extractCount(result interface{}) int64 {
-	if result == nil {
+func extractCount(result []map[string]interface{}) int64 {
+	if len(result) == 0 {
 		return 0
 	}
-	slice, ok := result.([]interface{})
-	if !ok || len(slice) == 0 {
-		return 0
-	}
-	row, ok := slice[0].(map[string]interface{})
-	if !ok {
-		return 0
-	}
-	if cnt, ok := row["cnt"]; ok {
+	if cnt, ok := result[0]["cnt"]; ok {
 		switch v := cnt.(type) {
 		case float64:
 			return int64(v)
@@ -1668,60 +1316,33 @@ func extractCount(result interface{}) int64 {
 	return 0
 }
 
-// extractModelID extracts model_id from query result
-func extractModelID(result interface{}) string {
-	if result == nil {
+// extractModelID extracts model_id from query result.
+func extractModelID(result []map[string]interface{}) string {
+	if len(result) == 0 {
 		return ""
 	}
-	slice, ok := result.([]interface{})
-	if !ok || len(slice) == 0 {
-		return ""
-	}
-	row, ok := slice[0].(map[string]interface{})
-	if !ok {
-		return ""
-	}
-	if modelID, ok := row["model_id"].(string); ok {
+	if modelID, ok := result[0]["model_id"].(string); ok {
 		return modelID
 	}
 	return ""
 }
 
-// extractErrorMsg extracts error_msg from query result
-func extractErrorMsg(result interface{}) string {
-	if result == nil {
+// extractErrorMsg extracts error_msg from query result.
+func extractErrorMsg(result []map[string]interface{}) string {
+	if len(result) == 0 {
 		return ""
 	}
-	slice, ok := result.([]interface{})
-	if !ok || len(slice) == 0 {
-		return ""
-	}
-	row, ok := slice[0].(map[string]interface{})
-	if !ok {
-		return ""
-	}
-	if errMsg, ok := row["error_msg"].(string); ok {
+	if errMsg, ok := result[0]["error_msg"].(string); ok {
 		return errMsg
 	}
 	return ""
 }
 
-// formatLogExploreResults formats the log explore query results
-func formatLogExploreResults(result interface{}, timeBucketSize int64) []map[string]interface{} {
+// formatLogExploreResults formats the log explore query results.
+func formatLogExploreResults(result []map[string]interface{}, timeBucketSize int64) []map[string]interface{} {
 	patterns := make([]map[string]interface{}, 0)
-	if result == nil {
-		return patterns
-	}
-	slice, ok := result.([]interface{})
-	if !ok {
-		return patterns
-	}
 
-	for _, item := range slice {
-		row, ok := item.(map[string]interface{})
-		if !ok {
-			continue
-		}
+	for _, row := range result {
 
 		pattern := make(map[string]interface{})
 		pattern["pattern"] = row["pattern"]
@@ -1788,16 +1409,8 @@ func formatLogExploreResults(result interface{}, timeBucketSize int64) []map[str
 	return patterns
 }
 
-// formatLogCompareResults formats the log compare query results
-func formatLogCompareResults(result interface{}) []map[string]interface{} {
-	if result == nil {
-		return []map[string]interface{}{}
-	}
-	slice, ok := result.([]interface{})
-	if !ok {
-		return []map[string]interface{}{}
-	}
-
+// formatLogCompareResults formats the log compare query results.
+func formatLogCompareResults(result []map[string]interface{}) []map[string]interface{} {
 	// Group results by (group, pattern) key
 	type pairKey struct {
 		group   string
@@ -1805,11 +1418,7 @@ func formatLogCompareResults(result interface{}) []map[string]interface{} {
 	}
 	pairs := make(map[pairKey]map[string]map[string]interface{})
 
-	for _, item := range slice {
-		row, ok := item.(map[string]interface{})
-		if !ok {
-			continue
-		}
+	for _, row := range result {
 
 		// Format individual item
 		formattedItem := map[string]interface{}{
@@ -1924,66 +1533,66 @@ func formatLogCompareResults(result interface{}) []map[string]interface{} {
 func (h *slsHandler) logCompareTool() toolkit.Tool {
 	return toolkit.Tool{
 		Name: "sls_log_compare",
-		Description: `查看阿里云日志服务中某个日志库的日志数据在两个时间范围内的对比结果。
+		Description: `View comparison results of log data between two time ranges in an Alibaba Cloud Log Service logstore.
 
-## 功能概述
+## Overview
 
-该工具可以两个时间范围内的日志数据分布的区别，用于快速分析日志数据的变化情况。
+Compares the log data distribution between two time ranges, enabling quick analysis of log data changes.
 
-## 使用场景
+## Use Cases
 
-- 当需要分析两个时间范围内的日志数据分布的区别时
+- When you need to analyze differences in log data distribution between two time ranges
 
-## 查询实例
+## Examples
 
-- "昨天的日志和今天的相比有什么区别"
-- "服务发布前后日志有什么变化"`,
+- "What are the differences between yesterday's logs and today's"
+- "What changed in the logs before and after a service deployment"`,
 		InputSchema: map[string]interface{}{
 			"type": "object",
 			"properties": map[string]interface{}{
 				"project": map[string]interface{}{
 					"type":        "string",
-					"description": "SLS项目名称，必须精确匹配，不能包含中文字符",
+					"description": "SLS project name, must be an exact match, cannot contain Chinese characters",
 				},
 				"logStore": map[string]interface{}{
 					"type":        "string",
-					"description": "SLS日志库名称，必须精确匹配，不能包含中文字符",
+					"description": "SLS logstore name, must be an exact match, cannot contain Chinese characters",
 				},
 				"test_from_time": map[string]interface{}{
 					"type":        "string",
-					"description": "实验组数据的开始时间: Unix时间戳(秒/毫秒)或相对时间(now-5m)",
+					"description": "Test group start time: Unix timestamp (seconds/milliseconds) or relative expression (now-5m)",
 					"default":     "now-1h",
 				},
 				"test_to_time": map[string]interface{}{
 					"type":        "string",
-					"description": "实验组数据的结束时间: Unix时间戳(秒/毫秒)或相对时间(now)",
+					"description": "Test group end time: Unix timestamp (seconds/milliseconds) or relative expression (now)",
 					"default":     "now",
 				},
 				"control_from_time": map[string]interface{}{
 					"type":        "string",
-					"description": "对照组数据的开始时间: Unix时间戳(秒/毫秒)或相对时间(now-5m)",
+					"description": "Control group start time: Unix timestamp (seconds/milliseconds) or relative expression (now-5m)",
 					"default":     "now-1h",
 				},
 				"control_to_time": map[string]interface{}{
 					"type":        "string",
-					"description": "对照组数据的结束时间: Unix时间戳(秒/毫秒)或相对时间(now)",
+					"description": "Control group end time: Unix timestamp (seconds/milliseconds) or relative expression (now)",
 					"default":     "now",
 				},
 				"regionId": map[string]interface{}{
 					"type":        "string",
-					"description": "阿里云区域ID",
+					"description": "Alibaba Cloud region ID",
 				},
 				"logField": map[string]interface{}{
 					"type":        "string",
-					"description": "包含日志消息的字段名称",
+					"description": "Field name containing the log message",
 				},
 				"filter_query": map[string]interface{}{
 					"type":        "string",
-					"description": "过滤查询语句，必须是有效的SLS查询语句，用于过滤日志数据",
+					"description": "Filter query statement, must be a valid SLS query, used to filter log data",
 				},
 				"groupField": map[string]interface{}{
 					"type":        "string",
-					"description": "包含日志消息分组标识的字段名称",
+					"description": "Field name containing the log message group identifier",
 				},
 			},
 			"required": []string{"project", "logStore", "regionId", "logField"},
@@ -2004,28 +1613,33 @@ func (h *slsHandler) handleLogCompare(ctx context.Context, params map[string]int
 		return buildResponse(nil, true, "project, logStore, regionId and logField are required"), nil
 	}
 
+	// 使用同一个 now 时刻解析所有时间参数，避免多次 time.Now() 调用之间的
+	// 微小时间差导致相邻时间范围（如 test=now-1h~now, control=now-2h~now-1h）
+	// 被误判为重叠。
+	now := time.Now()
+
 	// Parse test time range
-	testFromTS, err := parseTimeParam(params, "test_from_time", "now-1h")
+	testFromTS, err := parseTimeParamAt(params, "test_from_time", "now-1h", now)
 	if err != nil {
 		return buildResponse(nil, true, fmt.Sprintf("invalid test_from_time: %s", err)), nil
 	}
-	testToTS, err := parseTimeParam(params, "test_to_time", "now")
+	testToTS, err := parseTimeParamAt(params, "test_to_time", "now", now)
 	if err != nil {
 		return buildResponse(nil, true, fmt.Sprintf("invalid test_to_time: %s", err)), nil
 	}
 
 	// Parse control time range
-	controlFromTS, err := parseTimeParam(params, "control_from_time", "now-1h")
+	controlFromTS, err := parseTimeParamAt(params, "control_from_time", "now-1h", now)
 	if err != nil {
 		return buildResponse(nil, true, fmt.Sprintf("invalid control_from_time: %s", err)), nil
 	}
-	controlToTS, err := parseTimeParam(params, "control_to_time", "now")
+	controlToTS, err := parseTimeParamAt(params, "control_to_time", "now", now)
 	if err != nil {
 		return buildResponse(nil, true, fmt.Sprintf("invalid control_to_time: %s", err)), nil
 	}
 
-	// Check for time range overlap
-	if !(testToTS < controlFromTS || controlToTS < testFromTS) {
+	// Check for time range overlap (adjacent ranges where one ends exactly where the other begins are allowed)
+	if !(testToTS <= controlFromTS || controlToTS <= testFromTS) {
 		return map[string]interface{}{
 			"patterns": []interface{}{},
 			"message":  fmt.Sprintf("Failed to do log compare because test group (%s ~ %s) and control group (%s ~ %s) data time range overlap", paramString(params, "test_from_time", "now-1h"), paramString(params, "test_to_time", "now"), paramString(params, "control_from_time", "now-1h"), paramString(params, "control_to_time", "now")),

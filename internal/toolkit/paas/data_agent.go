@@ -16,16 +16,7 @@ func DataAgentTools(cmsClient client.CMSClient) []toolkit.Tool {
 	h := &dataAgentHandler{cmsClient: cmsClient}
 	return []toolkit.Tool{
 		h.dataAgentQueryTool(),
-		h.naturalLanguageQueryAliasTool(), // Alias for Python compatibility
 	}
-}
-
-// naturalLanguageQueryAliasTool returns an alias tool for umodel_data_agent_query
-// to maintain compatibility with Python MCP server which uses "cms_natural_language_query"
-func (h *dataAgentHandler) naturalLanguageQueryAliasTool() toolkit.Tool {
-	tool := h.dataAgentQueryTool()
-	tool.Name = "cms_natural_language_query"
-	return tool
 }
 
 // dataAgentHandler holds the CMS client and provides tool constructors and handlers.
@@ -34,60 +25,59 @@ type dataAgentHandler struct {
 }
 
 // ===========================================================================
-// Tool: umodel_data_agent_query
+// Tool: cms_natural_language_query
 // ===========================================================================
 
 func (h *dataAgentHandler) dataAgentQueryTool() toolkit.Tool {
 	return toolkit.Tool{
-		Name: "umodel_data_agent_query",
-		Description: `使用自然语言查询可观测数据。
+		Name: "cms_natural_language_query",
+		Description: `Query observability data using natural language.
 
-## 功能概述
+## Overview
 
-用户可以使用自然语言描述想要查询的数据，系统会自动理解意图并返回相应的数据结果。
-通过调用 CMS 的 data-agent skill，实现智能数据查询功能。
+Describe the data you want to query in natural language. The system interprets your intent
+and returns matching results via the CMS data-agent skill.
 
-## 使用场景
+## Use Cases
 
-- 当需要快速查询可观测数据但不熟悉具体 API 时
-- 当需要进行复杂的数据分析但不想编写复杂查询语句时
-- 当需要获取服务性能概览、错误分析、慢请求统计等信息时
+- Quickly query observability data without knowing specific APIs
+- Perform complex data analysis without writing query statements
+- Retrieve service performance overviews, error analysis, slow request statistics, etc.
 
-## 支持的查询类型
+## Supported Query Types
 
-- 指标查询：如"查询服务A的CPU使用率"、"获取内存使用最高的Pod"
-- 日志查询：如"统计错误日志数量"、"查找包含Exception的日志"
-- 链路查询：如"查询延迟超过1秒的请求"、"获取服务调用拓扑"
-- 聚合统计：如"按服务分组统计请求数量"、"计算平均响应时间"
+- Metrics: e.g. "CPU usage of service A", "Pods with highest memory usage"
+- Logs: e.g. "Count of error logs", "Logs containing Exception"
+- Traces: e.g. "Requests with latency over 1s", "Service call topology"
+- Aggregations: e.g. "Request count grouped by service", "Average response time"
 
-## 返回数据结构
+## Response Structure
 
-返回的数据包含：
-- data: 查询结果数据，包含 query_results（实体列表、指标数据等）
-- message: AI 生成的解释说明文本
-- error: 是否发生错误（true/false）
-- time_range: 查询的时间范围
+- data: Query result data, including query_results (entity lists, metric data, etc.)
+- message: AI-generated explanation text
+- error: Whether an error occurred (true/false)
+- time_range: The queried time range
 
-## 查询示例
+## Query Examples
 
-- "查询请求量最高的10个服务"
-- "哪些服务的错误率超过1%"
-- "查询响应时间超过1秒的服务"
-- "统计各服务的请求数量"`,
+- "Top 10 services by request volume"
+- "Services with error rate above 1%"
+- "Services with response time over 1s"
+- "Request count per service"`,
 		InputSchema: map[string]interface{}{
 			"type": "object",
 			"properties": map[string]interface{}{
 				"query": map[string]interface{}{
 					"type":        "string",
-					"description": "自然语言查询文本，描述你想要查询的可观测数据。示例：'查询请求量最高的10个服务'、'哪些服务的错误率超过1%'、'查询响应时间超过1秒的服务'",
+					"description": "Natural language query describing the observability data to retrieve. Examples: 'Top 10 services by request volume', 'Services with error rate above 1%', 'Services with response time over 1s'",
 				},
 				"workspace": map[string]interface{}{
 					"type":        "string",
-					"description": "CMS工作空间名称，可通过 list_workspace 获取",
+					"description": "CMS workspace name, obtainable via list_workspace",
 				},
 				"regionId": map[string]interface{}{
 					"type":        "string",
-					"description": "阿里云区域ID，如 'cn-hangzhou'",
+					"description": "Alibaba Cloud region ID, e.g. 'cn-hongkong'",
 				},
 				"time_range": map[string]interface{}{
 					"type":        "string",
@@ -96,15 +86,15 @@ func (h *dataAgentHandler) dataAgentQueryTool() toolkit.Tool {
 				},
 				"domain": map[string]interface{}{
 					"type":        "string",
-					"description": "可选的实体域上下文，如 'apm'、'infrastructure'，用于缩小查询范围",
+					"description": "Optional entity domain filter, e.g. 'apm', 'infrastructure', to narrow the query scope",
 				},
 				"entity_set_name": map[string]interface{}{
 					"type":        "string",
-					"description": "可选的实体类型上下文，如 'apm.service'，用于缩小查询范围",
+					"description": "Optional entity type filter, e.g. 'apm.service', to narrow the query scope",
 				},
 				"entity_ids": map[string]interface{}{
 					"type":        "string",
-					"description": "可选的逗号分隔实体ID列表，用于限定查询的实体范围",
+					"description": "Optional comma-separated entity IDs to restrict the query scope",
 				},
 			},
 			"required": []string{"query", "workspace", "regionId"},
@@ -131,7 +121,7 @@ func (h *dataAgentHandler) handleDataAgentQuery(ctx context.Context, params map[
 		return buildDataAgentErrorResponse(err.Error(), timeRange), nil
 	}
 
-	slog.InfoContext(ctx, "umodel_data_agent_query",
+	slog.InfoContext(ctx, "cms_natural_language_query",
 		"workspace", workspace,
 		"query", query,
 		"region", regionID,
@@ -142,8 +132,8 @@ func (h *dataAgentHandler) handleDataAgentQuery(ctx context.Context, params map[
 	// Call CMS CreateThread + CreateChatWithSSE API (matching Python implementation)
 	result, err := h.cmsClient.DataAgentQuery(ctx, regionID, workspace, query, fromTS, toTS)
 	if err != nil {
-		slog.ErrorContext(ctx, "umodel_data_agent_query failed", "error", err)
-		return buildDataAgentErrorResponse(fmt.Sprintf("查询失败: %s", err), timeRange), nil
+		slog.ErrorContext(ctx, "cms_natural_language_query failed", "error", err)
+		return buildDataAgentErrorResponse(fmt.Sprintf("Query failed: %s", err), timeRange), nil
 	}
 
 	// Build response matching Python format
@@ -172,7 +162,7 @@ func (h *dataAgentHandler) handleDataAgentQuery(ctx context.Context, params map[
 
 	message := result.Message
 	if message == "" {
-		message = "查询完成"
+		message = "Query completed"
 	}
 
 	now := time.Now()

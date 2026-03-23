@@ -13,9 +13,9 @@ import (
 
 func TestDataTools_Count(t *testing.T) {
 	tools := DataTools(&mockCMSClient{})
-	// 8 main tools + 1 alias (umodel_get_profiles)
-	if got := len(tools); got != 9 {
-		t.Fatalf("DataTools() returned %d tools, want 9", got)
+	// 8 tools
+	if got := len(tools); got != 8 {
+		t.Fatalf("DataTools() returned %d tools, want 8", got)
 	}
 }
 
@@ -29,8 +29,7 @@ func TestDataTools_Names(t *testing.T) {
 		"umodel_get_events",
 		"umodel_get_traces",
 		"umodel_search_traces",
-		"umodel_get_profiling",
-		"umodel_get_profiles", // alias for umodel_get_profiling
+		"umodel_get_profiles",
 	}
 	for i, tool := range tools {
 		if tool.Name != expected[i] {
@@ -89,7 +88,7 @@ func TestHandleGetMetrics_Success(t *testing.T) {
 		"metric_domain_name": "apm.metric.service",
 		"metric":             "cpu_usage",
 		"workspace":          "test-ws",
-		"regionId":           "cn-hangzhou",
+		"regionId":           "cn-hongkong",
 	})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -124,7 +123,7 @@ func TestHandleGetMetrics_WithEntityIDs(t *testing.T) {
 		"metric_domain_name": "apm.metric.service",
 		"metric":             "cpu_usage",
 		"workspace":          "test-ws",
-		"regionId":           "cn-hangzhou",
+		"regionId":           "cn-hongkong",
 		"entity_ids":         "svc-1,svc-2",
 	})
 	if err != nil {
@@ -155,7 +154,7 @@ func TestHandleGetMetrics_SPLError(t *testing.T) {
 		"metric_domain_name": "apm.metric.service",
 		"metric":             "cpu_usage",
 		"workspace":          "test-ws",
-		"regionId":           "cn-hangzhou",
+		"regionId":           "cn-hongkong",
 	})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -182,7 +181,7 @@ func TestHandleGetMetrics_IncompatibleMetricDomain(t *testing.T) {
 		"metric_domain_name": "apm.metric.jvm",
 		"metric":             "arms_jvm_mem_used_bytes",
 		"workspace":          "test-ws",
-		"regionId":           "cn-hangzhou",
+		"regionId":           "cn-hongkong",
 	})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -218,7 +217,7 @@ func TestHandleGetMetrics_CompatibleCombinationPassesThrough(t *testing.T) {
 		"metric_domain_name": "apm.metric.jvm",
 		"metric":             "arms_jvm_mem_used_bytes",
 		"workspace":          "test-ws",
-		"regionId":           "cn-hangzhou",
+		"regionId":           "cn-hongkong",
 	})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -250,7 +249,7 @@ func TestHandleGetMetrics_UnknownEntitySetSkipsValidation(t *testing.T) {
 		"metric_domain_name": "host.metric.cpu",
 		"metric":             "cpu_usage",
 		"workspace":          "test-ws",
-		"regionId":           "cn-hangzhou",
+		"regionId":           "cn-hongkong",
 	})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -372,7 +371,7 @@ func TestHandleGetGoldenMetrics_Success(t *testing.T) {
 		"domain":          "apm",
 		"entity_set_name": "apm.service",
 		"workspace":       "test-ws",
-		"regionId":        "cn-hangzhou",
+		"regionId":        "cn-hongkong",
 	})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -394,7 +393,7 @@ func TestHandleGetGoldenMetrics_InvalidQueryType(t *testing.T) {
 		"domain":          "apm",
 		"entity_set_name": "apm.service",
 		"workspace":       "test-ws",
-		"regionId":        "cn-hangzhou",
+		"regionId":        "cn-hongkong",
 		"query_type":      "invalid",
 	})
 	if err != nil {
@@ -446,8 +445,9 @@ func TestHandleGetRelationMetrics_Success(t *testing.T) {
 		"relation_type":       "calls",
 		"metric_set_domain":   "apm",
 		"metric":              "latency",
+		"dest_entity_set_name": "apm.external.nosql",
 		"workspace":           "test-ws",
-		"regionId":            "cn-hangzhou",
+		"regionId":            "cn-hongkong",
 	})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -458,6 +458,11 @@ func TestHandleGetRelationMetrics_Success(t *testing.T) {
 	}
 	if !strings.Contains(capturedQuery, "get_relation_metric") {
 		t.Errorf("query should contain get_relation_metric, got %q", capturedQuery)
+	}
+	// Verify parameter order: dest params first, then relation/direction, then metric params
+	// Expected: get_relation_metric('apm', 'apm.external.nosql', [], '', 'calls', 'out', 'apm', 'apm.metric.apm.service_calls_apm.external.nosql', 'latency', 'range', '', [])
+	if !strings.Contains(capturedQuery, "'calls', 'out', 'apm', 'apm.metric.apm.service_calls_apm.external.nosql', 'latency'") {
+		t.Errorf("query has wrong parameter order, got %q", capturedQuery)
 	}
 }
 
@@ -474,13 +479,14 @@ func TestHandleGetRelationMetrics_AutoGenerateMetricSetName(t *testing.T) {
 	handler := tools[2].Handler
 
 	result, err := handler(context.Background(), map[string]interface{}{
-		"src_domain":          "apm",
-		"src_entity_set_name": "apm.service",
-		"relation_type":       "calls",
-		"metric_set_domain":   "apm",
-		"metric":              "latency",
-		"workspace":           "test-ws",
-		"regionId":            "cn-hangzhou",
+		"src_domain":           "apm",
+		"src_entity_set_name":  "apm.service",
+		"relation_type":        "calls",
+		"metric_set_domain":    "apm",
+		"metric":               "latency",
+		"dest_entity_set_name": "apm.external.nosql",
+		"workspace":            "test-ws",
+		"regionId":             "cn-hongkong",
 	})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -489,9 +495,9 @@ func TestHandleGetRelationMetrics_AutoGenerateMetricSetName(t *testing.T) {
 	if resp["error"] != false {
 		t.Errorf("expected error=false, got message: %v", resp["message"])
 	}
-	// metric_set_name should be auto-generated as "calls.apm.service"
-	if !strings.Contains(capturedQuery, "calls.apm.service") {
-		t.Errorf("query should contain auto-generated metric_set_name 'calls.apm.service', got %q", capturedQuery)
+	// metric_set_name should be auto-generated as "apm.metric.apm.service_calls_apm.external.nosql"
+	if !strings.Contains(capturedQuery, "apm.metric.apm.service_calls_apm.external.nosql") {
+		t.Errorf("query should contain auto-generated metric_set_name 'apm.metric.apm.service_calls_apm.external.nosql', got %q", capturedQuery)
 	}
 }
 
@@ -508,14 +514,15 @@ func TestHandleGetRelationMetrics_WithEntityIDs(t *testing.T) {
 	handler := tools[2].Handler
 
 	result, err := handler(context.Background(), map[string]interface{}{
-		"src_domain":          "apm",
-		"src_entity_set_name": "apm.service",
-		"src_entity_ids":      "svc-1,svc-2",
-		"relation_type":       "calls",
-		"metric_set_domain":   "apm",
-		"metric":              "latency",
-		"workspace":           "test-ws",
-		"regionId":            "cn-hangzhou",
+		"src_domain":           "apm",
+		"src_entity_set_name":  "apm.service",
+		"src_entity_ids":       "svc-1,svc-2",
+		"relation_type":        "calls",
+		"metric_set_domain":    "apm",
+		"metric":               "latency",
+		"dest_entity_set_name": "apm.external.nosql",
+		"workspace":            "test-ws",
+		"regionId":             "cn-hongkong",
 	})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -540,7 +547,7 @@ func TestHandleGetRelationMetrics_InvalidDirection(t *testing.T) {
 		"metric_set_domain":   "apm",
 		"metric":              "latency",
 		"workspace":           "test-ws",
-		"regionId":            "cn-hangzhou",
+		"regionId":            "cn-hongkong",
 		"direction":           "invalid",
 	})
 	if err != nil {
@@ -563,7 +570,7 @@ func TestHandleGetRelationMetrics_InvalidQueryType(t *testing.T) {
 		"metric_set_domain":   "apm",
 		"metric":              "latency",
 		"workspace":           "test-ws",
-		"regionId":            "cn-hangzhou",
+		"regionId":            "cn-hongkong",
 		"query_type":          "invalid",
 	})
 	if err != nil {
@@ -586,13 +593,14 @@ func TestHandleGetRelationMetrics_SPLError(t *testing.T) {
 	handler := tools[2].Handler
 
 	result, err := handler(context.Background(), map[string]interface{}{
-		"src_domain":          "apm",
-		"src_entity_set_name": "apm.service",
-		"relation_type":       "calls",
-		"metric_set_domain":   "apm",
-		"metric":              "latency",
-		"workspace":           "test-ws",
-		"regionId":            "cn-hangzhou",
+		"src_domain":           "apm",
+		"src_entity_set_name":  "apm.service",
+		"relation_type":        "calls",
+		"metric_set_domain":    "apm",
+		"metric":               "latency",
+		"dest_entity_set_name": "apm.external.nosql",
+		"workspace":            "test-ws",
+		"regionId":             "cn-hongkong",
 	})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -643,7 +651,7 @@ func TestHandleGetLogs_Success(t *testing.T) {
 		"log_set_domain":  "apm",
 		"log_set_name":    "apm.log.apm.service",
 		"workspace":       "test-ws",
-		"regionId":        "cn-hangzhou",
+		"regionId":        "cn-hongkong",
 		"entity_ids":      "svc-1",
 	})
 	if err != nil {
@@ -701,7 +709,7 @@ func TestHandleGetEvents_Success(t *testing.T) {
 		"event_set_domain": "default",
 		"event_set_name":   "default.event.common",
 		"workspace":        "test-ws",
-		"regionId":         "cn-hangzhou",
+		"regionId":         "cn-hongkong",
 	})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -710,11 +718,176 @@ func TestHandleGetEvents_Success(t *testing.T) {
 	if resp["error"] != false {
 		t.Errorf("expected error=false, got message: %v", resp["message"])
 	}
-	if !strings.Contains(capturedQuery, "get_event") {
-		t.Errorf("query should contain get_event, got %q", capturedQuery)
+	// Default event set uses .event_set table-style query, not entity-call
+	if !strings.Contains(capturedQuery, ".event_set with(") {
+		t.Errorf("default events should use .event_set query, got %q", capturedQuery)
 	}
-	if !strings.Contains(capturedQuery, "default.event.common") {
-		t.Errorf("query should contain event_set_name, got %q", capturedQuery)
+	if strings.Contains(capturedQuery, "entity-call") {
+		t.Errorf("default events should NOT use entity-call, got %q", capturedQuery)
+	}
+	if !strings.Contains(capturedQuery, `"resource.entity.domain" = 'apm'`) {
+		t.Errorf("query should contain domain SQL condition, got %q", capturedQuery)
+	}
+}
+
+func TestHandleGetEvents_CustomEventSet(t *testing.T) {
+	var capturedQuery string
+	mock := &mockCMSClient{
+		executeSPLFn: func(_ context.Context, _, _, query string, _, _ int64, _ int) (map[string]interface{}, error) {
+			capturedQuery = query
+			return map[string]interface{}{
+				"data": []interface{}{
+					map[string]interface{}{"event_type": "custom"},
+				},
+			}, nil
+		},
+	}
+
+	tools := DataTools(mock)
+	handler := tools[4].Handler
+
+	result, err := handler(context.Background(), map[string]interface{}{
+		"domain":           "apm",
+		"entity_set_name":  "apm.service",
+		"event_set_domain": "custom.domain",
+		"event_set_name":   "custom.event.name",
+		"workspace":        "test-ws",
+		"regionId":         "cn-hongkong",
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	resp := result.(map[string]interface{})
+	if resp["error"] != false {
+		t.Errorf("expected error=false, got message: %v", resp["message"])
+	}
+	// Custom event set uses entity-call get_event
+	if !strings.Contains(capturedQuery, "entity-call get_event") {
+		t.Errorf("custom events should use entity-call get_event, got %q", capturedQuery)
+	}
+	if !strings.Contains(capturedQuery, "'custom.domain', 'custom.event.name'") {
+		t.Errorf("query should contain custom event set params, got %q", capturedQuery)
+	}
+}
+
+func TestHandleGetEvents_DefaultWithEntityIDs(t *testing.T) {
+	var capturedQuery string
+	mock := &mockCMSClient{
+		executeSPLFn: func(_ context.Context, _, _, query string, _, _ int64, _ int) (map[string]interface{}, error) {
+			capturedQuery = query
+			return map[string]interface{}{"data": []interface{}{}}, nil
+		},
+	}
+
+	tools := DataTools(mock)
+	handler := tools[4].Handler
+
+	_, err := handler(context.Background(), map[string]interface{}{
+		"domain":           "apm",
+		"entity_set_name":  "apm.service",
+		"event_set_domain": "default",
+		"event_set_name":   "default.event.common",
+		"entity_ids":       "svc-1,svc-2",
+		"workspace":        "test-ws",
+		"regionId":         "cn-hongkong",
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	// Default mode should include entity ID filter in SQL conditions
+	if !strings.Contains(capturedQuery, `"resource.entity.entity_id" in ('svc-1','svc-2')`) {
+		t.Errorf("default events with entity_ids should include SQL filter, got %q", capturedQuery)
+	}
+}
+
+func TestHandleGetEvents_MultipleStorageRetry(t *testing.T) {
+	callCount := 0
+	var capturedRetryQuery string
+	mock := &mockCMSClient{
+		executeSPLFn: func(_ context.Context, _, _, query string, _, _ int64, _ int) (map[string]interface{}, error) {
+			callCount++
+			if callCount == 1 {
+				// First call: return MultipleStorageFound error
+				return nil, fmt.Errorf(`api error: status 400, body: {"code":"ParameterInvalid","message":"{\"statusItem\":[{\"code\":\"MultipleStorageFound\",\"message\":\"Multiple storages found for the dataset, available storage IDs: [k8s@sls_logstore@cluster-a/k8s-event, k8s@sls_logstore@cluster-b/k8s-event]\"}]}"}`)
+			}
+			// Second call (retry): succeed
+			capturedRetryQuery = query
+			return map[string]interface{}{
+				"data": []interface{}{
+					map[string]interface{}{"event_type": "k8s_event"},
+				},
+			}, nil
+		},
+	}
+
+	tools := DataTools(mock)
+	handler := tools[4].Handler
+
+	result, err := handler(context.Background(), map[string]interface{}{
+		"domain":           "k8s",
+		"entity_set_name":  "k8s.pod",
+		"event_set_domain": "k8s",
+		"event_set_name":   "k8s.event.events",
+		"workspace":        "test-ws",
+		"regionId":         "cn-hongkong",
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	resp := result.(map[string]interface{})
+	if resp["error"] != false {
+		t.Errorf("expected error=false after retry, got message: %v", resp["message"])
+	}
+	if callCount != 2 {
+		t.Errorf("expected 2 SPL calls (original + retry), got %d", callCount)
+	}
+	if !strings.Contains(capturedRetryQuery, "storage_domain='k8s'") ||
+		!strings.Contains(capturedRetryQuery, "storage_kind='sls_logstore'") ||
+		!strings.Contains(capturedRetryQuery, "storage_name='cluster-a/k8s-event'") {
+		t.Errorf("retry query should contain storage_domain/kind/name params, got %q", capturedRetryQuery)
+	}
+	// 确认 retry 使用的是 Table 模式 (.event_set with) 而非 Object 模式 (.entity_set)
+	if !strings.Contains(capturedRetryQuery, ".event_set with(") {
+		t.Errorf("retry query should use table mode .event_set, got %q", capturedRetryQuery)
+	}
+}
+
+func TestParseMultipleStorageID(t *testing.T) {
+	tests := []struct {
+		input string
+		want  *storageInfo
+	}{
+		{"some random error", nil},
+		{"MultipleStorageFound but no IDs bracket", nil},
+		{
+			`MultipleStorageFound: available storage IDs: [k8s@sls_logstore@cluster-a/k8s-event, k8s@sls_logstore@cluster-b/k8s-event]`,
+			&storageInfo{Domain: "k8s", Kind: "sls_logstore", Name: "cluster-a/k8s-event"},
+		},
+		{
+			`MultipleStorageFound: available storage IDs: [single-storage-id]`,
+			nil, // "single-storage-id" 不符合 domain@kind@name 格式
+		},
+	}
+	for _, tt := range tests {
+		got := parseMultipleStorageID(tt.input)
+		if got == nil && tt.want == nil {
+			continue
+		}
+		if (got == nil) != (tt.want == nil) {
+			label := tt.input
+			if len(label) > 40 {
+				label = label[:40]
+			}
+			t.Errorf("parseMultipleStorageID(%q) = %v, want %v", label, got, tt.want)
+			continue
+		}
+		if *got != *tt.want {
+			label := tt.input
+			if len(label) > 40 {
+				label = label[:40]
+			}
+			t.Errorf("parseMultipleStorageID(%q) = %+v, want %+v", label, got, tt.want)
+		}
 	}
 }
 
@@ -759,7 +932,7 @@ func TestHandleGetTraces_Success(t *testing.T) {
 		"trace_set_name":   "apm.trace.common",
 		"trace_ids":        "trace-1,trace-2",
 		"workspace":        "test-ws",
-		"regionId":         "cn-hangzhou",
+		"regionId":         "cn-hongkong",
 	})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -819,7 +992,7 @@ func TestHandleSearchTraces_Success(t *testing.T) {
 		"trace_set_domain": "apm",
 		"trace_set_name":   "apm.trace.common",
 		"workspace":        "test-ws",
-		"regionId":         "cn-hangzhou",
+		"regionId":         "cn-hongkong",
 	})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -854,7 +1027,7 @@ func TestHandleSearchTraces_WithMinDuration(t *testing.T) {
 		"trace_set_domain": "apm",
 		"trace_set_name":   "apm.trace.common",
 		"workspace":        "test-ws",
-		"regionId":         "cn-hangzhou",
+		"regionId":         "cn-hongkong",
 		"min_duration_ms":  float64(1000),
 	})
 	if err != nil {
@@ -888,7 +1061,7 @@ func TestHandleSearchTraces_WithHasError(t *testing.T) {
 		"trace_set_domain": "apm",
 		"trace_set_name":   "apm.trace.common",
 		"workspace":        "test-ws",
-		"regionId":         "cn-hangzhou",
+		"regionId":         "cn-hongkong",
 		"has_error":        true,
 	})
 	if err != nil {
@@ -921,7 +1094,7 @@ func TestHandleSearchTraces_WithEntityIDs(t *testing.T) {
 		"trace_set_domain": "apm",
 		"trace_set_name":   "apm.trace.common",
 		"workspace":        "test-ws",
-		"regionId":         "cn-hangzhou",
+		"regionId":         "cn-hongkong",
 		"entity_ids":       "svc-1,svc-2",
 	})
 	if err != nil {
@@ -952,7 +1125,7 @@ func TestHandleSearchTraces_SPLError(t *testing.T) {
 		"trace_set_domain": "apm",
 		"trace_set_name":   "apm.trace.common",
 		"workspace":        "test-ws",
-		"regionId":         "cn-hangzhou",
+		"regionId":         "cn-hongkong",
 	})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -964,7 +1137,7 @@ func TestHandleSearchTraces_SPLError(t *testing.T) {
 }
 
 // ---------------------------------------------------------------------------
-// umodel_get_profiling handler tests
+// umodel_get_profiles handler tests
 // ---------------------------------------------------------------------------
 
 func TestHandleGetProfiling_MissingParams(t *testing.T) {
@@ -992,7 +1165,7 @@ func TestHandleGetProfiling_RequiresEntityIDs(t *testing.T) {
 		"profile_set_domain": "default",
 		"profile_set_name":   "default.profile.common",
 		"workspace":          "test-ws",
-		"regionId":           "cn-hangzhou",
+		"regionId":           "cn-hongkong",
 	})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -1026,7 +1199,7 @@ func TestHandleGetProfiling_Success(t *testing.T) {
 		"profile_set_name":   "default.profile.common",
 		"workspace":          "test-ws",
 		"entity_ids":         "svc-1",
-		"regionId":           "cn-hangzhou",
+		"regionId":           "cn-hongkong",
 	})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -1060,7 +1233,7 @@ func TestHandleGetProfiling_SPLError(t *testing.T) {
 		"profile_set_name":   "default.profile.common",
 		"workspace":          "test-ws",
 		"entity_ids":         "svc-1",
-		"regionId":           "cn-hangzhou",
+		"regionId":           "cn-hongkong",
 	})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -1091,7 +1264,7 @@ func TestDataTools_ResponseContainsTimeRange(t *testing.T) {
 		"metric_domain_name": "apm.metric.service",
 		"metric":             "cpu_usage",
 		"workspace":          "test-ws",
-		"regionId":           "cn-hangzhou",
+		"regionId":           "cn-hongkong",
 	})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -1120,123 +1293,3 @@ func TestDataTools_ResponseContainsTimeRange(t *testing.T) {
 	}
 }
 
-// ---------------------------------------------------------------------------
-// umodel_get_profiles alias tests
-// ---------------------------------------------------------------------------
-
-func TestGetProfilesAlias_Name(t *testing.T) {
-	tools := DataTools(&mockCMSClient{})
-	// Index 8 is umodel_get_profiles (alias)
-	aliasTool := tools[8]
-	if aliasTool.Name != "umodel_get_profiles" {
-		t.Errorf("alias tool name = %q, want %q", aliasTool.Name, "umodel_get_profiles")
-	}
-}
-
-func TestGetProfilesAlias_SameInputSchema(t *testing.T) {
-	tools := DataTools(&mockCMSClient{})
-	// Index 7 is umodel_get_profiling (original)
-	// Index 8 is umodel_get_profiles (alias)
-	originalTool := tools[7]
-	aliasTool := tools[8]
-
-	// Verify both have the same InputSchema structure
-	originalSchema := originalTool.InputSchema
-	aliasSchema := aliasTool.InputSchema
-
-	// Check that both schemas have the same "type" field
-	if originalSchema["type"] != aliasSchema["type"] {
-		t.Errorf("InputSchema type mismatch: original=%v, alias=%v", originalSchema["type"], aliasSchema["type"])
-	}
-
-	// Check that both schemas have the same "required" fields
-	originalRequired, _ := originalSchema["required"].([]string)
-	aliasRequired, _ := aliasSchema["required"].([]string)
-	if len(originalRequired) != len(aliasRequired) {
-		t.Errorf("InputSchema required length mismatch: original=%d, alias=%d", len(originalRequired), len(aliasRequired))
-	}
-
-	// Check that both schemas have the same properties
-	originalProps, _ := originalSchema["properties"].(map[string]interface{})
-	aliasProps, _ := aliasSchema["properties"].(map[string]interface{})
-	if len(originalProps) != len(aliasProps) {
-		t.Errorf("InputSchema properties count mismatch: original=%d, alias=%d", len(originalProps), len(aliasProps))
-	}
-	for key := range originalProps {
-		if _, ok := aliasProps[key]; !ok {
-			t.Errorf("alias InputSchema missing property %q", key)
-		}
-	}
-}
-
-func TestGetProfilesAlias_SameHandlerBehavior(t *testing.T) {
-	// Test that both tools produce the same result for the same input
-	var originalQuery, aliasQuery string
-	mock := &mockCMSClient{
-		executeSPLFn: func(_ context.Context, _, _, query string, _, _ int64, _ int) (map[string]interface{}, error) {
-			if originalQuery == "" {
-				originalQuery = query
-			} else {
-				aliasQuery = query
-			}
-			return map[string]interface{}{
-				"data": []interface{}{
-					map[string]interface{}{"profile_type": "cpu"},
-				},
-			}, nil
-		},
-	}
-
-	tools := DataTools(mock)
-	originalHandler := tools[7].Handler // umodel_get_profiling
-	aliasHandler := tools[8].Handler    // umodel_get_profiles
-
-	params := map[string]interface{}{
-		"domain":             "apm",
-		"entity_set_name":    "apm.service",
-		"profile_set_domain": "default",
-		"profile_set_name":   "default.profile.common",
-		"workspace":          "test-ws",
-		"entity_ids":         "svc-1",
-		"regionId":           "cn-hangzhou",
-	}
-
-	// Call original handler
-	result1, err1 := originalHandler(context.Background(), params)
-	if err1 != nil {
-		t.Fatalf("original handler error: %v", err1)
-	}
-
-	// Call alias handler
-	result2, err2 := aliasHandler(context.Background(), params)
-	if err2 != nil {
-		t.Fatalf("alias handler error: %v", err2)
-	}
-
-	// Both should produce the same query
-	if originalQuery != aliasQuery {
-		t.Errorf("handlers produced different queries:\noriginal: %q\nalias: %q", originalQuery, aliasQuery)
-	}
-
-	// Both should have the same error status
-	resp1 := result1.(map[string]interface{})
-	resp2 := result2.(map[string]interface{})
-	if resp1["error"] != resp2["error"] {
-		t.Errorf("handlers produced different error status: original=%v, alias=%v", resp1["error"], resp2["error"])
-	}
-}
-
-func TestGetProfilesAlias_MissingParams(t *testing.T) {
-	// Verify alias tool has the same validation behavior as original
-	tools := DataTools(&mockCMSClient{})
-	aliasHandler := tools[8].Handler // umodel_get_profiles
-
-	result, err := aliasHandler(context.Background(), map[string]interface{}{})
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	resp := result.(map[string]interface{})
-	if resp["error"] != true {
-		t.Error("expected error=true for missing params")
-	}
-}

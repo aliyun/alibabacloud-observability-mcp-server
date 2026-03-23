@@ -74,9 +74,9 @@ func (m *mockSLSClient) TextToSQL(_ context.Context, _, _, _, _ string) (string,
 
 func TestSLSTools_Count(t *testing.T) {
 	tools := SLSTools(&mockSLSClient{}, &mockCMSClient{})
-	// 14 main tools + 1 deprecated alias (sls_text_to_sql_old)
-	if got := len(tools); got != 15 {
-		t.Errorf("SLSTools() returned %d tools, want 15", got)
+	// 11 main tools + 1 deprecated alias (sls_text_to_sql_old)
+	if got := len(tools); got != 12 {
+		t.Errorf("SLSTools() returned %d tools, want 12", got)
 	}
 }
 
@@ -92,21 +92,18 @@ func TestSLSTools_NamesPrefix(t *testing.T) {
 func TestSLSTools_ExpectedNames(t *testing.T) {
 	tools := SLSTools(&mockSLSClient{}, &mockCMSClient{})
 	expected := map[string]bool{
-		"sls_query_logstore":    false,
-		"sls_query_metricstore": false,
-		"sls_list_projects":     false,
-		"sls_list_logstores":    false,
-		"sls_list_metricstores": false,
-		"sls_text_to_sql":       false,
-		"sls_text_to_sql_old":   false, // Deprecated alias for Python compatibility
-		"sls_text_to_promql":    false,
-		"sls_sop":               false,
-		"sls_execute_sql":       false,
-		"sls_execute_spl":       false,
-		"sls_get_context_logs":  false,
-		"sls_text_to_spl":       false,
-		"sls_log_explore":       false,
-		"sls_log_compare":       false,
+		"sls_list_projects":    false,
+		"sls_list_logstores":   false,
+		"sls_text_to_sql":      false,
+		"sls_text_to_sql_old":  false, // Deprecated alias for Python compatibility
+		"sls_text_to_promql":   false,
+		"sls_sop":              false,
+		"sls_execute_sql":      false,
+		"sls_execute_spl":      false,
+		"sls_get_context_logs": false,
+		"sls_text_to_spl":      false,
+		"sls_log_explore":      false,
+		"sls_log_compare":      false,
 	}
 	for _, tool := range tools {
 		if _, ok := expected[tool.Name]; !ok {
@@ -153,194 +150,11 @@ func TestSLSTools_MissingParams(t *testing.T) {
 	}
 }
 
-func TestQueryLogstore_Success(t *testing.T) {
-	mock := &mockSLSClient{
-		queryResult: []map[string]interface{}{
-			{"__time__": "1234567890", "content": "test log"},
-		},
-	}
-	tools := SLSTools(mock, &mockCMSClient{})
-	ctx := context.Background()
-
-	var tool func(context.Context, map[string]interface{}) (interface{}, error)
-	for _, tt := range tools {
-		if tt.Name == "sls_query_logstore" {
-			tool = tt.Handler
-			break
-		}
-	}
-
-	result, err := tool(ctx, map[string]interface{}{
-		"project":   "my-project",
-		"logStore":  "my-logstore",
-		"query":     "* | limit 10",
-		"regionId":  "cn-hangzhou",
-		"from_time": "now-1h",
-		"to_time":   "now",
-	})
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	resp := result.(map[string]interface{})
-	if resp["error"].(bool) {
-		t.Errorf("expected error=false, got true: %s", resp["message"])
-	}
-}
-
-func TestQueryLogstore_ClientError(t *testing.T) {
-	mock := &mockSLSClient{
-		queryErr: fmt.Errorf("connection refused"),
-	}
-	tools := SLSTools(mock, &mockCMSClient{})
-	ctx := context.Background()
-
-	var tool func(context.Context, map[string]interface{}) (interface{}, error)
-	for _, tt := range tools {
-		if tt.Name == "sls_query_logstore" {
-			tool = tt.Handler
-			break
-		}
-	}
-
-	result, err := tool(ctx, map[string]interface{}{
-		"project":  "my-project",
-		"logStore": "my-logstore",
-		"query":    "* | limit 10",
-		"regionId": "cn-hangzhou",
-	})
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	resp := result.(map[string]interface{})
-	if !resp["error"].(bool) {
-		t.Errorf("expected error=true for client error")
-	}
-	msg := resp["message"].(string)
-	if !strings.Contains(msg, "connection refused") {
-		t.Errorf("expected error message to contain 'connection refused', got %q", msg)
-	}
-}
-
-func TestQueryLogstore_SPLIncompatibleError(t *testing.T) {
-	tests := []struct {
-		name     string
-		queryErr error
-	}{
-		{
-			name:     "InvalidSPLFormat error",
-			queryErr: fmt.Errorf("sls: query proj/store: sls api error: InvalidSPLFormat: SPL query syntax is invalid"),
-		},
-		{
-			name:     "InvalidSpls error",
-			queryErr: fmt.Errorf("sls: query proj/store: sls api error: InvalidSpls"),
-		},
-		{
-			name:     "not support SPL error",
-			queryErr: fmt.Errorf("sls: query proj/store: logstore does not support SPL"),
-		},
-	}
-
-	for _, tc := range tests {
-		t.Run(tc.name, func(t *testing.T) {
-			mock := &mockSLSClient{queryErr: tc.queryErr}
-			tools := SLSTools(mock, &mockCMSClient{})
-			ctx := context.Background()
-
-			var tool func(context.Context, map[string]interface{}) (interface{}, error)
-			for _, tt := range tools {
-				if tt.Name == "sls_query_logstore" {
-					tool = tt.Handler
-					break
-				}
-			}
-
-			result, err := tool(ctx, map[string]interface{}{
-				"project":  "my-project",
-				"logStore": "my-logstore",
-				"query":    "* | where level = 'ERROR'",
-				"regionId": "cn-hangzhou",
-			})
-			if err != nil {
-				t.Fatalf("unexpected error: %v", err)
-			}
-			resp := result.(map[string]interface{})
-			if !resp["error"].(bool) {
-				t.Errorf("expected error=true for SPL incompatible error")
-			}
-			msg := resp["message"].(string)
-			if !strings.Contains(msg, "SQL format") {
-				t.Errorf("expected message to suggest SQL format, got %q", msg)
-			}
-			if !strings.Contains(msg, "sls_execute_sql") {
-				t.Errorf("expected message to mention sls_execute_sql tool, got %q", msg)
-			}
-		})
-	}
-}
-
-func TestQueryLogstore_NonSPLError_NoSuggestion(t *testing.T) {
-	mock := &mockSLSClient{
-		queryErr: fmt.Errorf("connection refused"),
-	}
-	tools := SLSTools(mock, &mockCMSClient{})
-	ctx := context.Background()
-
-	var tool func(context.Context, map[string]interface{}) (interface{}, error)
-	for _, tt := range tools {
-		if tt.Name == "sls_query_logstore" {
-			tool = tt.Handler
-			break
-		}
-	}
-
-	result, err := tool(ctx, map[string]interface{}{
-		"project":  "my-project",
-		"logStore": "my-logstore",
-		"query":    "* | limit 10",
-		"regionId": "cn-hangzhou",
-	})
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	resp := result.(map[string]interface{})
-	if !resp["error"].(bool) {
-		t.Errorf("expected error=true")
-	}
-	msg := resp["message"].(string)
-	if strings.Contains(msg, "SQL format") {
-		t.Errorf("non-SPL error should not suggest SQL format, got %q", msg)
-	}
-}
-
-func TestIsSPLIncompatibleError(t *testing.T) {
-	tests := []struct {
-		name   string
-		err    error
-		expect bool
-	}{
-		{"nil error", nil, false},
-		{"generic error", fmt.Errorf("timeout"), false},
-		{"InvalidSPLFormat", fmt.Errorf("InvalidSPLFormat: bad query"), true},
-		{"InvalidSpls", fmt.Errorf("InvalidSpls"), true},
-		{"not support SPL", fmt.Errorf("logstore does not support SPL"), true},
-		{"connection refused", fmt.Errorf("connection refused"), false},
-	}
-
-	for _, tc := range tests {
-		t.Run(tc.name, func(t *testing.T) {
-			got := isSPLIncompatibleError(tc.err)
-			if got != tc.expect {
-				t.Errorf("isSPLIncompatibleError(%v) = %v, want %v", tc.err, got, tc.expect)
-			}
-		})
-	}
-}
-
 func TestListProjects_Success(t *testing.T) {
 	mock := &mockSLSClient{
 		listProjectsWithFilterResult: []map[string]interface{}{
-			{"project_name": "project-a", "description": "Project A", "region_id": "cn-hangzhou"},
-			{"project_name": "project-b", "description": "Project B", "region_id": "cn-hangzhou"},
+			{"project_name": "project-a", "description": "Project A", "region_id": "cn-hongkong"},
+			{"project_name": "project-b", "description": "Project B", "region_id": "cn-hongkong"},
 		},
 	}
 	tools := SLSTools(mock, &mockCMSClient{})
@@ -355,7 +169,7 @@ func TestListProjects_Success(t *testing.T) {
 	}
 
 	result, err := tool(ctx, map[string]interface{}{
-		"regionId": "cn-hangzhou",
+		"regionId": "cn-hongkong",
 	})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -388,7 +202,7 @@ func TestListLogstores_Success(t *testing.T) {
 
 	result, err := tool(ctx, map[string]interface{}{
 		"project":  "my-project",
-		"regionId": "cn-hangzhou",
+		"regionId": "cn-hongkong",
 	})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -401,39 +215,6 @@ func TestListLogstores_Success(t *testing.T) {
 	logstores := data["logstores"].([]string)
 	if len(logstores) != 2 {
 		t.Errorf("expected 2 logstores, got %d", len(logstores))
-	}
-}
-
-func TestListMetricstores_Success(t *testing.T) {
-	mock := &mockSLSClient{
-		listMetricStoresResult: []string{"cpu-metrics", "mem-metrics"},
-	}
-	tools := SLSTools(mock, &mockCMSClient{})
-	ctx := context.Background()
-
-	var tool func(context.Context, map[string]interface{}) (interface{}, error)
-	for _, tt := range tools {
-		if tt.Name == "sls_list_metricstores" {
-			tool = tt.Handler
-			break
-		}
-	}
-
-	result, err := tool(ctx, map[string]interface{}{
-		"project":  "my-project",
-		"regionId": "cn-hangzhou",
-	})
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	resp := result.(map[string]interface{})
-	if resp["error"].(bool) {
-		t.Errorf("expected error=false, got true")
-	}
-	data := resp["data"].(map[string]interface{})
-	stores := data["metricstores"].([]string)
-	if len(stores) != 2 {
-		t.Errorf("expected 2 metric stores, got %d", len(stores))
 	}
 }
 
@@ -456,7 +237,7 @@ func TestTextToSQL_Success(t *testing.T) {
 		"text":     "查找错误日志",
 		"project":  "my-project",
 		"logStore": "my-logstore",
-		"regionId": "cn-hangzhou",
+		"regionId": "cn-hongkong",
 	})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -535,7 +316,7 @@ func TestTextToSQLOld_SameHandlerBehavior(t *testing.T) {
 		"text":     "查找错误日志",
 		"project":  "my-project",
 		"logStore": "my-logstore",
-		"regionId": "cn-hangzhou",
+		"regionId": "cn-hongkong",
 	}
 
 	// Both handlers should produce the same result
@@ -593,7 +374,7 @@ func TestTextToPromQL_Success(t *testing.T) {
 		"text":        "查询每个namespace下的请求数",
 		"project":     "my-project",
 		"metricStore": "my-metrics",
-		"regionId":    "cn-hangzhou",
+		"regionId":    "cn-hongkong",
 	})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -605,10 +386,11 @@ func TestTextToPromQL_Success(t *testing.T) {
 }
 
 func TestSOP_Success(t *testing.T) {
-	mock := &mockSLSClient{
-		textToSQLResult: "要创建数据加工任务，请按以下步骤操作...",
+	mock := &mockSLSClient{}
+	cmsMock := &mockCMSClient{
+		chatWithSkillResult: "要创建数据加工任务，请按以下步骤操作...",
 	}
-	tools := SLSTools(mock, &mockCMSClient{})
+	tools := SLSTools(mock, cmsMock)
 	ctx := context.Background()
 
 	var tool func(context.Context, map[string]interface{}) (interface{}, error)
@@ -621,7 +403,7 @@ func TestSOP_Success(t *testing.T) {
 
 	result, err := tool(ctx, map[string]interface{}{
 		"text":     "如何创建数据加工",
-		"regionId": "cn-hangzhou",
+		"regionId": "cn-hongkong",
 	})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -637,127 +419,6 @@ func TestSOP_Success(t *testing.T) {
 	}
 }
 
-func TestQueryMetricstore_Success(t *testing.T) {
-	mock := &mockSLSClient{
-		queryResult: []map[string]interface{}{
-			{"__time__": "1234567890", "value": "42.5"},
-		},
-	}
-	tools := SLSTools(mock, &mockCMSClient{})
-	ctx := context.Background()
-
-	var tool func(context.Context, map[string]interface{}) (interface{}, error)
-	for _, tt := range tools {
-		if tt.Name == "sls_query_metricstore" {
-			tool = tt.Handler
-			break
-		}
-	}
-
-	result, err := tool(ctx, map[string]interface{}{
-		"project":     "my-project",
-		"metricStore": "my-metrics",
-		"query":       "sum(rate(cpu_usage[5m]))",
-		"regionId":    "cn-hangzhou",
-	})
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	resp := result.(map[string]interface{})
-	if resp["error"].(bool) {
-		t.Errorf("expected error=false, got true: %s", resp["message"])
-	}
-}
-
-func TestQueryMetricstore_MetricStoreNotFound(t *testing.T) {
-	tests := []struct {
-		name   string
-		errMsg string
-	}{
-		{"LogStoreNotExist", "LogStoreNotExist: metricstore my-metrics does not exist"},
-		{"MetricStoreNotExist", "MetricStoreNotExist: my-metrics"},
-		{"not exist", "The specified logstore my-metrics does not exist"},
-	}
-
-	for _, tc := range tests {
-		t.Run(tc.name, func(t *testing.T) {
-			mock := &mockSLSClient{
-				queryErr: fmt.Errorf("%s", tc.errMsg),
-			}
-			tools := SLSTools(mock, &mockCMSClient{})
-			ctx := context.Background()
-
-			var tool func(context.Context, map[string]interface{}) (interface{}, error)
-			for _, tt := range tools {
-				if tt.Name == "sls_query_metricstore" {
-					tool = tt.Handler
-					break
-				}
-			}
-
-			result, err := tool(ctx, map[string]interface{}{
-				"project":     "my-project",
-				"metricStore": "my-metrics",
-				"query":       "up",
-				"regionId":    "cn-hangzhou",
-			})
-			if err != nil {
-				t.Fatalf("unexpected error: %v", err)
-			}
-			resp := result.(map[string]interface{})
-			if !resp["error"].(bool) {
-				t.Fatal("expected error=true, got false")
-			}
-			msg := resp["message"].(string)
-			if !strings.Contains(msg, "does not exist in project") {
-				t.Errorf("expected friendly not-found message, got: %s", msg)
-			}
-			if !strings.Contains(msg, "sls_list_metricstores") {
-				t.Errorf("expected suggestion to use sls_list_metricstores, got: %s", msg)
-			}
-			if !strings.Contains(msg, "cms_query_metric") {
-				t.Errorf("expected suggestion to use cms_query_metric, got: %s", msg)
-			}
-		})
-	}
-}
-
-func TestQueryMetricstore_GenericError(t *testing.T) {
-	mock := &mockSLSClient{
-		queryErr: fmt.Errorf("connection timeout"),
-	}
-	tools := SLSTools(mock, &mockCMSClient{})
-	ctx := context.Background()
-
-	var tool func(context.Context, map[string]interface{}) (interface{}, error)
-	for _, tt := range tools {
-		if tt.Name == "sls_query_metricstore" {
-			tool = tt.Handler
-			break
-		}
-	}
-
-	result, err := tool(ctx, map[string]interface{}{
-		"project":     "my-project",
-		"metricStore": "my-metrics",
-		"query":       "up",
-		"regionId":    "cn-hangzhou",
-	})
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	resp := result.(map[string]interface{})
-	if !resp["error"].(bool) {
-		t.Fatal("expected error=true, got false")
-	}
-	msg := resp["message"].(string)
-	if !strings.Contains(msg, "Query failed") {
-		t.Errorf("expected generic 'Query failed' message, got: %s", msg)
-	}
-	if strings.Contains(msg, "sls_list_metricstores") {
-		t.Errorf("generic error should not suggest sls_list_metricstores, got: %s", msg)
-	}
-}
 
 func TestIsMetricStoreNotFoundError(t *testing.T) {
 	tests := []struct {
@@ -805,7 +466,7 @@ func TestExecuteSQL_Success(t *testing.T) {
 		"project":   "my-project",
 		"logStore":  "my-logstore",
 		"query":     "* | limit 10",
-		"regionId":  "cn-hangzhou",
+		"regionId":  "cn-hongkong",
 		"from_time": "now-1h",
 		"to_time":   "now",
 		"limit":     10,
@@ -846,7 +507,7 @@ func TestExecuteSQL_WithPagination(t *testing.T) {
 		"project":   "my-project",
 		"logStore":  "my-logstore",
 		"query":     "* | limit 10",
-		"regionId":  "cn-hangzhou",
+		"regionId":  "cn-hongkong",
 		"from_time": "now-1h",
 		"to_time":   "now",
 		"limit":     5,
@@ -863,12 +524,14 @@ func TestExecuteSQL_WithPagination(t *testing.T) {
 }
 
 func TestExecuteSPL_Success(t *testing.T) {
-	mock := &mockSLSClient{
-		queryResult: []map[string]interface{}{
-			{"field1": "value1", "field2": "value2"},
+	mockCMS := &mockCMSClient{
+		executeSPLResult: map[string]interface{}{
+			"data": []map[string]interface{}{
+				{"field1": "value1", "field2": "value2"},
+			},
 		},
 	}
-	tools := SLSTools(mock, &mockCMSClient{})
+	tools := SLSTools(&mockSLSClient{}, mockCMS)
 	ctx := context.Background()
 
 	var tool func(context.Context, map[string]interface{}) (interface{}, error)
@@ -880,10 +543,9 @@ func TestExecuteSPL_Success(t *testing.T) {
 	}
 
 	result, err := tool(ctx, map[string]interface{}{
-		"query":     "* | parse-json content | project field1, field2",
-		"project":   "my-project",
-		"logStore":  "my-logstore",
-		"regionId":  "cn-hangzhou",
+		"query":     ".entity_set with(domain='apm') | stats count(1) by __domain__",
+		"workspace": "my-workspace",
+		"regionId":  "cn-hongkong",
 		"from_time": "now-5m",
 		"to_time":   "now",
 	})
@@ -926,7 +588,7 @@ func TestGetContextLogs_Success(t *testing.T) {
 		"logStore":      "my-logstore",
 		"pack_id":       "ABCDE-12345-FGHIJ-67890",
 		"pack_meta":     "logstore-1|MTY5MjAwMDAwMA==|12345|67890",
-		"regionId":      "cn-hangzhou",
+		"regionId":      "cn-hongkong",
 		"back_lines":    10,
 		"forward_lines": 10,
 	})
@@ -958,7 +620,7 @@ func TestGetContextLogs_InvalidParams(t *testing.T) {
 		"logStore":      "my-logstore",
 		"pack_id":       "ABCDE-12345-FGHIJ-67890",
 		"pack_meta":     "logstore-1|MTY5MjAwMDAwMA==|12345|67890",
-		"regionId":      "cn-hangzhou",
+		"regionId":      "cn-hongkong",
 		"back_lines":    0,
 		"forward_lines": 0,
 	})
@@ -1005,7 +667,7 @@ func TestGetContextLogs_InvalidPackValues(t *testing.T) {
 				"logStore":      "my-logstore",
 				"pack_id":       tc.packID,
 				"pack_meta":     tc.packMeta,
-				"regionId":      "cn-hangzhou",
+				"regionId":      "cn-hongkong",
 				"back_lines":    10,
 				"forward_lines": 10,
 			})
@@ -1047,7 +709,7 @@ func TestGetContextLogs_APIErrorIncludesHint(t *testing.T) {
 		"logStore":      "my-logstore",
 		"pack_id":       "ABCDE-12345-FGHIJ-67890",
 		"pack_meta":     "logstore-1|MTY5MjAwMDAwMA==|12345|67890",
-		"regionId":      "cn-hangzhou",
+		"regionId":      "cn-hongkong",
 		"back_lines":    10,
 		"forward_lines": 10,
 	})
@@ -1100,10 +762,11 @@ func TestIsInvalidPackValue(t *testing.T) {
 }
 
 func TestTextToSPL_Success(t *testing.T) {
-	mock := &mockSLSClient{
-		textToSQLResult: "* | parse-json content | project field1, field2",
+	mock := &mockSLSClient{}
+	cmsMock := &mockCMSClient{
+		chatWithSkillResult: "* | parse-json content | project field1, field2",
 	}
-	tools := SLSTools(mock, &mockCMSClient{})
+	tools := SLSTools(mock, cmsMock)
 	ctx := context.Background()
 
 	var tool func(context.Context, map[string]interface{}) (interface{}, error)
@@ -1119,7 +782,7 @@ func TestTextToSPL_Success(t *testing.T) {
 		"project":     "my-project",
 		"logStore":    "my-logstore",
 		"data_sample": []interface{}{map[string]interface{}{"content": "{\"field1\":\"value1\"}"}},
-		"regionId":    "cn-hangzhou",
+		"regionId":    "cn-hongkong",
 	})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -1155,7 +818,7 @@ func TestLogExplore_Success(t *testing.T) {
 	result, err := tool(ctx, map[string]interface{}{
 		"project":      "my-project",
 		"logStore":     "my-logstore",
-		"regionId":     "cn-hangzhou",
+		"regionId":     "cn-hongkong",
 		"logField":     "content",
 		"from_time":    "now-1h",
 		"to_time":      "now",
@@ -1195,7 +858,7 @@ func TestLogCompare_Success(t *testing.T) {
 	result, err := tool(ctx, map[string]interface{}{
 		"project":           "my-project",
 		"logStore":          "my-logstore",
-		"regionId":          "cn-hangzhou",
+		"regionId":          "cn-hongkong",
 		"logField":          "content",
 		"test_from_time":    "now-1h",
 		"test_to_time":      "now",
@@ -1262,7 +925,7 @@ func TestLogCompare_ClientError(t *testing.T) {
 	result, err := tool(ctx, map[string]interface{}{
 		"project":           "my-project",
 		"logStore":          "my-logstore",
-		"regionId":          "cn-hangzhou",
+		"regionId":          "cn-hongkong",
 		"logField":          "content",
 		"test_from_time":    "now-1h",
 		"test_to_time":      "now",
@@ -1302,7 +965,7 @@ func TestLogCompare_WithDifferentPatterns(t *testing.T) {
 	result, err := tool(ctx, map[string]interface{}{
 		"project":           "my-project",
 		"logStore":          "my-logstore",
-		"regionId":          "cn-hangzhou",
+		"regionId":          "cn-hongkong",
 		"logField":          "content",
 		"test_from_time":    "now-1h",
 		"test_to_time":      "now",
@@ -1320,53 +983,10 @@ func TestLogCompare_WithDifferentPatterns(t *testing.T) {
 }
 
 // ===========================================================================
-// Tests for sls_execute_spl dual-mode (workspace/CMS mode and project/logStore/SLS mode)
+// Tests for sls_execute_spl (workspace/CMS mode only)
 // ===========================================================================
 
-func TestExecuteSPL_WorkspaceMode_Success(t *testing.T) {
-	mockCMS := &mockCMSClient{
-		executeSPLResult: map[string]interface{}{
-			"data": []map[string]interface{}{
-				{"field1": "value1", "field2": "value2"},
-			},
-		},
-	}
-	tools := SLSTools(&mockSLSClient{}, mockCMS)
-	ctx := context.Background()
-
-	var tool func(context.Context, map[string]interface{}) (interface{}, error)
-	for _, tt := range tools {
-		if tt.Name == "sls_execute_spl" {
-			tool = tt.Handler
-			break
-		}
-	}
-
-	result, err := tool(ctx, map[string]interface{}{
-		"query":     ".entity_set with(domain='apm') | entity-call get_metric('apm.metric', 'cpu_usage')",
-		"workspace": "my-workspace",
-		"regionId":  "cn-hangzhou",
-		"from_time": "now-5m",
-		"to_time":   "now",
-	})
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	resp := result.(map[string]interface{})
-	if resp["error"].(bool) {
-		t.Errorf("expected error=false, got true: %s", resp["message"])
-	}
-	// Verify response contains time_range
-	if _, ok := resp["time_range"]; !ok {
-		t.Error("expected time_range in response")
-	}
-	// Verify response contains query
-	if _, ok := resp["query"]; !ok {
-		t.Error("expected query in response")
-	}
-}
-
-func TestExecuteSPL_WorkspaceMode_CMSError(t *testing.T) {
+func TestExecuteSPL_CMSError(t *testing.T) {
 	mockCMS := &mockCMSClient{
 		executeSPLErr: fmt.Errorf("CMS service unavailable"),
 	}
@@ -1384,7 +1004,7 @@ func TestExecuteSPL_WorkspaceMode_CMSError(t *testing.T) {
 	result, err := tool(ctx, map[string]interface{}{
 		"query":     ".entity_set with(domain='apm')",
 		"workspace": "my-workspace",
-		"regionId":  "cn-hangzhou",
+		"regionId":  "cn-hongkong",
 	})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -1399,45 +1019,7 @@ func TestExecuteSPL_WorkspaceMode_CMSError(t *testing.T) {
 	}
 }
 
-func TestExecuteSPL_SLSMode_Success(t *testing.T) {
-	mockSLS := &mockSLSClient{
-		queryResult: []map[string]interface{}{
-			{"field1": "value1", "field2": "value2"},
-		},
-	}
-	tools := SLSTools(mockSLS, &mockCMSClient{})
-	ctx := context.Background()
-
-	var tool func(context.Context, map[string]interface{}) (interface{}, error)
-	for _, tt := range tools {
-		if tt.Name == "sls_execute_spl" {
-			tool = tt.Handler
-			break
-		}
-	}
-
-	result, err := tool(ctx, map[string]interface{}{
-		"query":     "* | parse-json content | project field1, field2",
-		"project":   "my-project",
-		"logStore":  "my-logstore",
-		"regionId":  "cn-hangzhou",
-		"from_time": "now-5m",
-		"to_time":   "now",
-	})
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	resp := result.(map[string]interface{})
-	if resp["error"].(bool) {
-		t.Errorf("expected error=false, got true: %s", resp["message"])
-	}
-	// Verify response contains time_range
-	if _, ok := resp["time_range"]; !ok {
-		t.Error("expected time_range in response")
-	}
-}
-
-func TestExecuteSPL_MissingModeParams(t *testing.T) {
+func TestExecuteSPL_MissingWorkspace(t *testing.T) {
 	tools := SLSTools(&mockSLSClient{}, &mockCMSClient{})
 	ctx := context.Background()
 
@@ -1449,94 +1031,16 @@ func TestExecuteSPL_MissingModeParams(t *testing.T) {
 		}
 	}
 
-	// Test with neither workspace nor project/logStore
 	result, err := tool(ctx, map[string]interface{}{
-		"query":    "* | project field1",
-		"regionId": "cn-hangzhou",
+		"query":    ".entity_set with(domain='apm')",
+		"regionId": "cn-hongkong",
 	})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	resp := result.(map[string]interface{})
 	if !resp["error"].(bool) {
-		t.Errorf("expected error=true when neither workspace nor project/logStore provided")
-	}
-	msg := resp["message"].(string)
-	if !strings.Contains(msg, "workspace or (project + logStore) is required") {
-		t.Errorf("expected error message about missing params, got %q", msg)
-	}
-}
-
-func TestExecuteSPL_PartialSLSParams(t *testing.T) {
-	tools := SLSTools(&mockSLSClient{}, &mockCMSClient{})
-	ctx := context.Background()
-
-	var tool func(context.Context, map[string]interface{}) (interface{}, error)
-	for _, tt := range tools {
-		if tt.Name == "sls_execute_spl" {
-			tool = tt.Handler
-			break
-		}
-	}
-
-	// Test with only project (missing logStore)
-	result, err := tool(ctx, map[string]interface{}{
-		"query":    "* | project field1",
-		"project":  "my-project",
-		"regionId": "cn-hangzhou",
-	})
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	resp := result.(map[string]interface{})
-	if !resp["error"].(bool) {
-		t.Errorf("expected error=true when only project provided without logStore")
-	}
-}
-
-func TestExecuteSPL_WorkspacePriority(t *testing.T) {
-	// When both workspace and project/logStore are provided, workspace should take priority
-	mockCMS := &mockCMSClient{
-		executeSPLResult: map[string]interface{}{
-			"data": []map[string]interface{}{
-				{"source": "cms"},
-			},
-		},
-	}
-	mockSLS := &mockSLSClient{
-		queryResult: []map[string]interface{}{
-			{"source": "sls"},
-		},
-	}
-	tools := SLSTools(mockSLS, mockCMS)
-	ctx := context.Background()
-
-	var tool func(context.Context, map[string]interface{}) (interface{}, error)
-	for _, tt := range tools {
-		if tt.Name == "sls_execute_spl" {
-			tool = tt.Handler
-			break
-		}
-	}
-
-	result, err := tool(ctx, map[string]interface{}{
-		"query":     ".entity_set with(domain='apm')",
-		"workspace": "my-workspace",
-		"project":   "my-project",
-		"logStore":  "my-logstore",
-		"regionId":  "cn-hangzhou",
-	})
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	resp := result.(map[string]interface{})
-	if resp["error"].(bool) {
-		t.Errorf("expected error=false, got true: %s", resp["message"])
-	}
-	// The result should come from CMS (workspace mode), not SLS
-	data := resp["data"]
-	if data == nil {
-		t.Error("expected data in response")
+		t.Errorf("expected error=true when workspace is missing")
 	}
 }
 
@@ -1560,13 +1064,13 @@ func TestExecuteSPL_MissingRequiredParams(t *testing.T) {
 			name: "missing query",
 			params: map[string]interface{}{
 				"workspace": "my-workspace",
-				"regionId":  "cn-hangzhou",
+				"regionId":  "cn-hongkong",
 			},
 		},
 		{
 			name: "missing regionId",
 			params: map[string]interface{}{
-				"query":     "* | project field1",
+				"query":     ".entity_set with(domain='apm')",
 				"workspace": "my-workspace",
 			},
 		},
@@ -1575,7 +1079,7 @@ func TestExecuteSPL_MissingRequiredParams(t *testing.T) {
 			params: map[string]interface{}{
 				"query":     "",
 				"workspace": "my-workspace",
-				"regionId":  "cn-hangzhou",
+				"regionId":  "cn-hongkong",
 			},
 		},
 	}

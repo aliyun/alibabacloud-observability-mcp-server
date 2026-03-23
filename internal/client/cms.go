@@ -37,7 +37,9 @@ type CMSClient interface {
 	QueryMetric(ctx context.Context, region, namespace, metricName string, dimensions map[string]string, from, to int64) ([]map[string]interface{}, error)
 	// TextToSQL converts natural language to SQL query using CMS Chat API.
 	TextToSQL(ctx context.Context, region, project, logstore, text string) (string, error)
-	// CMSClient interface 中添加：
+	// ChatWithSkill sends a natural language query to CMS Chat API with a specified skill.
+	// Supported skills: "sql_generation", "spl_intent_recognition", "sop".
+	ChatWithSkill(ctx context.Context, region, project, logstore, text, skill string) (string, error)
 	// DataAgentQuery performs a natural language data query using CMS CreateThread + CreateChatWithSSE API.
 	DataAgentQuery(ctx context.Context, region, workspace, query string, fromTime, toTime int64) (*DataAgentResult, error)
 }
@@ -492,8 +494,14 @@ func (c *CMSClientImpl) createCMSSDKClient(region string) (*cms.Client, error) {
 }
 
 // TextToSQL converts natural language to SQL query using CMS Chat API with SSE streaming.
-// This matches the Python implementation that uses CreateThread + CreateChatWithSSE.
+// This is a convenience wrapper that calls ChatWithSkill with "sql_generation" skill.
 func (c *CMSClientImpl) TextToSQL(ctx context.Context, region, project, logstore, text string) (string, error) {
+	return c.ChatWithSkill(ctx, region, project, logstore, text, "sql_generation")
+}
+
+// ChatWithSkill sends a natural language query to CMS Chat API with a specified skill.
+// Supported skills: "sql_generation", "spl_intent_recognition", "sop".
+func (c *CMSClientImpl) ChatWithSkill(ctx context.Context, region, project, logstore, text, skill string) (string, error) {
 	client, err := c.createCMSSDKClient(region)
 	if err != nil {
 		return "", err
@@ -513,7 +521,8 @@ func (c *CMSClientImpl) TextToSQL(ctx context.Context, region, project, logstore
 		timeZone = "Asia/Shanghai"
 	}
 
-	slog.DebugContext(ctx, "cms: text to sql",
+	slog.DebugContext(ctx, "cms: chat with skill",
+		"skill", skill,
 		"region", region,
 		"project", project,
 		"logstore", logstore,
@@ -524,7 +533,7 @@ func (c *CMSClientImpl) TextToSQL(ctx context.Context, region, project, logstore
 
 	// Step 1: Create a thread
 	threadRequest := &cms.CreateThreadRequest{}
-	threadRequest.SetTitle(fmt.Sprintf("text2sql-%d", time.Now().Unix()))
+	threadRequest.SetTitle(fmt.Sprintf("%s-%d", skill, time.Now().Unix()))
 	threadVariables := &cms.CreateThreadRequestVariables{}
 	threadVariables.SetProject(project)
 	threadRequest.SetVariables(threadVariables)
@@ -586,10 +595,10 @@ func (c *CMSClientImpl) TextToSQL(ctx context.Context, region, project, logstore
 		"logstore":    logstore,
 		"startTime":   fromTime,
 		"endTime":     toTime,
-		"skill_name":  "sql_generation",
+		"skill_name":  skill,
 		"userContext": string(userContext),
 		"config":      string(configJSON),
-		"skill":       "sql_generation",
+		"skill":       skill,
 	}
 	chatRequest.SetVariables(variables)
 

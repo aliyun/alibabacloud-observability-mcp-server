@@ -56,6 +56,10 @@ func (s *stubCMSClient) TextToSQL(_ context.Context, _, _, _, _ string) (string,
 	return "", nil
 }
 
+func (s *stubCMSClient) ChatWithSkill(_ context.Context, _, _, _, _, _ string) (string, error) {
+	return "", nil
+}
+
 func (s *stubCMSClient) DataAgentQuery(_ context.Context, _, _, _ string, _, _ int64) (*client.DataAgentResult, error) {
 	return &client.DataAgentResult{}, nil
 }
@@ -509,10 +513,10 @@ func TestApplyRuntimeDefaults(t *testing.T) {
 	}{
 		{
 			name:      "fills missing regionId and workspace",
-			region:    "cn-hangzhou",
+			region:    "cn-hongkong",
 			workspace: "default-ws",
 			params:    map[string]interface{}{},
-			wantR:     "cn-hangzhou",
+			wantR:     "cn-hongkong",
 			wantW:     "default-ws",
 		},
 		{
@@ -525,7 +529,7 @@ func TestApplyRuntimeDefaults(t *testing.T) {
 		},
 		{
 			name:      "does not overwrite user-provided values",
-			region:    "cn-hangzhou",
+			region:    "cn-hongkong",
 			workspace: "default-ws",
 			params:    map[string]interface{}{"regionId": "cn-shanghai", "workspace": "my-ws"},
 			wantR:     "cn-shanghai",
@@ -541,15 +545,15 @@ func TestApplyRuntimeDefaults(t *testing.T) {
 		},
 		{
 			name:      "fills only regionId when workspace config is empty",
-			region:    "cn-hangzhou",
+			region:    "cn-hongkong",
 			workspace: "",
 			params:    map[string]interface{}{},
-			wantR:     "cn-hangzhou",
+			wantR:     "cn-hongkong",
 			wantW:     "",
 		},
 		{
 			name:      "does not touch non-string param values",
-			region:    "cn-hangzhou",
+			region:    "cn-hongkong",
 			workspace: "default-ws",
 			params:    map[string]interface{}{"regionId": 123, "workspace": true},
 			wantR:     "",

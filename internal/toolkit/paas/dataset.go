@@ -33,47 +33,47 @@ type datasetHandler struct {
 func (h *datasetHandler) listDataSetTool() toolkit.Tool {
 	return toolkit.Tool{
 		Name: "umodel_list_data_set",
-		Description: `列出指定实体的可用数据集合，为其他PaaS工具提供参数选项。
+		Description: `List available data sets for a specified entity, providing parameter options for other PaaS tools.
 
-## 功能概述
+## Overview
 
-该工具是一个元数据查询接口，用于获取指定实体域和类型下可用的数据集合信息。
-主要作用是为其他PaaS层工具（如observability、entity等工具）提供可选的参数列表，
-包括指标集合、日志集合、事件集合等存储信息。
+This tool is a metadata query interface for retrieving available data set information under a specified entity domain and type.
+Its primary purpose is to provide parameter lists for other PaaS-layer tools (e.g. observability, entity tools),
+including metric sets, log sets, event sets, and other storage information.
 
-## 使用场景
+## Use Cases
 
-- **参数发现**: 为 umodel_get_metrics 提供可用的指标集合（metric_set）列表
-- **日志源查询**: 为 umodel_get_logs 提供可用的日志集合（log_set）列表
-- **事件源发现**: 为 umodel_get_events 提供可用的事件集合（event_set）列表
-- **追踪数据源**: 为 umodel_get_traces 提供可用的追踪集合（trace_set）列表
+- **Parameter Discovery**: Provide available metric set (metric_set) lists for umodel_get_metrics
+- **Log Source Query**: Provide available log set (log_set) lists for umodel_get_logs
+- **Event Source Discovery**: Provide available event set (event_set) lists for umodel_get_events
+- **Trace Data Source**: Provide available trace set (trace_set) lists for umodel_get_traces
 
-## 参数说明
+## Parameters
 
-- data_set_types: 数据集合类型过滤器，常见类型包括：
-  * 'metric_set': 指标集合
-  * 'log_set': 日志集合
-  * 'event_set': 事件集合
-  * 'trace_set': 追踪集合
-  * 'profile_set': 性能剖析集合`,
+- data_set_types: Data set type filter, common types include:
+  * 'metric_set': Metric sets
+  * 'log_set': Log sets
+  * 'event_set': Event sets
+  * 'trace_set': Trace sets
+  * 'profile_set': Profiling sets`,
 		InputSchema: map[string]interface{}{
 			"type": "object",
 			"properties": map[string]interface{}{
 				"workspace": map[string]interface{}{
 					"type":        "string",
-					"description": "CMS工作空间名称，可通过list_workspace获取",
+					"description": "CMS workspace name, obtainable via list_workspace",
 				},
 				"domain": map[string]interface{}{
 					"type":        "string",
-					"description": "实体域, 不能为 '*'",
+					"description": "Entity domain, cannot be '*'",
 				},
 				"entity_set_name": map[string]interface{}{
 					"type":        "string",
-					"description": "实体类型, 不能为 '*'",
+					"description": "Entity set name, cannot be '*'",
 				},
 				"data_set_types": map[string]interface{}{
 					"type":        "string",
-					"description": "逗号分隔的数据集合类型过滤器，如 'metric_set,log_set'",
+					"description": "Comma-separated data set type filter, e.g. 'metric_set,log_set'",
 				},
 				"time_range": map[string]interface{}{
 					"type":        "string",
@@ -82,7 +82,7 @@ func (h *datasetHandler) listDataSetTool() toolkit.Tool {
 				},
 				"regionId": map[string]interface{}{
 					"type":        "string",
-					"description": "阿里云区域ID，如 'cn-hangzhou'",
+					"description": "Alibaba Cloud region ID, e.g. 'cn-hongkong'",
 				},
 			},
 			"required": []string{"workspace", "domain", "entity_set_name", "regionId"},
@@ -145,52 +145,52 @@ func (h *datasetHandler) handleListDataSet(ctx context.Context, params map[strin
 func (h *datasetHandler) searchEntitySetTool() toolkit.Tool {
 	return toolkit.Tool{
 		Name: "umodel_search_entity_set",
-		Description: `搜索实体集合，支持全文搜索并按相关度排序。
+		Description: `Search entity sets with full-text search, sorted by relevance.
 
-## 功能概述
+## Overview
 
-该工具用于在UModel元数据中搜索实体集合定义，支持按关键词进行全文搜索。
-主要用于发现可用的实体集合类型和它们的元数据信息。
+Searches entity set definitions in UModel metadata by keyword, supporting full-text search.
+Primarily used to discover available entity set types and their metadata.
 
-## 功能特点
+## Features
 
-- **全文搜索**: 支持在实体集合的元数据和规格中进行全文搜索
-- **相关度排序**: 搜索结果按相关度进行排序
-- **可选过滤**: 支持按domain和name进行额外过滤
+- **Full-text Search**: Supports full-text search across entity set metadata and specs
+- **Relevance Sorting**: Results are sorted by relevance
+- **Optional Filtering**: Supports additional filtering by domain and name
 
-## 使用场景
+## Use Cases
 
-- **实体集合发现**: 搜索包含特定关键词的实体集合类型
-- **元数据探索**: 了解系统中可用的实体集合及其描述信息`,
+- **Entity Set Discovery**: Search for entity set types containing specific keywords
+- **Metadata Exploration**: Discover available entity sets and their descriptions`,
 		InputSchema: map[string]interface{}{
 			"type": "object",
 			"properties": map[string]interface{}{
 				"search_text": map[string]interface{}{
 					"type":        "string",
-					"description": "搜索关键词，用于全文搜索",
+					"description": "Search keyword for full-text search",
 				},
 				"workspace": map[string]interface{}{
 					"type":        "string",
-					"description": "CMS工作空间名称，可通过list_workspace获取",
+					"description": "CMS workspace name, obtainable via list_workspace",
 				},
 				"domain": map[string]interface{}{
 					"type":        "string",
-					"description": "可选的实体域过滤",
+					"description": "Optional entity domain filter",
 				},
 				"entity_set_name": map[string]interface{}{
 					"type":        "string",
-					"description": "可选的实体类型过滤",
+					"description": "Optional entity set name filter",
 				},
 				"limit": map[string]interface{}{
 					"type":        "integer",
-					"description": "返回多少个实体集合，默认10个",
+					"description": "Number of entity sets to return, default 10",
 					"default":     10,
 					"minimum":     1,
 					"maximum":     100,
 				},
 				"regionId": map[string]interface{}{
 					"type":        "string",
-					"description": "阿里云区域ID，如 'cn-hangzhou'",
+					"description": "Alibaba Cloud region ID, e.g. 'cn-hongkong'",
 				},
 			},
 			"required": []string{"search_text", "workspace", "regionId"},
@@ -253,56 +253,56 @@ func (h *datasetHandler) handleSearchEntitySet(ctx context.Context, params map[s
 func (h *datasetHandler) listRelatedEntitySetTool() toolkit.Tool {
 	return toolkit.Tool{
 		Name: "umodel_list_related_entity_set",
-		Description: `列出与指定实体集合相关的其他实体集合。
+		Description: `List entity sets related to a specified entity set.
 
-## 功能概述
+## Overview
 
-该工具用于发现与指定实体集合存在关系定义的其他实体集合类型。
-这是一个元数据级别的工具，用于探索UModel拓扑的高级蓝图。
+Discovers other entity set types that have relationship definitions with the specified entity set.
+This is a metadata-level tool for exploring the high-level blueprint of the UModel topology.
 
-## 功能特点
+## Features
 
-- **关系发现**: 查找与源实体集合有关系定义的其他实体集合
-- **方向控制**: 支持查看入向、出向或双向关系
-- **类型过滤**: 可按特定关系类型进行过滤
+- **Relationship Discovery**: Find entity sets with defined relationships to the source entity set
+- **Direction Control**: Supports viewing inbound, outbound, or bidirectional relationships
+- **Type Filtering**: Filter by specific relationship types
 
-## 使用场景
+## Use Cases
 
-- **拓扑探索**: 了解实体集合间可能存在的关系类型
-- **依赖分析**: 发现服务可以调用的其他实体类型`,
+- **Topology Exploration**: Discover possible relationship types between entity sets
+- **Dependency Analysis**: Find other entity types a service can call`,
 		InputSchema: map[string]interface{}{
 			"type": "object",
 			"properties": map[string]interface{}{
 				"domain": map[string]interface{}{
 					"type":        "string",
-					"description": "实体域，如 'apm'",
+					"description": "Entity domain, e.g. 'apm'",
 				},
 				"entity_set_name": map[string]interface{}{
 					"type":        "string",
-					"description": "实体类型，如 'apm.service'",
+					"description": "Entity set name, e.g. 'apm.service'",
 				},
 				"workspace": map[string]interface{}{
 					"type":        "string",
-					"description": "CMS工作空间名称，可通过list_workspace获取",
+					"description": "CMS workspace name, obtainable via list_workspace",
 				},
 				"relation_type": map[string]interface{}{
 					"type":        "string",
-					"description": "关系类型过滤，如 'calls'",
+					"description": "Relationship type filter, e.g. 'calls'",
 				},
 				"direction": map[string]interface{}{
 					"type":        "string",
-					"description": `关系方向: "in", "out", 或 "both"。默认: "both"`,
+					"description": `Relationship direction: "in", "out", or "both". Default: "both"`,
 					"default":     "both",
 					"enum":        []string{"in", "out", "both"},
 				},
 				"detail": map[string]interface{}{
 					"type":        "boolean",
-					"description": "是否返回详细信息",
+					"description": "Whether to return detailed information",
 					"default":     false,
 				},
 				"regionId": map[string]interface{}{
 					"type":        "string",
-					"description": "阿里云区域ID，如 'cn-hangzhou'",
+					"description": "Alibaba Cloud region ID, e.g. 'cn-hongkong'",
 				},
 			},
 			"required": []string{"domain", "entity_set_name", "workspace", "regionId"},
@@ -373,47 +373,47 @@ func (h *datasetHandler) handleListRelatedEntitySet(ctx context.Context, params 
 func (h *datasetHandler) getEntitySetTool() toolkit.Tool {
 	return toolkit.Tool{
 		Name: "umodel_get_entity_set",
-		Description: `获取指定实体集合的 Schema 定义，包括字段列表、字段类型等结构信息。
+		Description: `Get the schema definition of a specified entity set, including field list, field types, and other structural information.
 
-## 功能概述
+## Overview
 
-该工具用于获取特定 EntitySet 的元数据定义（Schema），帮助理解实体的结构和可用字段。
-与 umodel_search_entity_set（全文搜索）不同，本工具通过精确的 domain 和 name 获取单个实体集合的完整定义。
+Retrieves the metadata definition (schema) of a specific EntitySet to understand its structure and available fields.
+Unlike umodel_search_entity_set (full-text search), this tool retrieves the complete definition of a single entity set by exact domain and name.
 
-## 使用场景
+## Use Cases
 
-- **结构理解**: 了解某个实体集合有哪些字段、字段类型，为后续过滤查询提供依据
-- **字段发现**: 获取实体的可用字段列表，用于构建 umodel_get_entities 的过滤条件
-- **元数据查看**: 查看实体集合的完整 Schema 定义
+- **Structure Understanding**: Discover available fields and field types of an entity set for subsequent filter queries
+- **Field Discovery**: Get the list of available entity fields for building umodel_get_entities filter conditions
+- **Metadata Viewing**: View the complete schema definition of an entity set
 
-## 参数说明
+## Parameters
 
-- domain: 实体域，如 'apm', 'k8s', 'acs' 等
-- entity_set_name: 实体集合名称，如 'apm.service', 'k8s.pod' 等
-- detail: 是否返回完整的详细 JSON Schema，默认 false 返回摘要信息`,
+- domain: Entity domain, e.g. 'apm', 'k8s', 'acs'
+- entity_set_name: Entity set name, e.g. 'apm.service', 'k8s.pod'
+- detail: Whether to return the full detailed JSON Schema, default false returns summary`,
 		InputSchema: map[string]interface{}{
 			"type": "object",
 			"properties": map[string]interface{}{
 				"domain": map[string]interface{}{
 					"type":        "string",
-					"description": "实体域，如 'apm', 'k8s', 'acs'",
+					"description": "Entity domain, e.g. 'apm', 'k8s', 'acs'",
 				},
 				"entity_set_name": map[string]interface{}{
 					"type":        "string",
-					"description": "实体集合名称，如 'apm.service', 'k8s.pod'",
+					"description": "Entity set name, e.g. 'apm.service', 'k8s.pod'",
 				},
 				"workspace": map[string]interface{}{
 					"type":        "string",
-					"description": "CMS工作空间名称，可通过list_workspace获取",
+					"description": "CMS workspace name, obtainable via list_workspace",
 				},
 				"detail": map[string]interface{}{
 					"type":        "boolean",
-					"description": "是否返回完整详细的 JSON Schema，默认 false 返回摘要",
+					"description": "Whether to return the full detailed JSON Schema, default false returns summary",
 					"default":     false,
 				},
 				"regionId": map[string]interface{}{
 					"type":        "string",
-					"description": "阿里云区域ID，如 'cn-hangzhou'",
+					"description": "Alibaba Cloud region ID, e.g. 'cn-hongkong'",
 				},
 			},
 			"required": []string{"domain", "entity_set_name", "workspace", "regionId"},

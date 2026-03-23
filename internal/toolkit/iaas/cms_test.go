@@ -23,6 +23,8 @@ type mockCMSClient struct {
 	listWorkspacesErr    error
 	queryMetricResult    []map[string]interface{}
 	queryMetricErr       error
+	chatWithSkillResult  string
+	chatWithSkillErr     error
 }
 
 func (m *mockCMSClient) ExecuteSPL(_ context.Context, _, _, _ string, _, _ int64, _ int) (map[string]interface{}, error) {
@@ -41,6 +43,10 @@ func (m *mockCMSClient) TextToSQL(_ context.Context, _, _, _, _ string) (string,
 	return "", nil
 }
 
+func (m *mockCMSClient) ChatWithSkill(_ context.Context, _, _, _, _, _ string) (string, error) {
+	return m.chatWithSkillResult, m.chatWithSkillErr
+}
+
 func (m *mockCMSClient) DataAgentQuery(_ context.Context, _, _, _ string, _, _ int64) (*client.DataAgentResult, error) {
 	return &client.DataAgentResult{}, nil
 }
@@ -51,8 +57,8 @@ func (m *mockCMSClient) DataAgentQuery(_ context.Context, _, _, _ string, _, _ i
 
 func TestCMSTools_Count(t *testing.T) {
 	tools := CMSTools(&mockCMSClient{}, &mockSLSClient{})
-	// 4 main tools + 2 aliases (cms_execute_promql, cms_text_to_promql)
-	if got := len(tools); got != 6 {
+	// 2 tools: cms_execute_promql + cms_text_to_promql
+	if got := len(tools); got != 2 {
 		t.Errorf("CMSTools() returned %d tools, want 6", got)
 	}
 }
@@ -60,9 +66,8 @@ func TestCMSTools_Count(t *testing.T) {
 func TestCMSTools_NamesPrefix(t *testing.T) {
 	tools := CMSTools(&mockCMSClient{}, &mockSLSClient{})
 	for _, tool := range tools {
-		// sls_query_metricstore is the PromQL tool which uses sls_ prefix
-		if !strings.HasPrefix(tool.Name, "cms_") && !strings.HasPrefix(tool.Name, "sls_") {
-			t.Errorf("tool %q does not have cms_ or sls_ prefix", tool.Name)
+		if !strings.HasPrefix(tool.Name, "cms_") {
+			t.Errorf("tool %q does not have cms_ prefix", tool.Name)
 		}
 	}
 }
@@ -70,12 +75,8 @@ func TestCMSTools_NamesPrefix(t *testing.T) {
 func TestCMSTools_ExpectedNames(t *testing.T) {
 	tools := CMSTools(&mockCMSClient{}, &mockSLSClient{})
 	expected := map[string]bool{
-		"cms_query_metric":      false,
-		"cms_list_metrics":      false,
-		"cms_list_namespaces":   false,
-		"sls_query_metricstore": false,
-		"cms_execute_promql":    false, // alias for Python compatibility
-		"cms_text_to_promql":    false, // alias for Python compatibility
+		"cms_execute_promql": false,
+		"cms_text_to_promql": false,
 	}
 	for _, tool := range tools {
 		if _, ok := expected[tool.Name]; !ok {
@@ -113,271 +114,6 @@ func TestCMSTools_MissingParams(t *testing.T) {
 	}
 }
 
-func TestQueryMetric_Success(t *testing.T) {
-	mock := &mockCMSClient{
-		queryMetricResult: []map[string]interface{}{
-			{"timestamp": float64(1234567890), "Average": 42.5, "instanceId": "i-xxx"},
-		},
-	}
-	tools := CMSTools(mock, &mockSLSClient{})
-	ctx := context.Background()
-
-	var handler func(context.Context, map[string]interface{}) (interface{}, error)
-	for _, tt := range tools {
-		if tt.Name == "cms_query_metric" {
-			handler = tt.Handler
-			break
-		}
-	}
-
-	result, err := handler(ctx, map[string]interface{}{
-		"namespace":  "acs_ecs_dashboard",
-		"metricName": "CPUUtilization",
-		"regionId":   "cn-hangzhou",
-		"from_time":  "now-1h",
-		"to_time":    "now",
-	})
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	resp := result.(map[string]interface{})
-	if resp["error"].(bool) {
-		t.Errorf("expected error=false, got true: %s", resp["message"])
-	}
-	data := resp["data"].(map[string]interface{})
-	datapoints := data["datapoints"].([]map[string]interface{})
-	if len(datapoints) != 1 {
-		t.Errorf("expected 1 datapoint, got %d", len(datapoints))
-	}
-}
-
-func TestQueryMetric_WithDimensions(t *testing.T) {
-	mock := &mockCMSClient{
-		queryMetricResult: []map[string]interface{}{
-			{"timestamp": float64(1234567890), "Average": 55.0},
-		},
-	}
-	tools := CMSTools(mock, &mockSLSClient{})
-	ctx := context.Background()
-
-	var handler func(context.Context, map[string]interface{}) (interface{}, error)
-	for _, tt := range tools {
-		if tt.Name == "cms_query_metric" {
-			handler = tt.Handler
-			break
-		}
-	}
-
-	result, err := handler(ctx, map[string]interface{}{
-		"namespace":  "acs_ecs_dashboard",
-		"metricName": "CPUUtilization",
-		"dimensions": `{"instanceId":"i-abc123"}`,
-		"regionId":   "cn-hangzhou",
-	})
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	resp := result.(map[string]interface{})
-	if resp["error"].(bool) {
-		t.Errorf("expected error=false, got true: %s", resp["message"])
-	}
-}
-
-func TestQueryMetric_InvalidDimensions(t *testing.T) {
-	mock := &mockCMSClient{}
-	tools := CMSTools(mock, &mockSLSClient{})
-	ctx := context.Background()
-
-	var handler func(context.Context, map[string]interface{}) (interface{}, error)
-	for _, tt := range tools {
-		if tt.Name == "cms_query_metric" {
-			handler = tt.Handler
-			break
-		}
-	}
-
-	result, err := handler(ctx, map[string]interface{}{
-		"namespace":  "acs_ecs_dashboard",
-		"metricName": "CPUUtilization",
-		"dimensions": "not-valid-json",
-		"regionId":   "cn-hangzhou",
-	})
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	resp := result.(map[string]interface{})
-	if !resp["error"].(bool) {
-		t.Errorf("expected error=true for invalid dimensions JSON")
-	}
-	msg := resp["message"].(string)
-	if !strings.Contains(msg, "invalid dimensions JSON") {
-		t.Errorf("expected error message about invalid dimensions, got %q", msg)
-	}
-}
-
-func TestQueryMetric_ClientError(t *testing.T) {
-	mock := &mockCMSClient{
-		queryMetricErr: fmt.Errorf("connection refused"),
-	}
-	tools := CMSTools(mock, &mockSLSClient{})
-	ctx := context.Background()
-
-	var handler func(context.Context, map[string]interface{}) (interface{}, error)
-	for _, tt := range tools {
-		if tt.Name == "cms_query_metric" {
-			handler = tt.Handler
-			break
-		}
-	}
-
-	result, err := handler(ctx, map[string]interface{}{
-		"namespace":  "acs_ecs_dashboard",
-		"metricName": "CPUUtilization",
-		"regionId":   "cn-hangzhou",
-	})
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	resp := result.(map[string]interface{})
-	if !resp["error"].(bool) {
-		t.Errorf("expected error=true for client error")
-	}
-	msg := resp["message"].(string)
-	if !strings.Contains(msg, "connection refused") {
-		t.Errorf("expected error message to contain 'connection refused', got %q", msg)
-	}
-}
-
-func TestListMetrics_Success(t *testing.T) {
-	mock := &mockCMSClient{
-		queryMetricResult: []map[string]interface{}{
-			{"metricName": "CPUUtilization", "namespace": "acs_ecs_dashboard"},
-			{"metricName": "memory_usedutilization", "namespace": "acs_ecs_dashboard"},
-		},
-	}
-	tools := CMSTools(mock, &mockSLSClient{})
-	ctx := context.Background()
-
-	var handler func(context.Context, map[string]interface{}) (interface{}, error)
-	for _, tt := range tools {
-		if tt.Name == "cms_list_metrics" {
-			handler = tt.Handler
-			break
-		}
-	}
-
-	result, err := handler(ctx, map[string]interface{}{
-		"namespace": "acs_ecs_dashboard",
-		"regionId":  "cn-hangzhou",
-	})
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	resp := result.(map[string]interface{})
-	if resp["error"].(bool) {
-		t.Errorf("expected error=false, got true: %s", resp["message"])
-	}
-	data := resp["data"].(map[string]interface{})
-	metrics := data["metrics"].([]map[string]interface{})
-	if len(metrics) != 2 {
-		t.Errorf("expected 2 metrics, got %d", len(metrics))
-	}
-}
-
-func TestListMetrics_ClientError(t *testing.T) {
-	mock := &mockCMSClient{
-		queryMetricErr: fmt.Errorf("service unavailable"),
-	}
-	tools := CMSTools(mock, &mockSLSClient{})
-	ctx := context.Background()
-
-	var handler func(context.Context, map[string]interface{}) (interface{}, error)
-	for _, tt := range tools {
-		if tt.Name == "cms_list_metrics" {
-			handler = tt.Handler
-			break
-		}
-	}
-
-	result, err := handler(ctx, map[string]interface{}{
-		"namespace": "acs_ecs_dashboard",
-		"regionId":  "cn-hangzhou",
-	})
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	resp := result.(map[string]interface{})
-	if !resp["error"].(bool) {
-		t.Errorf("expected error=true for client error")
-	}
-}
-
-func TestListNamespaces_Success(t *testing.T) {
-	mock := &mockCMSClient{
-		queryMetricResult: []map[string]interface{}{
-			{"namespace": "acs_ecs_dashboard", "description": "ECS"},
-			{"namespace": "acs_rds_dashboard", "description": "RDS"},
-		},
-	}
-	tools := CMSTools(mock, &mockSLSClient{})
-	ctx := context.Background()
-
-	var handler func(context.Context, map[string]interface{}) (interface{}, error)
-	for _, tt := range tools {
-		if tt.Name == "cms_list_namespaces" {
-			handler = tt.Handler
-			break
-		}
-	}
-
-	result, err := handler(ctx, map[string]interface{}{
-		"regionId": "cn-hangzhou",
-	})
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	resp := result.(map[string]interface{})
-	if resp["error"].(bool) {
-		t.Errorf("expected error=false, got true: %s", resp["message"])
-	}
-	data := resp["data"].(map[string]interface{})
-	namespaces := data["namespaces"].([]map[string]interface{})
-	if len(namespaces) != 2 {
-		t.Errorf("expected 2 namespaces, got %d", len(namespaces))
-	}
-}
-
-func TestListNamespaces_ClientError(t *testing.T) {
-	mock := &mockCMSClient{
-		queryMetricErr: fmt.Errorf("timeout"),
-	}
-	tools := CMSTools(mock, &mockSLSClient{})
-	ctx := context.Background()
-
-	var handler func(context.Context, map[string]interface{}) (interface{}, error)
-	for _, tt := range tools {
-		if tt.Name == "cms_list_namespaces" {
-			handler = tt.Handler
-			break
-		}
-	}
-
-	result, err := handler(ctx, map[string]interface{}{
-		"regionId": "cn-hangzhou",
-	})
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	resp := result.(map[string]interface{})
-	if !resp["error"].(bool) {
-		t.Errorf("expected error=true for client error")
-	}
-	msg := resp["message"].(string)
-	if !strings.Contains(msg, "timeout") {
-		t.Errorf("expected error message to contain 'timeout', got %q", msg)
-	}
-}
-
 // ---------------------------------------------------------------------------
 // cms_execute_promql / handleExecutePromQL tests
 // ---------------------------------------------------------------------------
@@ -403,7 +139,7 @@ func TestExecutePromQL_Success(t *testing.T) {
 		"project":     "my-project",
 		"metricStore": "my-metrics",
 		"query":       "up",
-		"regionId":    "cn-hangzhou",
+		"regionId":    "cn-hongkong",
 	})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -448,7 +184,7 @@ func TestExecutePromQL_MetricStoreNotFound(t *testing.T) {
 				"project":     "my-project",
 				"metricStore": "my-metrics",
 				"query":       "up",
-				"regionId":    "cn-hangzhou",
+				"regionId":    "cn-hongkong",
 			})
 			if err != nil {
 				t.Fatalf("unexpected error: %v", err)
@@ -461,11 +197,8 @@ func TestExecutePromQL_MetricStoreNotFound(t *testing.T) {
 			if !strings.Contains(msg, "does not exist in project") {
 				t.Errorf("expected friendly not-found message, got: %s", msg)
 			}
-			if !strings.Contains(msg, "sls_list_metricstores") {
-				t.Errorf("expected suggestion to use sls_list_metricstores, got: %s", msg)
-			}
-			if !strings.Contains(msg, "cms_query_metric") {
-				t.Errorf("expected suggestion to use cms_query_metric, got: %s", msg)
+			if !strings.Contains(msg, "does not exist") {
+				t.Errorf("expected not-found message, got: %s", msg)
 			}
 		})
 	}
@@ -490,7 +223,7 @@ func TestExecutePromQL_GenericError(t *testing.T) {
 		"project":     "my-project",
 		"metricStore": "my-metrics",
 		"query":       "up",
-		"regionId":    "cn-hangzhou",
+		"regionId":    "cn-hongkong",
 	})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)

@@ -33,6 +33,10 @@ func (m *mockCMSClient) TextToSQL(ctx context.Context, region, project, logStore
 	return "", nil
 }
 
+func (m *mockCMSClient) ChatWithSkill(_ context.Context, _, _, _, _, _ string) (string, error) {
+	return "", nil
+}
+
 func (m *mockCMSClient) DataAgentQuery(ctx context.Context, region, workspace, query string, fromTime, toTime int64) (*client.DataAgentResult, error) {
 	if m.dataAgentQueryFn != nil {
 		return m.dataAgentQueryFn(ctx, region, workspace, query, fromTime, toTime)
@@ -102,8 +106,8 @@ func TestBuildEntityFilterParam(t *testing.T) {
 		want  string
 	}{
 		{"", ""},
-		{"name=payment", `, query=` + "`" + `"name"='payment'` + "`"},
-		{"name=payment and status!=inactive", `, query=` + "`" + `"name"='payment' and "status"!='inactive'` + "`"},
+		{"name=payment", `, query=` + "`" + `name="payment"` + "`"},
+		{"name=payment and status!=inactive", `, query=` + "`" + `name="payment" and status!="inactive"` + "`"},
 	}
 	for _, tt := range tests {
 		got := buildEntityFilterParam(tt.input)
@@ -118,9 +122,9 @@ func TestConvertToSQLSyntax(t *testing.T) {
 		input string
 		want  string
 	}{
-		{"name=payment", `"name"='payment'`},
-		{"status!=inactive", `"status"!='inactive'`},
-		{"name=payment and status!=inactive", `"name"='payment' and "status"!='inactive'`},
+		{"name=payment", `name="payment"`},
+		{"status!=inactive", `status!="inactive"`},
+		{"name=payment and status!=inactive", `name="payment" and status!="inactive"`},
 	}
 	for _, tt := range tests {
 		got := convertToSQLSyntax(tt.input)
@@ -203,22 +207,37 @@ func TestHandleGetEntities_MissingParams(t *testing.T) {
 	}
 }
 
-func TestHandleGetEntities_RequiresEntityIDsOrFilter(t *testing.T) {
-	tools := EntityTools(&mockCMSClient{})
+func TestHandleGetEntities_WithoutEntityIDsOrFilter(t *testing.T) {
+	var capturedQuery string
+	mock := &mockCMSClient{
+		executeSPLFn: func(_ context.Context, _, _, query string, _, _ int64, _ int) (map[string]interface{}, error) {
+			capturedQuery = query
+			return map[string]interface{}{"data": []interface{}{}}, nil
+		},
+	}
+
+	tools := EntityTools(mock)
 	handler := tools[0].Handler // umodel_get_entities
 
 	result, err := handler(context.Background(), map[string]interface{}{
 		"domain":          "apm",
 		"entity_set_name": "apm.service",
 		"workspace":       "test-ws",
-		"regionId":        "cn-hangzhou",
+		"regionId":        "cn-hongkong",
 	})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	resp := result.(map[string]interface{})
-	if resp["error"] != true {
-		t.Error("expected error=true when neither entity_ids nor entity_filter provided")
+	if resp["error"] != false {
+		t.Errorf("expected error=false when querying all entities, got message: %v", resp["message"])
+	}
+	// 不带 entity_ids 和 entity_filter 时，SPL 中不应包含 ids= 或 query=
+	if contains(capturedQuery, "ids=") {
+		t.Errorf("query should not contain ids= param, got %q", capturedQuery)
+	}
+	if contains(capturedQuery, "query=") {
+		t.Errorf("query should not contain query= param, got %q", capturedQuery)
 	}
 }
 
@@ -238,7 +257,7 @@ func TestHandleGetEntities_WithEntityIDs(t *testing.T) {
 		"domain":          "apm",
 		"entity_set_name": "apm.service",
 		"workspace":       "test-ws",
-		"regionId":        "cn-hangzhou",
+		"regionId":        "cn-hongkong",
 		"entity_ids":      "svc-1,svc-2",
 	})
 	if err != nil {
@@ -261,7 +280,7 @@ func TestHandleGetEntities_WildcardDomainRejected(t *testing.T) {
 		"domain":          "*",
 		"entity_set_name": "apm.service",
 		"workspace":       "test-ws",
-		"regionId":        "cn-hangzhou",
+		"regionId":        "cn-hongkong",
 		"entity_ids":      "svc-1",
 	})
 	if err != nil {
@@ -283,7 +302,7 @@ func TestHandleGetNeighborEntities_InvalidDirection(t *testing.T) {
 		"src_name":          "apm.service",
 		"src_entity_ids":    "svc-1",
 		"direction":         "invalid",
-		"regionId":          "cn-hangzhou",
+		"regionId":          "cn-hongkong",
 	})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -312,7 +331,7 @@ func TestHandleGetNeighborEntities_Success(t *testing.T) {
 		"src_name":          "apm.service",
 		"src_entity_ids":    "svc-1,svc-2",
 		"direction":         "out",
-		"regionId":          "cn-hangzhou",
+		"regionId":          "cn-hongkong",
 	})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -345,7 +364,7 @@ func TestHandleSearchEntities_Success(t *testing.T) {
 		"workspace":   "test-ws",
 		"search_text": "payment",
 		"domain":      "apm",
-		"regionId":    "cn-hangzhou",
+		"regionId":    "cn-hongkong",
 	})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -384,7 +403,7 @@ func TestHandleSearchEntities_SPLError(t *testing.T) {
 	result, err := handler(context.Background(), map[string]interface{}{
 		"workspace":   "test-ws",
 		"search_text": "payment",
-		"regionId":    "cn-hangzhou",
+		"regionId":    "cn-hongkong",
 	})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)

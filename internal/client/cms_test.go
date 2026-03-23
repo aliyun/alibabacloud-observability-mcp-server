@@ -43,7 +43,7 @@ func TestCMSClient_ExecuteSPL(t *testing.T) {
 	client := NewCMSClient(testCredential(), cfg)
 
 	ctx := context.Background()
-	result, err := client.ExecuteSPL(ctx, "cn-hangzhou", "my-workspace", "* | SELECT count(*)", 1700000000, 1700003600, 100)
+	result, err := client.ExecuteSPL(ctx, "cn-hongkong", "my-workspace", "* | SELECT count(*)", 1700000000, 1700003600, 100)
 	if err != nil {
 		t.Fatalf("ExecuteSPL() error = %v; want nil", err)
 	}
@@ -61,7 +61,7 @@ func TestCMSClient_ListWorkspaces(t *testing.T) {
 	client := NewCMSClient(testCredential(), cfg)
 
 	ctx := context.Background()
-	workspaces, err := client.ListWorkspaces(ctx, "cn-hangzhou")
+	workspaces, err := client.ListWorkspaces(ctx, "cn-hongkong")
 	if err != nil {
 		t.Fatalf("ListWorkspaces() error = %v; want nil", err)
 	}
@@ -77,7 +77,7 @@ func TestCMSClient_QueryMetric(t *testing.T) {
 	ctx := context.Background()
 	dims := map[string]string{"instanceId": "i-abc123"}
 	// QueryMetric currently returns empty slice (placeholder for CMS 2.0)
-	datapoints, err := client.QueryMetric(ctx, "cn-hangzhou", "acs_ecs_dashboard", "CPUUtilization", dims, 1700000000, 1700003600)
+	datapoints, err := client.QueryMetric(ctx, "cn-hongkong", "acs_ecs_dashboard", "CPUUtilization", dims, 1700000000, 1700003600)
 	if err != nil {
 		t.Fatalf("QueryMetric() error = %v; want nil", err)
 	}
@@ -96,7 +96,7 @@ func TestCMSClient_QueryMetric_NilDimensions(t *testing.T) {
 
 	ctx := context.Background()
 	// QueryMetric currently returns empty slice (placeholder for CMS 2.0)
-	datapoints, err := client.QueryMetric(ctx, "cn-hangzhou", "acs_ecs_dashboard", "CPUUtilization", nil, 1700000000, 1700003600)
+	datapoints, err := client.QueryMetric(ctx, "cn-hongkong", "acs_ecs_dashboard", "CPUUtilization", nil, 1700000000, 1700003600)
 	if err != nil {
 		t.Fatalf("QueryMetric() with nil dimensions error = %v; want nil", err)
 	}
@@ -133,11 +133,11 @@ func TestCMSClient_EmptyRegion(t *testing.T) {
 func TestCMSClient_EndpointOverride(t *testing.T) {
 	cfg := testConfig()
 	cfg.Endpoints.CMS = map[string]string{
-		"cn-hangzhou": "custom-cms.example.com",
+		"cn-hongkong": "custom-cms.example.com",
 	}
 	client := NewCMSClient(testCredential(), cfg)
 
-	ep, err := client.resolver.Resolve("cn-hangzhou")
+	ep, err := client.resolver.Resolve("cn-hongkong")
 	if err != nil {
 		t.Fatalf("resolver.Resolve() error = %v", err)
 	}
@@ -220,7 +220,7 @@ func TestCMSClient_ContextCancellation(t *testing.T) {
 	cancel() // Cancel immediately.
 
 	// With a cancelled context, the retry loop should exit quickly.
-	_, err := client.ExecuteSPL(ctx, "cn-hangzhou", "ws", "query", 0, 1, 10)
+	_, err := client.ExecuteSPL(ctx, "cn-hongkong", "ws", "query", 0, 1, 10)
 	// Placeholder succeeds immediately even with cancelled context, which is
 	// acceptable. The important thing is it doesn't hang.
 	_ = err

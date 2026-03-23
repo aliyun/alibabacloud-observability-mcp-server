@@ -27,10 +27,10 @@ func TestResolve(t *testing.T) {
 		wantErr  bool
 	}{
 		{
-			name:     "SLS cn-hangzhou",
+			name:     "SLS cn-hongkong",
 			resolver: NewSLSResolver(nil),
-			region:   "cn-hangzhou",
-			want:     "cn-hangzhou.log.aliyuncs.com",
+			region:   "cn-hongkong",
+			want:     "cn-hongkong.log.aliyuncs.com",
 		},
 		{
 			name:     "SLS cn-shanghai",
@@ -39,10 +39,10 @@ func TestResolve(t *testing.T) {
 			want:     "cn-shanghai.log.aliyuncs.com",
 		},
 		{
-			name:     "CMS cn-hangzhou",
+			name:     "CMS cn-hongkong",
 			resolver: NewCMSResolver(nil),
-			region:   "cn-hangzhou",
-			want:     "cms.cn-hangzhou.aliyuncs.com",
+			region:   "cn-hongkong",
+			want:     "cms.cn-hongkong.aliyuncs.com",
 		},
 		{
 			name:     "CMS us-west-1",
@@ -64,8 +64,8 @@ func TestResolve(t *testing.T) {
 		},
 		{
 			name:     "SLS override takes precedence",
-			resolver: NewSLSResolver(map[string]string{"cn-hangzhou": "custom-sls.example.com"}),
-			region:   "cn-hangzhou",
+			resolver: NewSLSResolver(map[string]string{"cn-hongkong": "custom-sls.example.com"}),
+			region:   "cn-hongkong",
 			want:     "custom-sls.example.com",
 		},
 		{
@@ -76,14 +76,14 @@ func TestResolve(t *testing.T) {
 		},
 		{
 			name:     "override falls back to template for other regions",
-			resolver: NewSLSResolver(map[string]string{"cn-hangzhou": "custom.example.com"}),
+			resolver: NewSLSResolver(map[string]string{"cn-hongkong": "custom.example.com"}),
 			region:   "cn-beijing",
 			want:     "cn-beijing.log.aliyuncs.com",
 		},
 		{
 			name:     "override with protocol prefix is normalized",
-			resolver: NewSLSResolver(map[string]string{"cn-hangzhou": "https://custom.example.com/"}),
-			region:   "cn-hangzhou",
+			resolver: NewSLSResolver(map[string]string{"cn-hongkong": "https://custom.example.com/"}),
+			region:   "cn-hongkong",
 			want:     "custom.example.com",
 		},
 	}

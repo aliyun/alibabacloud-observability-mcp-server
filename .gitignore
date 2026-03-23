@@ -93,3 +93,10 @@ docs/**
 deploy/**
 agents.md
 .cursor/**
+
+# E2E test artifacts
+tooltest/output/
+tooltest/input.json
+cmd/tooltest/output/
+output/
+cmd/tooltest/

@@ -40,36 +40,36 @@ func (s *SharedToolkit) Tools() []toolkit.Tool {
 func (s *SharedToolkit) listWorkspaceTool() toolkit.Tool {
 	return toolkit.Tool{
 		Name: "list_workspace",
-		Description: `列出可用的CMS工作空间
+		Description: `List available CMS workspaces.
 
-## 功能概述
-获取指定区域内可用的Cloud Monitor Service (CMS)工作空间列表。
-工作空间是CMS中用于组织和管理监控数据的逻辑容器。
+## Overview
+Retrieve the list of available Cloud Monitor Service (CMS) workspaces in a specified region.
+A workspace is a logical container in CMS for organizing and managing monitoring data.
 
-## 参数说明
-- regionId: 阿里云区域标识符，如 "cn-hangzhou", "cn-beijing" 等
+## Parameters
+- regionId: Alibaba Cloud region identifier, e.g. "cn-hongkong", "cn-beijing"
 
-## 返回结果
-返回包含工作空间信息的字典，包括：
-- workspaces: 工作空间列表，每个工作空间包含名称、ID、描述等信息
-- total_count: 工作空间总数
-- region: 查询的区域ID
+## Response
+Returns a dictionary containing workspace information:
+- workspaces: List of workspaces, each including name, ID, description, etc.
+- total_count: Total number of workspaces
+- region: The queried region ID
 
-## 使用场景
-- 在使用PaaS层API之前，需要先获取可用的工作空间
-- 为DoAI层查询提供工作空间选择
-- 管理和监控多个工作空间的资源使用情况
+## Use Cases
+- Retrieve available workspaces before using PaaS-layer APIs
+- Provide workspace selection for DoAI-layer queries
+- Manage and monitor resource usage across multiple workspaces
 
-## 注意事项
-- 不同区域的工作空间是独立的
-- 工作空间的可见性取决于当前用户的权限
-- 这是一个基础工具，为其他PaaS和DoAI工具提供工作空间选择`,
+## Notes
+- Workspaces in different regions are independent
+- Workspace visibility depends on the current user's permissions
+- This is a foundational tool that provides workspace selection for other PaaS and DoAI tools`,
 		InputSchema: map[string]interface{}{
 			"type": "object",
 			"properties": map[string]interface{}{
 				"regionId": map[string]interface{}{
 					"type":        "string",
-					"description": "阿里云区域ID",
+					"description": "Alibaba Cloud region ID",
 				},
 			},
 			"required": []string{"regionId"},
@@ -118,31 +118,32 @@ func (s *SharedToolkit) handleListWorkspace(ctx context.Context, params map[stri
 func (s *SharedToolkit) listDomainsTool() toolkit.Tool {
 	return toolkit.Tool{
 		Name: "list_domains",
-		Description: `列出所有可用的实体域
+		Description: `List all available entity domains.
 
-## 功能概述
-获取系统中所有可用的实体域（domain）列表。实体域是实体的最高级分类，
-如 APM、容器、云产品等。这是发现系统支持实体类型的第一步。
+## Overview
+Retrieve all available entity domains in the system. An entity domain is the top-level
+classification of entities, such as APM, Kubernetes, cloud products, etc.
+This is the first step to discover supported entity types.
 
-## 使用场景
-- 了解系统支持的所有实体域
-- 为后续查询选择正确的domain参数
-- 构建动态的域选择界面
+## Use Cases
+- Discover all supported entity domains
+- Select the correct domain parameter for subsequent queries
+- Build dynamic domain selection interfaces
 
-## 返回数据
-每个域包含：
-- __domain__: 域名称（如 apm, k8s, cloud）
-- cnt: 该域下的实体总数量`,
+## Response
+Each domain contains:
+- __domain__: Domain name (e.g. apm, k8s, cloud)
+- cnt: Total number of entities in the domain`,
 		InputSchema: map[string]interface{}{
 			"type": "object",
 			"properties": map[string]interface{}{
 				"workspace": map[string]interface{}{
 					"type":        "string",
-					"description": "CMS工作空间名称，可通过list_workspace获取",
+					"description": "CMS workspace name, obtainable via list_workspace",
 				},
 				"regionId": map[string]interface{}{
 					"type":        "string",
-					"description": "阿里云区域ID",
+					"description": "Alibaba Cloud region ID",
 				},
 			},
 			"required": []string{"workspace", "regionId"},
@@ -197,19 +198,20 @@ func (s *SharedToolkit) handleListDomains(ctx context.Context, params map[string
 func (s *SharedToolkit) introductionTool() toolkit.Tool {
 	return toolkit.Tool{
 		Name: "introduction",
-		Description: `获取阿里云可观测性MCP Server的介绍和使用说明
+		Description: `Get the introduction and usage guide for Alibaba Cloud Observability MCP Server.
 
-## 功能概述
-返回阿里云可观测性 MCP Server 的服务概述、核心能力和使用限制说明。
-帮助用户快速了解服务能做什么，以及使用各层工具的前提条件。
+## Overview
+Returns the service overview, core capabilities, and usage constraints of the
+Alibaba Cloud Observability MCP Server. Helps users quickly understand what the
+service can do and the prerequisites for each tool layer.
 
-## 使用场景
-- 首次接入时了解服务能力和限制
-- 了解不同工具层的使用前提
+## Use Cases
+- Learn about service capabilities and constraints on first use
+- Understand prerequisites for different tool layers
 
-## 注意事项
-- 此工具不需要任何参数，可直接调用
-- 返回信息包含各层工具的使用前提条件`,
+## Notes
+- This tool requires no parameters and can be called directly
+- The response includes prerequisites for each tool layer`,
 		InputSchema: map[string]interface{}{
 			"type":       "object",
 			"properties": map[string]interface{}{},
@@ -223,59 +225,59 @@ func handleIntroduction(_ context.Context, _ map[string]interface{}) (interface{
 	return map[string]interface{}{
 		"name":        "Alibaba Cloud Observability MCP Server",
 		"version":     "1.0.0",
-		"description": "阿里云可观测性 MCP 服务 - 提供 AI 驱动的可观测数据访问能力",
+		"description": "Alibaba Cloud Observability MCP Server - AI-driven observability data access",
 		"capabilities": map[string]interface{}{
 			"data_access": []string{
-				"查询日志数据（SLS 日志库）",
-				"查询指标数据（时序指标）",
-				"查询链路数据（分布式追踪）",
-				"查询事件数据（异常事件）",
-				"查询实体信息（应用、容器、云产品等）",
-				"性能剖析数据查询",
+				"Query log data (SLS Log Store)",
+				"Query metric data (time-series metrics)",
+				"Query trace data (distributed tracing)",
+				"Query event data (anomaly events)",
+				"Query entity information (applications, containers, cloud products, etc.)",
+				"Profiling data queries",
 			},
 			"ai_features": []string{
-				"自然语言转 SQL 查询",
-				"自然语言转 PromQL 查询",
-				"智能实体发现和关系分析",
+				"Natural language to SQL queries",
+				"Natural language to PromQL queries",
+				"Intelligent entity discovery and relationship analysis",
 			},
 		},
 		"tool_layers": map[string]interface{}{
 			"paas": map[string]interface{}{
-				"description": "PaaS 层工具集（推荐）- 基于云监控 2.0 的现代化可观测能力",
+				"description": "PaaS layer toolkit (recommended) - modern observability powered by Cloud Monitor 2.0",
 				"capabilities": []string{
-					"实体发现和管理",
-					"指标、日志、事件、链路、性能剖析的统一查询",
-					"数据集和元数据管理",
+					"Entity discovery and management",
+					"Unified queries for metrics, logs, events, traces, and profiling",
+					"Dataset and metadata management",
 				},
-				"prerequisites": "⚠️ 需要开通阿里云监控 2.0 服务",
-				"note":          "适用于需要统一数据模型和实体关系分析的场景",
+				"prerequisites": "⚠️ Requires Alibaba Cloud Monitor 2.0 service activation",
+				"note":          "Suitable for scenarios requiring unified data models and entity relationship analysis",
 			},
 			"iaas": map[string]interface{}{
-				"description": "IaaS 层工具集 - 直接访问底层存储服务",
+				"description": "IaaS layer toolkit - direct access to underlying storage services",
 				"capabilities": []string{
-					"直接查询 SLS 日志库（Log Store）",
-					"直接查询 SLS 指标库（Metric Store）",
-					"执行原生 SQL/PromQL 查询",
-					"日志库和项目管理",
+					"Direct SLS Log Store queries",
+					"Direct SLS Metric Store queries",
+					"Execute native SQL/PromQL queries",
+					"Log store and project management",
 				},
-				"prerequisites": "✓ 无需云监控 2.0，仅需 SLS 服务权限",
-				"note":          "适用于直接访问 SLS 数据或不依赖云监控 2.0 的场景",
+				"prerequisites": "✓ No Cloud Monitor 2.0 required, only SLS service permissions needed",
+				"note":          "Suitable for direct SLS data access or scenarios not dependent on Cloud Monitor 2.0",
 			},
 			"shared": map[string]interface{}{
-				"description": "共享工具集 - 基础服务发现和管理",
+				"description": "Shared toolkit - basic service discovery and management",
 				"capabilities": []string{
-					"工作空间管理",
-					"实体域发现",
-					"服务介绍",
+					"Workspace management",
+					"Entity domain discovery",
+					"Service introduction",
 				},
-				"prerequisites": "✓ 所有场景可用",
+				"prerequisites": "✓ Available for all scenarios",
 			},
 		},
 		"important_notes": []string{
-			"PaaS 层工具（umodel_* 系列）依赖云监控 2.0，需要先开通服务",
-			"IaaS 层工具（sls_* 系列）直接访问 SLS，无需云监控 2.0",
-			"建议优先使用 PaaS 层工具以获得更好的实体关系和统一数据模型体验",
-			"如果未开通云监控 2.0，可使用 IaaS 层工具直接查询 SLS 数据",
+			"PaaS tools (umodel_* series) depend on Cloud Monitor 2.0 and require service activation",
+			"IaaS tools (sls_* series) access SLS directly without Cloud Monitor 2.0",
+			"PaaS tools are recommended for better entity relationships and unified data model experience",
+			"If Cloud Monitor 2.0 is not activated, use IaaS tools to query SLS data directly",
 		},
 		"references": map[string]interface{}{
 			"cloudmonitor_2_0": "https://help.aliyun.com/zh/cms/cloudmonitor-2-0/product-overview/what-is-cloud-monitor-2-0",

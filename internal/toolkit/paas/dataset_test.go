@@ -80,7 +80,7 @@ func TestHandleListDataSet_Success(t *testing.T) {
 		"workspace":       "test-ws",
 		"domain":          "apm",
 		"entity_set_name": "apm.service",
-		"regionId":        "cn-hangzhou",
+		"regionId":        "cn-hongkong",
 	})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -118,7 +118,7 @@ func TestHandleListDataSet_WithDataSetTypes(t *testing.T) {
 		"domain":          "apm",
 		"entity_set_name": "apm.service",
 		"data_set_types":  "metric_set,log_set",
-		"regionId":        "cn-hangzhou",
+		"regionId":        "cn-hongkong",
 	})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -147,7 +147,7 @@ func TestHandleListDataSet_SPLError(t *testing.T) {
 		"workspace":       "test-ws",
 		"domain":          "apm",
 		"entity_set_name": "apm.service",
-		"regionId":        "cn-hangzhou",
+		"regionId":        "cn-hongkong",
 	})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -195,7 +195,7 @@ func TestHandleSearchEntitySet_Success(t *testing.T) {
 	result, err := handler(context.Background(), map[string]interface{}{
 		"search_text": "service",
 		"workspace":   "test-ws",
-		"regionId":    "cn-hangzhou",
+		"regionId":    "cn-hongkong",
 	})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -230,7 +230,7 @@ func TestHandleSearchEntitySet_WithDomainFilter(t *testing.T) {
 		"workspace":       "test-ws",
 		"domain":          "infrastructure",
 		"entity_set_name": "host.instance",
-		"regionId":        "cn-hangzhou",
+		"regionId":        "cn-hongkong",
 	})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -286,7 +286,7 @@ func TestHandleGetEntitySet_Success(t *testing.T) {
 		"domain":          "apm",
 		"entity_set_name": "apm.service",
 		"workspace":       "test-ws",
-		"regionId":        "cn-hangzhou",
+		"regionId":        "cn-hongkong",
 	})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -327,7 +327,7 @@ func TestHandleGetEntitySet_WithDetail(t *testing.T) {
 		"entity_set_name": "apm.service",
 		"workspace":       "test-ws",
 		"detail":          true,
-		"regionId":        "cn-hangzhou",
+		"regionId":        "cn-hongkong",
 	})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -356,7 +356,7 @@ func TestHandleGetEntitySet_SPLError(t *testing.T) {
 		"domain":          "apm",
 		"entity_set_name": "apm.service",
 		"workspace":       "test-ws",
-		"regionId":        "cn-hangzhou",
+		"regionId":        "cn-hongkong",
 	})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -405,7 +405,7 @@ func TestHandleListRelatedEntitySet_Success(t *testing.T) {
 		"domain":          "apm",
 		"entity_set_name": "apm.service",
 		"workspace":       "test-ws",
-		"regionId":        "cn-hangzhou",
+		"regionId":        "cn-hongkong",
 	})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -442,7 +442,7 @@ func TestHandleListRelatedEntitySet_WithOptions(t *testing.T) {
 		"relation_type":   "calls",
 		"direction":       "out",
 		"detail":          true,
-		"regionId":        "cn-hangzhou",
+		"regionId":        "cn-hongkong",
 	})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -477,7 +477,7 @@ func TestHandleListRelatedEntitySet_SPLError(t *testing.T) {
 		"domain":          "apm",
 		"entity_set_name": "apm.service",
 		"workspace":       "test-ws",
-		"regionId":        "cn-hangzhou",
+		"regionId":        "cn-hongkong",
 	})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)

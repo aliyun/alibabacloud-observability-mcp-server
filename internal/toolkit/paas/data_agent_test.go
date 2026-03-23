@@ -3,6 +3,7 @@ package paas
 import (
 	"context"
 	"fmt"
+	"strings"
 	"testing"
 
 	"github.com/alibabacloud-observability-mcp-server-go/internal/client"
@@ -14,24 +15,23 @@ import (
 
 func TestDataAgentTools_Count(t *testing.T) {
 	tools := DataAgentTools(&mockCMSClient{})
-	// 1 main tool + 1 alias (cms_natural_language_query)
-	if got := len(tools); got != 2 {
-		t.Fatalf("DataAgentTools() returned %d tools, want 2", got)
+	// 1 tool: cms_natural_language_query
+	if got := len(tools); got != 1 {
+		t.Fatalf("DataAgentTools() returned %d tools, want 1", got)
 	}
 }
 
 func TestDataAgentTools_Name(t *testing.T) {
 	tools := DataAgentTools(&mockCMSClient{})
-	if tools[0].Name != "umodel_data_agent_query" {
-		t.Errorf("tool name = %q, want %q", tools[0].Name, "umodel_data_agent_query")
+	if tools[0].Name != "cms_natural_language_query" {
+		t.Errorf("tool name = %q, want %q", tools[0].Name, "cms_natural_language_query")
 	}
 }
 
 func TestDataAgentTools_HasUmodelPrefix(t *testing.T) {
 	tools := DataAgentTools(&mockCMSClient{})
 	for _, tool := range tools {
-		// Allow both umodel_ prefix and cms_natural_language_query alias
-		if tool.Name != "cms_natural_language_query" && (len(tool.Name) < 7 || tool.Name[:7] != "umodel_") {
+		if !strings.HasPrefix(tool.Name, "cms_") {
 			t.Errorf("tool %q does not have umodel_ prefix", tool.Name)
 		}
 	}
@@ -47,7 +47,7 @@ func TestHandleDataAgentQuery_MissingQuery(t *testing.T) {
 
 	result, err := handler(context.Background(), map[string]interface{}{
 		"workspace": "test-ws",
-		"regionId":  "cn-hangzhou",
+		"regionId":  "cn-hongkong",
 	})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -64,7 +64,7 @@ func TestHandleDataAgentQuery_MissingWorkspace(t *testing.T) {
 
 	result, err := handler(context.Background(), map[string]interface{}{
 		"query":    "test query",
-		"regionId": "cn-hangzhou",
+		"regionId": "cn-hongkong",
 	})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -137,7 +137,7 @@ func TestHandleDataAgentQuery_Success(t *testing.T) {
 	result, err := handler(context.Background(), map[string]interface{}{
 		"query":     "查询请求量最高的服务",
 		"workspace": "test-ws",
-		"regionId":  "cn-hangzhou",
+		"regionId":  "cn-hongkong",
 	})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -150,8 +150,8 @@ func TestHandleDataAgentQuery_Success(t *testing.T) {
 	if capturedWorkspace != "test-ws" {
 		t.Errorf("workspace = %q, want %q", capturedWorkspace, "test-ws")
 	}
-	if capturedRegion != "cn-hangzhou" {
-		t.Errorf("region = %q, want %q", capturedRegion, "cn-hangzhou")
+	if capturedRegion != "cn-hongkong" {
+		t.Errorf("region = %q, want %q", capturedRegion, "cn-hongkong")
 	}
 	if capturedQuery != "查询请求量最高的服务" {
 		t.Errorf("query = %q, want %q", capturedQuery, "查询请求量最高的服务")
@@ -183,7 +183,7 @@ func TestHandleDataAgentQuery_APIError(t *testing.T) {
 	result, err := handler(context.Background(), map[string]interface{}{
 		"query":     "test query",
 		"workspace": "test-ws",
-		"regionId":  "cn-hangzhou",
+		"regionId":  "cn-hongkong",
 	})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -216,7 +216,7 @@ func TestHandleDataAgentQuery_DefaultTimeRange(t *testing.T) {
 	result, err := handler(context.Background(), map[string]interface{}{
 		"query":     "test",
 		"workspace": "test-ws",
-		"regionId":  "cn-hangzhou",
+		"regionId":  "cn-hongkong",
 	})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -247,7 +247,7 @@ func TestHandleDataAgentQuery_WithGeneratedSQL(t *testing.T) {
 	result, err := handler(context.Background(), map[string]interface{}{
 		"query":     "查询错误日志",
 		"workspace": "test-ws",
-		"regionId":  "cn-hangzhou",
+		"regionId":  "cn-hongkong",
 	})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -281,7 +281,7 @@ func TestHandleDataAgentQuery_ResponseStructure(t *testing.T) {
 	result, err := handler(context.Background(), map[string]interface{}{
 		"query":     "test",
 		"workspace": "test-ws",
-		"regionId":  "cn-hangzhou",
+		"regionId":  "cn-hongkong",
 	})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -307,107 +307,5 @@ func TestHandleDataAgentQuery_ResponseStructure(t *testing.T) {
 		if _, ok := tr[key]; !ok {
 			t.Errorf("time_range missing key %q", key)
 		}
-	}
-}
-
-// ---------------------------------------------------------------------------
-// cms_natural_language_query alias tests
-// ---------------------------------------------------------------------------
-
-func TestNaturalLanguageQueryAlias_Name(t *testing.T) {
-	tools := DataAgentTools(&mockCMSClient{})
-	aliasTool := tools[1]
-	if aliasTool.Name != "cms_natural_language_query" {
-		t.Errorf("alias tool name = %q, want %q", aliasTool.Name, "cms_natural_language_query")
-	}
-}
-
-func TestNaturalLanguageQueryAlias_SameInputSchema(t *testing.T) {
-	tools := DataAgentTools(&mockCMSClient{})
-	originalTool := tools[0]
-	aliasTool := tools[1]
-
-	originalSchema := originalTool.InputSchema
-	aliasSchema := aliasTool.InputSchema
-
-	if originalSchema["type"] != aliasSchema["type"] {
-		t.Errorf("InputSchema type mismatch: original=%v, alias=%v", originalSchema["type"], aliasSchema["type"])
-	}
-
-	originalRequired, _ := originalSchema["required"].([]string)
-	aliasRequired, _ := aliasSchema["required"].([]string)
-	if len(originalRequired) != len(aliasRequired) {
-		t.Errorf("InputSchema required length mismatch: original=%d, alias=%d", len(originalRequired), len(aliasRequired))
-	}
-
-	originalProps, _ := originalSchema["properties"].(map[string]interface{})
-	aliasProps, _ := aliasSchema["properties"].(map[string]interface{})
-	if len(originalProps) != len(aliasProps) {
-		t.Errorf("InputSchema properties count mismatch: original=%d, alias=%d", len(originalProps), len(aliasProps))
-	}
-	for key := range originalProps {
-		if _, ok := aliasProps[key]; !ok {
-			t.Errorf("alias InputSchema missing property %q", key)
-		}
-	}
-}
-
-func TestNaturalLanguageQueryAlias_SameHandlerBehavior(t *testing.T) {
-	callCount := 0
-	mock := &mockCMSClient{
-		dataAgentQueryFn: func(_ context.Context, _, _, _ string, _, _ int64) (*client.DataAgentResult, error) {
-			callCount++
-			return &client.DataAgentResult{
-				QueryResults: []interface{}{
-					map[string]interface{}{"type": "entity_list", "data": []interface{}{}},
-				},
-				Message: "ok",
-			}, nil
-		},
-	}
-
-	tools := DataAgentTools(mock)
-	originalHandler := tools[0].Handler
-	aliasHandler := tools[1].Handler
-
-	params := map[string]interface{}{
-		"query":     "查询请求量最高的服务",
-		"workspace": "test-ws",
-		"regionId":  "cn-hangzhou",
-	}
-
-	result1, err1 := originalHandler(context.Background(), params)
-	if err1 != nil {
-		t.Fatalf("original handler error: %v", err1)
-	}
-
-	result2, err2 := aliasHandler(context.Background(), params)
-	if err2 != nil {
-		t.Fatalf("alias handler error: %v", err2)
-	}
-
-	// Both should call DataAgentQuery
-	if callCount != 2 {
-		t.Errorf("expected 2 DataAgentQuery calls, got %d", callCount)
-	}
-
-	resp1 := result1.(map[string]interface{})
-	resp2 := result2.(map[string]interface{})
-	if resp1["error"] != resp2["error"] {
-		t.Errorf("handlers produced different error status: original=%v, alias=%v", resp1["error"], resp2["error"])
-	}
-}
-
-func TestNaturalLanguageQueryAlias_MissingParams(t *testing.T) {
-	tools := DataAgentTools(&mockCMSClient{})
-	aliasHandler := tools[1].Handler
-
-	result, err := aliasHandler(context.Background(), map[string]interface{}{})
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	resp := result.(map[string]interface{})
-	if resp["error"] != true {
-		t.Error("expected error=true for missing params")
 	}
 }

@@ -16,17 +16,16 @@ func TestPaaSToolkit_Name(t *testing.T) {
 
 func TestPaaSToolkit_ToolCount(t *testing.T) {
 	tk := NewPaaSToolkit(&mockCMSClient{})
-	// 3 entity + 9 data (8 main + 1 alias) + 1 timeseries + 3 dataset + 2 data_agent (1 main + 1 alias) = 18
-	if got := len(tk.Tools()); got != 18 {
-		t.Errorf("Tools() returned %d tools, want 18", got)
+	// 3 entity + 8 data + 1 timeseries + 3 dataset + 1 data_agent = 16
+	if got := len(tk.Tools()); got != 16 {
+		t.Errorf("Tools() returned %d tools, want 16", got)
 	}
 }
 
 func TestPaaSToolkit_AllToolsHaveUmodelPrefix(t *testing.T) {
 	tk := NewPaaSToolkit(&mockCMSClient{})
 	for _, tool := range tk.Tools() {
-		// Allow both umodel_ prefix and cms_natural_language_query alias
-		if tool.Name != "cms_natural_language_query" && !strings.HasPrefix(tool.Name, "umodel_") {
+		if !strings.HasPrefix(tool.Name, "umodel_") && !strings.HasPrefix(tool.Name, "cms_") {
 			t.Errorf("tool %q does not have umodel_ prefix", tool.Name)
 		}
 	}

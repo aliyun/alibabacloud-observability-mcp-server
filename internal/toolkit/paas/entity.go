@@ -166,7 +166,7 @@ func buildEntityFilterParam(filter string) string {
 }
 
 // convertToSQLSyntax converts simple filter expressions (e.g. "name=payment and status!=inactive")
-// to SQL-like syntax (e.g. `"name"='payment' and "status"!='inactive'`).
+// to SPL query syntax (e.g. `name="payment" and status!="inactive"`).
 func convertToSQLSyntax(expr string) string {
 	conditions := strings.Split(expr, " and ")
 	sqlParts := make([]string, 0, len(conditions))
@@ -178,11 +178,11 @@ func convertToSQLSyntax(expr string) string {
 		if idx := strings.Index(cond, "!="); idx >= 0 {
 			field := strings.Trim(strings.TrimSpace(cond[:idx]), "'\"")
 			value := strings.Trim(strings.TrimSpace(cond[idx+2:]), "'\"")
-			sqlParts = append(sqlParts, fmt.Sprintf(`"%s"!='%s'`, field, value))
+			sqlParts = append(sqlParts, fmt.Sprintf(`%s!="%s"`, field, value))
 		} else if idx := strings.Index(cond, "="); idx >= 0 {
 			field := strings.Trim(strings.TrimSpace(cond[:idx]), "'\"")
 			value := strings.Trim(strings.TrimSpace(cond[idx+1:]), "'\"")
-			sqlParts = append(sqlParts, fmt.Sprintf(`"%s"='%s'`, field, value))
+			sqlParts = append(sqlParts, fmt.Sprintf(`%s="%s"`, field, value))
 		}
 	}
 	return strings.Join(sqlParts, " and ")
@@ -235,54 +235,54 @@ func splitAndTrim(s string) []string {
 func (h *entityHandler) getEntitiesTool() toolkit.Tool {
 	return toolkit.Tool{
 		Name: "umodel_get_entities",
-		Description: `获取实体信息的PaaS API工具。
+		Description: `PaaS API tool for retrieving entity information.
 
-## 功能概述
-该工具用于检索实体信息，支持分页查询、精确ID查询和过滤条件查询。
-如需要模糊搜索请使用 umodel_search_entities 工具。
+## Overview
+Retrieves entity information with support for paginated queries, exact ID lookups, and filter-based queries.
+For fuzzy search, use the umodel_search_entities tool instead.
 
-## 功能特点
-- **数量控制**: 默认返回20个实体，支持通过limit参数控制返回数量
-- **精确查询**: 支持根据实体ID列表进行精确查询
-- **过滤查询**: 支持使用 entity_filter 表达式进行条件过滤
-- **职责清晰**: 专注于基础实体信息获取，不包含复杂搜索逻辑
+## Features
+- **Pagination**: Returns 20 entities by default, configurable via the limit parameter
+- **Exact Lookup**: Supports querying by a list of entity IDs
+- **Filter Query**: Supports entity_filter expressions for conditional filtering
+- **Focused**: Retrieves basic entity information only, no complex search logic
 
-## 使用场景
-- **分页浏览**: 分页获取实体列表
-- **精确查询**: 根据已知的实体ID列表批量获取实体详细信息
-- **条件过滤**: 使用 entity_filter 按属性过滤实体
+## Use Cases
+- **Paginated Browsing**: Retrieve entity lists page by page
+- **Exact Lookup**: Batch-retrieve entity details by known entity IDs
+- **Conditional Filtering**: Filter entities by attributes using entity_filter
 
-## 参数说明
-- domain: 实体集合的域，如 'apm'、'infrastructure' 等，不能为 '*'
-- entity_set_name: 实体集合名称，如 'apm.service'、'host.instance' 等，不能为 '*'
-- entity_ids: 可选的逗号分隔实体ID字符串，用于精确查询指定实体
-- entity_filter: 可选的过滤表达式，如 'name=payment and status!=inactive'
-- time_range: 时间范围表达式，支持多种格式，默认 last_1h
-- limit: 返回多少个实体，默认20个，最大1000个
+## Parameters
+- domain: Entity domain, e.g. 'apm', 'infrastructure', cannot be '*'
+- entity_set_name: Entity set name, e.g. 'apm.service', 'host.instance', cannot be '*'
+- entity_ids: Optional comma-separated entity ID string for exact lookups
+- entity_filter: Optional filter expression, e.g. 'service=qwen38b and status!=inactive'
+- time_range: Time range expression, supports multiple formats, default last_1h
+- limit: Number of entities to return, default 20, max 1000
 
-**注意**: entity_ids 和 entity_filter 至少需要提供一个`,
+**Note**: When neither entity_ids nor entity_filter is provided, all entities in the entity set are returned (up to the limit)`,
 		InputSchema: map[string]interface{}{
 			"type": "object",
 			"properties": map[string]interface{}{
 				"domain": map[string]interface{}{
 					"type":        "string",
-					"description": "实体域, 不能为 '*'",
+					"description": "Entity domain, cannot be '*'",
 				},
 				"entity_set_name": map[string]interface{}{
 					"type":        "string",
-					"description": "实体类型, 不能为 '*'",
+					"description": "Entity set name, cannot be '*'",
 				},
 				"workspace": map[string]interface{}{
 					"type":        "string",
-					"description": "CMS工作空间名称，可通过list_workspace获取",
+					"description": "CMS workspace name, obtainable via list_workspace",
 				},
 				"entity_ids": map[string]interface{}{
 					"type":        "string",
-					"description": "可选的逗号分隔实体ID列表，用于精确查询指定实体。entity_ids 和 entity_filter 至少需要提供一个",
+					"description": "Optional comma-separated entity IDs for exact lookup. At least one of entity_ids or entity_filter must be provided",
 				},
 				"entity_filter": map[string]interface{}{
 					"type":        "string",
-					"description": "实体过滤表达式，如 'name=payment' 或 'status!=inactive'，支持 'and' 连接多个条件。entity_ids 和 entity_filter 至少需要提供一个",
+					"description": "Entity filter expression, e.g. 'name=payment' or 'status!=inactive', supports 'and' to join conditions. At least one of entity_ids or entity_filter must be provided",
 				},
 				"time_range": map[string]interface{}{
 					"type":        "string",
@@ -291,14 +291,14 @@ func (h *entityHandler) getEntitiesTool() toolkit.Tool {
 				},
 				"limit": map[string]interface{}{
 					"type":        "integer",
-					"description": "返回多少个实体，默认20个",
+					"description": "Number of entities to return, default 20",
 					"default":     20,
 					"minimum":     1,
 					"maximum":     1000,
 				},
 				"regionId": map[string]interface{}{
 					"type":        "string",
-					"description": "阿里云区域ID，如 'cn-hangzhou'",
+					"description": "Alibaba Cloud region ID, e.g. 'cn-hongkong'",
 				},
 			},
 			"required": []string{"domain", "entity_set_name", "workspace", "regionId"},
@@ -320,20 +320,14 @@ func (h *entityHandler) handleGetEntities(ctx context.Context, params map[string
 	// Validate required params - domain and entity_set_name cannot be '*'
 	if domain == "" || domain == "*" {
 		return buildStandardResponse(nil, "", 0, 0, true,
-			"domain 不能为空或 '*'，请使用 umodel_list_entity_types 获取有效的 domain 值", timeRange), nil
+			"domain cannot be empty or '*'. Use umodel_list_entity_types to get valid domain values", timeRange), nil
 	}
 	if entitySetName == "" || entitySetName == "*" {
 		return buildStandardResponse(nil, "", 0, 0, true,
-			"entity_set_name 不能为空或 '*'，请使用 umodel_list_entity_types 获取有效值", timeRange), nil
+			"entity_set_name cannot be empty or '*'. Use umodel_list_entity_types to get valid values", timeRange), nil
 	}
 	if workspace == "" || regionID == "" {
 		return buildStandardResponse(nil, "", 0, 0, true, "workspace and regionId are required", timeRange), nil
-	}
-
-	// At least one of entity_ids or entity_filter must be provided
-	if entityIDs == "" && entityFilter == "" {
-		return buildStandardResponse(nil, "", 0, 0, true,
-			"必须至少提供 entity_ids 或 entity_filter 之一。entity_ids: 逗号分隔的实体ID列表；entity_filter: 过滤表达式，如 'name=payment and status!=inactive'", timeRange), nil
 	}
 
 	fromTS, toTS, err := parseTimeRange(timeRange)
@@ -368,64 +362,64 @@ func (h *entityHandler) handleGetEntities(ctx context.Context, params map[string
 func (h *entityHandler) getNeighborEntitiesTool() toolkit.Tool {
 	return toolkit.Tool{
 		Name: "umodel_get_neighbor_entities",
-		Description: `获取实体的邻居关系（拓扑关系）
+		Description: `Retrieve neighbor entities (topology relationships) of an entity.
 
-## 功能概述
-检索与源实体直接相关的实体，支持上游、下游和双向查询。
-单层遍历，用于探索实体的直接连接关系。
+## Overview
+Retrieves entities directly related to the source entity, supporting upstream, downstream, and bidirectional queries.
+Single-layer traversal for exploring direct connections of an entity.
 
-## 方向说明
-- "out": 下游关系（被调用方）
-- "in": 上游关系（调用方）
-- "both": 双向关系（默认）
+## Direction
+- "out": Downstream relationships (callees)
+- "in": Upstream relationships (callers)
+- "both": Bidirectional relationships (default)
 
-## 使用场景
-- 查看服务的上下游依赖关系
-- 分析微服务调用链路
-- 探索基础设施拓扑关系
+## Use Cases
+- View upstream/downstream dependencies of a service
+- Analyze microservice call chains
+- Explore infrastructure topology relationships
 
-## 参数说明
-- src_entity_domain: 源实体域
-- src_name: 源实体类型名称
-- src_entity_ids: 逗号分隔的源实体ID列表
-- dest_entity_domain: 可选的目标实体域过滤
-- dest_name: 可选的目标实体类型过滤
-- relation_type: 可选的关系类型过滤
-- direction: 方向 "out"/"in"/"both"，默认 "both"`,
+## Parameters
+- src_entity_domain: Source entity domain
+- src_name: Source entity set name
+- src_entity_ids: Comma-separated source entity IDs
+- dest_entity_domain: Optional destination entity domain filter
+- dest_name: Optional destination entity set name filter
+- relation_type: Optional relationship type filter
+- direction: Direction "out"/"in"/"both", default "both"`,
 		InputSchema: map[string]interface{}{
 			"type": "object",
 			"properties": map[string]interface{}{
 				"workspace": map[string]interface{}{
 					"type":        "string",
-					"description": "CMS工作空间名称",
+					"description": "CMS workspace name",
 				},
 				"src_entity_domain": map[string]interface{}{
 					"type":        "string",
-					"description": "源实体域，如 'apm'、'k8s' 等",
+					"description": "Source entity domain, e.g. 'apm', 'k8s'",
 				},
 				"src_name": map[string]interface{}{
 					"type":        "string",
-					"description": "源实体类型名称，如 'apm.service'、'k8s.pod' 等",
+					"description": "Source entity set name, e.g. 'apm.service', 'k8s.pod'",
 				},
 				"src_entity_ids": map[string]interface{}{
 					"type":        "string",
-					"description": "逗号分隔的源实体ID列表",
+					"description": "Comma-separated source entity IDs",
 				},
 				"dest_entity_domain": map[string]interface{}{
 					"type":        "string",
-					"description": "可选的目标实体域过滤",
+					"description": "Optional destination entity domain filter",
 				},
 				"dest_name": map[string]interface{}{
 					"type":        "string",
-					"description": "可选的目标实体类型过滤",
+					"description": "Optional destination entity set name filter",
 				},
 				"relation_type": map[string]interface{}{
 					"type":        "string",
-					"description": "可选的关系类型过滤",
+					"description": "Optional relationship type filter",
 				},
 				"direction": map[string]interface{}{
 					"type":        "string",
-					"description": `方向: "out" (下游), "in" (上游), "both" (双向)。默认: "both"`,
+					"description": `Direction: "out" (downstream), "in" (upstream), "both" (bidirectional). Default: "both"`,
 					"default":     "both",
 					"enum":        []string{"in", "out", "both"},
 				},
@@ -436,14 +430,14 @@ func (h *entityHandler) getNeighborEntitiesTool() toolkit.Tool {
 				},
 				"limit": map[string]interface{}{
 					"type":        "integer",
-					"description": "最大返回数量，默认10",
+					"description": "Maximum number of results to return, default 10",
 					"default":     10,
 					"minimum":     1,
 					"maximum":     1000,
 				},
 				"regionId": map[string]interface{}{
 					"type":        "string",
-					"description": "阿里云区域ID",
+					"description": "Alibaba Cloud region ID",
 				},
 			},
 			"required": []string{"workspace", "src_entity_domain", "src_name", "src_entity_ids", "regionId"},
@@ -512,46 +506,46 @@ func (h *entityHandler) handleGetNeighborEntities(ctx context.Context, params ma
 func (h *entityHandler) searchEntitiesTool() toolkit.Tool {
 	return toolkit.Tool{
 		Name: "umodel_search_entities",
-		Description: `基于关键词全文搜索实体信息
+		Description: `Full-text search for entities by keyword.
 
-## 功能概述
-在指定的实体集合中根据关键词进行全文搜索，查找名称或属性包含搜索关键词的实体。
-返回 'statistics'（按类型统计匹配数量）和 'detail'（匹配的实体详情）两部分数据。
+## Overview
+Searches for entities matching a keyword in the specified entity set, looking for matches in entity names and attributes.
+Returns 'statistics' (match count by type) and 'detail' (matched entity details).
 
-## 功能特点
-- **全文检索**: 支持对实体名称和属性进行模糊搜索
-- **统计信息**: 返回按实体类型分组的匹配数量统计
-- **详细结果**: 返回匹配的实体详细信息
-- **灵活过滤**: 支持通配符 '*' 搜索所有域或类型
+## Features
+- **Full-text Search**: Supports fuzzy search across entity names and attributes
+- **Statistics**: Returns match count grouped by entity type
+- **Detailed Results**: Returns matched entity details
+- **Flexible Filtering**: Supports wildcard '*' to search all domains or types
 
-## 使用场景
-- **服务搜索**: 根据服务名称片段搜索相关的微服务实体
-- **基础设施搜索**: 根据主机名或IP地址搜索基础设施实体
-- **快速定位**: 在大量实体中搜索包含特定关键词的实体
-- **实体发现**: 作为主要的实体发现工具
+## Use Cases
+- **Service Search**: Search for microservice entities by service name fragments
+- **Infrastructure Search**: Search for infrastructure entities by hostname or IP
+- **Quick Lookup**: Find entities containing specific keywords among large datasets
+- **Entity Discovery**: Primary tool for entity discovery
 
-## 返回数据说明
-- **statistics**: 按实体类型分组的匹配数量统计
-- **detail**: 匹配的实体详细信息列表`,
+## Response
+- **statistics**: Match count grouped by entity type
+- **detail**: List of matched entity details`,
 		InputSchema: map[string]interface{}{
 			"type": "object",
 			"properties": map[string]interface{}{
 				"workspace": map[string]interface{}{
 					"type":        "string",
-					"description": "CMS工作空间名称，可通过list_workspace获取",
+					"description": "CMS workspace name, obtainable via list_workspace",
 				},
 				"search_text": map[string]interface{}{
 					"type":        "string",
-					"description": "搜索关键词（全文搜索），支持关键词、IP、服务名等",
+					"description": "Search keyword (full-text search), supports keywords, IPs, service names, etc.",
 				},
 				"domain": map[string]interface{}{
 					"type":        "string",
-					"description": "实体域，可以为 '*' 表示搜索所有域",
+					"description": "Entity domain, use '*' to search all domains",
 					"default":     "*",
 				},
 				"entity_set_name": map[string]interface{}{
 					"type":        "string",
-					"description": "实体类型，可以为 '*' 表示搜索所有类型",
+					"description": "Entity set name, use '*' to search all types",
 					"default":     "*",
 				},
 				"time_range": map[string]interface{}{
@@ -561,14 +555,14 @@ func (h *entityHandler) searchEntitiesTool() toolkit.Tool {
 				},
 				"limit": map[string]interface{}{
 					"type":        "integer",
-					"description": "返回多少个详细搜索结果，默认10个",
+					"description": "Number of detailed search results to return, default 10",
 					"default":     10,
 					"minimum":     1,
 					"maximum":     1000,
 				},
 				"regionId": map[string]interface{}{
 					"type":        "string",
-					"description": "阿里云区域ID",
+					"description": "Alibaba Cloud region ID",
 				},
 			},
 			"required": []string{"workspace", "search_text", "regionId"},

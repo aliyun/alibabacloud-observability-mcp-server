@@ -2,7 +2,6 @@ package iaas
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"log/slog"
 
@@ -14,12 +13,8 @@ import (
 func CMSTools(cmsClient client.CMSClient, slsClient client.SLSClient) []toolkit.Tool {
 	h := &cmsHandler{cmsClient: cmsClient, slsClient: slsClient}
 	return []toolkit.Tool{
-		h.queryMetricTool(),
-		h.listMetricsTool(),
-		h.listNamespacesTool(),
 		h.executePromQLTool(),
-		h.cmsExecutePromQLTool(), // Alias for Python compatibility
-		h.cmsTextToPromQLTool(),  // Alias for Python compatibility
+		h.textToPromQLTool(),
 	}
 }
 
@@ -30,286 +25,60 @@ type cmsHandler struct {
 }
 
 // ===========================================================================
-// Tool 1: cms_query_metric
-// ===========================================================================
-
-func (h *cmsHandler) queryMetricTool() toolkit.Tool {
-	return toolkit.Tool{
-		Name: "cms_query_metric",
-		Description: `查询云监控指标数据。
-
-## 功能概述
-
-该工具用于查询阿里云云监控（CMS）中指定命名空间和指标名称的监控数据。
-
-## 使用场景
-
-- 当需要查询ECS、RDS等云产品的监控指标时
-- 当需要分析特定资源的性能数据时
-- 当需要获取特定维度的指标数据时
-
-## 参数说明
-
-- namespace: 云产品命名空间，如 'acs_ecs_dashboard'、'acs_rds_dashboard'
-- metricName: 指标名称，如 'CPUUtilization'、'memory_usedutilization'
-- dimensions: 维度过滤条件，JSON格式，如 '{"instanceId":"i-xxx"}'
-- from_time: 开始时间，支持Unix时间戳（秒/毫秒）或相对时间表达式
-- to_time: 结束时间，支持Unix时间戳（秒/毫秒）或相对时间表达式`,
-		InputSchema: map[string]interface{}{
-			"type": "object",
-			"properties": map[string]interface{}{
-				"namespace": map[string]interface{}{
-					"type":        "string",
-					"description": "云产品命名空间，如 'acs_ecs_dashboard'",
-				},
-				"metricName": map[string]interface{}{
-					"type":        "string",
-					"description": "指标名称，如 'CPUUtilization'",
-				},
-				"dimensions": map[string]interface{}{
-					"type":        "string",
-					"description": "维度过滤条件，JSON格式，如 '{\"instanceId\":\"i-xxx\"}'",
-				},
-				"from_time": map[string]interface{}{
-					"type":        "string",
-					"description": "开始时间，支持Unix时间戳或相对时间如 'now-1h'",
-					"default":     "now-1h",
-				},
-				"to_time": map[string]interface{}{
-					"type":        "string",
-					"description": "结束时间，支持Unix时间戳或相对时间如 'now'",
-					"default":     "now",
-				},
-				"regionId": map[string]interface{}{
-					"type":        "string",
-					"description": "阿里云区域ID，如 'cn-hangzhou'",
-				},
-			},
-			"required": []string{"namespace", "metricName", "regionId"},
-		},
-		Handler: h.handleQueryMetric,
-	}
-}
-
-func (h *cmsHandler) handleQueryMetric(ctx context.Context, params map[string]interface{}) (interface{}, error) {
-	namespace := paramString(params, "namespace", "")
-	metricName := paramString(params, "metricName", "")
-	regionID := paramString(params, "regionId", "")
-
-	if namespace == "" || metricName == "" || regionID == "" {
-		return buildResponse(nil, true, "namespace, metricName and regionId are required"), nil
-	}
-
-	fromTS, err := parseTimeParam(params, "from_time", "now-1h")
-	if err != nil {
-		return buildResponse(nil, true, fmt.Sprintf("invalid from_time: %s", err)), nil
-	}
-	toTS, err := parseTimeParam(params, "to_time", "now")
-	if err != nil {
-		return buildResponse(nil, true, fmt.Sprintf("invalid to_time: %s", err)), nil
-	}
-
-	// Parse dimensions JSON string into map
-	dimensions := make(map[string]string)
-	dimStr := paramString(params, "dimensions", "")
-	if dimStr != "" {
-		if err := json.Unmarshal([]byte(dimStr), &dimensions); err != nil {
-			return buildResponse(nil, true, fmt.Sprintf("invalid dimensions JSON: %s", err)), nil
-		}
-	}
-
-	slog.InfoContext(ctx, "cms_query_metric",
-		"namespace", namespace, "metricName", metricName, "region", regionID)
-
-	datapoints, err := h.cmsClient.QueryMetric(ctx, regionID, namespace, metricName, dimensions, fromTS, toTS)
-	if err != nil {
-		slog.ErrorContext(ctx, "cms_query_metric failed", "error", err)
-		return buildResponse(nil, true, fmt.Sprintf("Query metric failed: %s", err)), nil
-	}
-
-	return buildResponse(map[string]interface{}{
-		"datapoints": datapoints,
-	}, false, ""), nil
-}
-
-// ===========================================================================
-// Tool 2: cms_list_metrics
-// ===========================================================================
-
-func (h *cmsHandler) listMetricsTool() toolkit.Tool {
-	return toolkit.Tool{
-		Name: "cms_list_metrics",
-		Description: `列出云监控命名空间下的可用指标。
-
-## 功能概述
-
-该工具用于列出指定云产品命名空间下所有可用的监控指标。
-
-## 使用场景
-
-- 当需要了解某个云产品有哪些可用的监控指标时
-- 当需要查找特定指标的名称时
-- 当需要在查询指标数据前确认指标是否存在时
-
-## 参数说明
-
-- namespace: 云产品命名空间，如 'acs_ecs_dashboard'
-- regionId: 阿里云区域ID`,
-		InputSchema: map[string]interface{}{
-			"type": "object",
-			"properties": map[string]interface{}{
-				"namespace": map[string]interface{}{
-					"type":        "string",
-					"description": "云产品命名空间，如 'acs_ecs_dashboard'",
-				},
-				"regionId": map[string]interface{}{
-					"type":        "string",
-					"description": "阿里云区域ID，如 'cn-hangzhou'",
-				},
-			},
-			"required": []string{"namespace", "regionId"},
-		},
-		Handler: h.handleListMetrics,
-	}
-}
-
-func (h *cmsHandler) handleListMetrics(ctx context.Context, params map[string]interface{}) (interface{}, error) {
-	namespace := paramString(params, "namespace", "")
-	regionID := paramString(params, "regionId", "")
-
-	if namespace == "" || regionID == "" {
-		return buildResponse(nil, true, "namespace and regionId are required"), nil
-	}
-
-	slog.InfoContext(ctx, "cms_list_metrics",
-		"namespace", namespace, "region", regionID)
-
-	// Use QueryMetric with empty metric name and short time range to discover available metrics.
-	// The CMS API returns metric metadata when queried this way.
-	// We query with a minimal time range to get the metric list.
-	datapoints, err := h.cmsClient.QueryMetric(ctx, regionID, namespace, "", nil, 0, 0)
-	if err != nil {
-		slog.ErrorContext(ctx, "cms_list_metrics failed", "error", err)
-		return buildResponse(nil, true, fmt.Sprintf("List metrics failed: %s", err)), nil
-	}
-
-	return buildResponse(map[string]interface{}{
-		"metrics": datapoints,
-	}, false, ""), nil
-}
-
-// ===========================================================================
-// Tool 3: cms_list_namespaces
-// ===========================================================================
-
-func (h *cmsHandler) listNamespacesTool() toolkit.Tool {
-	return toolkit.Tool{
-		Name: "cms_list_namespaces",
-		Description: `列出云监控可用的命名空间。
-
-## 功能概述
-
-该工具用于列出阿里云云监控中所有可用的命名空间（云产品监控项）。
-
-## 使用场景
-
-- 当需要了解有哪些云产品支持云监控时
-- 当需要查找特定云产品的命名空间名称时
-- 当需要在查询指标前确认命名空间是否存在时
-
-## 返回数据
-
-返回可用的命名空间列表，每个命名空间包含名称和描述信息。`,
-		InputSchema: map[string]interface{}{
-			"type": "object",
-			"properties": map[string]interface{}{
-				"regionId": map[string]interface{}{
-					"type":        "string",
-					"description": "阿里云区域ID，如 'cn-hangzhou'",
-				},
-			},
-			"required": []string{"regionId"},
-		},
-		Handler: h.handleListNamespaces,
-	}
-}
-
-func (h *cmsHandler) handleListNamespaces(ctx context.Context, params map[string]interface{}) (interface{}, error) {
-	regionID := paramString(params, "regionId", "")
-
-	if regionID == "" {
-		return buildResponse(nil, true, "regionId is required"), nil
-	}
-
-	slog.InfoContext(ctx, "cms_list_namespaces", "region", regionID)
-
-	// Use QueryMetric with empty namespace and metric to list available namespaces.
-	datapoints, err := h.cmsClient.QueryMetric(ctx, regionID, "", "", nil, 0, 0)
-	if err != nil {
-		slog.ErrorContext(ctx, "cms_list_namespaces failed", "error", err)
-		return buildResponse(nil, true, fmt.Sprintf("List namespaces failed: %s", err)), nil
-	}
-
-	return buildResponse(map[string]interface{}{
-		"namespaces": datapoints,
-	}, false, ""), nil
-}
-
-// ===========================================================================
-// Tool 4: cms_execute_promql (sls_query_metricstore)
+// Tool 1: cms_execute_promql
 // ===========================================================================
 
 func (h *cmsHandler) executePromQLTool() toolkit.Tool {
 	return toolkit.Tool{
-		Name: "sls_query_metricstore",
-		Description: `执行PromQL指标查询。
+		Name: "cms_execute_promql",
+		Description: `Execute a PromQL metric query.
 
-## 功能概述
+## Overview
 
-该工具用于在指定的SLS项目和指标库上执行PromQL查询语句，并返回时序指标数据。
+Execute a PromQL query on a specified SLS project and metric store, returning time-series metric data.
 
-## 使用场景
+## Use Cases
 
-- 当需要查询时序指标数据时
-- 当需要分析系统性能指标时
-- 当需要监控业务指标趋势时
+- Query time-series metric data
+- Analyze system performance metrics
+- Monitor business metric trends
 
-## 查询语法
+## Query Syntax
 
-查询必须使用有效的PromQL语法。
+The query must use valid PromQL syntax.
 
-## 时间范围
+## Time Range
 
-- from_time: 开始时间，支持Unix时间戳（秒/毫秒）或相对时间表达式
-- to_time: 结束时间，支持Unix时间戳（秒/毫秒）或相对时间表达式`,
-		InputSchema: map[string]interface{}{
+- from_time: Start time, supports Unix timestamp (seconds/milliseconds) or relative time expressions
+- to_time: End time, supports Unix timestamp (seconds/milliseconds) or relative time expressions`,
+		InputSchema: map[string]any{
 			"type": "object",
-			"properties": map[string]interface{}{
-				"project": map[string]interface{}{
+			"properties": map[string]any{
+				"project": map[string]any{
 					"type":        "string",
-					"description": "SLS项目名称",
+					"description": "SLS project name",
 				},
-				"metricStore": map[string]interface{}{
+				"metricStore": map[string]any{
 					"type":        "string",
-					"description": "SLS指标库名称",
+					"description": "SLS metric store name",
 				},
-				"query": map[string]interface{}{
+				"query": map[string]any{
 					"type":        "string",
-					"description": "PromQL查询语句",
+					"description": "PromQL query statement",
 				},
-				"from_time": map[string]interface{}{
+				"from_time": map[string]any{
 					"type":        "string",
-					"description": "开始时间，支持Unix时间戳或相对时间如 'now-5m'",
+					"description": "Start time, supports Unix timestamp or relative time e.g. 'now-5m'",
 					"default":     "now-5m",
 				},
-				"to_time": map[string]interface{}{
+				"to_time": map[string]any{
 					"type":        "string",
-					"description": "结束时间，支持Unix时间戳或相对时间如 'now'",
+					"description": "End time, supports Unix timestamp or relative time e.g. 'now'",
 					"default":     "now",
 				},
-				"regionId": map[string]interface{}{
+				"regionId": map[string]any{
 					"type":        "string",
-					"description": "阿里云区域ID，如 'cn-hangzhou'",
+					"description": "Alibaba Cloud region ID, e.g. 'cn-hongkong'",
 				},
 			},
 			"required": []string{"project", "metricStore", "query", "regionId"},
@@ -318,7 +87,7 @@ func (h *cmsHandler) executePromQLTool() toolkit.Tool {
 	}
 }
 
-func (h *cmsHandler) handleExecutePromQL(ctx context.Context, params map[string]interface{}) (interface{}, error) {
+func (h *cmsHandler) handleExecutePromQL(ctx context.Context, params map[string]any) (any, error) {
 	project := paramString(params, "project", "")
 	metricStore := paramString(params, "metricStore", "")
 	query := paramString(params, "query", "")
@@ -341,9 +110,24 @@ func (h *cmsHandler) handleExecutePromQL(ctx context.Context, params map[string]
 		"project", project, "metricStore", metricStore, "region", regionID,
 		"from", fromTS, "to", toTS)
 
-	// Wrap PromQL in SPL template for execution via SLS
-	// SPL format: .metricstore with(promql_query='<query>')
-	splQuery := fmt.Sprintf(".%s with(promql_query='%s')", metricStore, query)
+	// Wrap PromQL in SPL template for execution via SLS.
+	// The SPL keyword is always ".metricstore" (literal), not the actual store name.
+	// The store name is passed as the logstore parameter to the API.
+	// Includes .set directives required by the SLS PromQL engine.
+	splQuery := fmt.Sprintf(`.set "sql.session.velox_support_row_constructor_enabled" = 'true';
+.set "sql.session.presto_velox_mix_run_not_check_linked_agg_enabled" = 'true';
+.set "sql.session.presto_velox_mix_run_support_complex_type_enabled" = 'true';
+.set "sql.session.velox_sanity_limit_enabled" = 'false';
+.metricstore with(promql_query='%s',range='1m')
+| extend latest_ts = element_at(__ts__,cardinality(__ts__)),
+         latest_val = element_at(__value__,cardinality(__value__))
+| stats arr_ts = array_agg(__ts__),
+        arr_val = array_agg(__value__),
+        title_agg = array_agg(json_format(cast(__labels__ as json))),
+        cnt = count(*),
+        latest_ts = array_agg(latest_ts),
+        latest_val = array_agg(latest_val)
+| project title_agg, cnt, latest_ts, latest_val`, query)
 
 	results, err := h.slsClient.Query(ctx, regionID, project, metricStore, splQuery, fromTS, toTS)
 	if err != nil {
@@ -351,8 +135,7 @@ func (h *cmsHandler) handleExecutePromQL(ctx context.Context, params map[string]
 		if isMetricStoreNotFoundError(err) {
 			msg := fmt.Sprintf(
 				"Metric store '%s' does not exist in project '%s'. "+
-					"Please use sls_list_metricstores to check available metric stores. "+
-					"Alternatively, you can use cms_query_metric to query CMS metrics directly.",
+					"Please check available metric stores.",
 				metricStore, project,
 			)
 			return buildResponse(nil, true, msg), nil
@@ -360,127 +143,65 @@ func (h *cmsHandler) handleExecutePromQL(ctx context.Context, params map[string]
 		return buildResponse(nil, true, fmt.Sprintf("PromQL query failed: %s", err)), nil
 	}
 
-	return buildResponse(map[string]interface{}{
+	return buildResponse(map[string]any{
 		"data":  results,
 		"query": splQuery,
 	}, false, ""), nil
 }
 
 // ===========================================================================
-// Tool 5: cms_execute_promql (Alias for Python compatibility)
+// Tool 2: cms_text_to_promql
 // ===========================================================================
 
-func (h *cmsHandler) cmsExecutePromQLTool() toolkit.Tool {
-	return toolkit.Tool{
-		Name: "cms_execute_promql",
-		Description: `执行PromQL查询（与 sls_query_metricstore 功能相同）。
-
-## 功能概述
-
-该工具用于执行PromQL查询，查询云监控指标数据。
-这是 sls_query_metricstore 的别名，为了与 Python 版本保持兼容。
-
-## 使用场景
-
-- 当需要查询云监控指标数据时
-- 当需要使用 PromQL 语法分析时序数据时
-
-## 查询语法
-
-查询必须使用有效的PromQL语法。
-
-## 时间范围
-
-- from_time: 开始时间，支持Unix时间戳（秒/毫秒）或相对时间表达式（如 'now-5m'）
-- to_time: 结束时间，支持Unix时间戳（秒/毫秒）或相对时间表达式（如 'now'）`,
-		InputSchema: map[string]interface{}{
-			"type": "object",
-			"properties": map[string]interface{}{
-				"project": map[string]interface{}{
-					"type":        "string",
-					"description": "项目名称",
-				},
-				"metricStore": map[string]interface{}{
-					"type":        "string",
-					"description": "指标存储名称",
-				},
-				"query": map[string]interface{}{
-					"type":        "string",
-					"description": "PromQL查询语句",
-				},
-				"from_time": map[string]interface{}{
-					"type":        "string",
-					"description": "查询开始时间，支持Unix时间戳或相对时间如 'now-5m'",
-					"default":     "now-5m",
-				},
-				"to_time": map[string]interface{}{
-					"type":        "string",
-					"description": "查询结束时间，支持Unix时间戳或相对时间如 'now'",
-					"default":     "now",
-				},
-				"regionId": map[string]interface{}{
-					"type":        "string",
-					"description": "阿里云区域ID，如 'cn-hangzhou'",
-				},
-			},
-			"required": []string{"project", "metricStore", "query", "regionId"},
-		},
-		Handler: h.handleExecutePromQL, // Reuse the same handler
-	}
-}
-
-// ===========================================================================
-// Tool 6: cms_text_to_promql (Alias for sls_text_to_promql for Python compatibility)
-// ===========================================================================
-
-func (h *cmsHandler) cmsTextToPromQLTool() toolkit.Tool {
+func (h *cmsHandler) textToPromQLTool() toolkit.Tool {
 	return toolkit.Tool{
 		Name: "cms_text_to_promql",
-		Description: `将自然语言转换为PromQL查询语句。
+		Description: `Convert natural language to PromQL query statements.
 
-## 功能概述
+## Overview
 
-该工具可以将自然语言描述转换为有效的PromQL查询语句，便于用户使用自然语言表达查询需求。
+This tool converts natural language descriptions into valid PromQL query statements,
+allowing users to express query requirements in plain language.
 
-## 使用场景
+## Use Cases
 
-- 当用户不熟悉PromQL查询语法时
-- 当需要快速构建复杂查询时
-- 当需要从自然语言描述中提取查询意图时
+- When users are unfamiliar with PromQL query syntax
+- When quickly building complex queries
+- When extracting query intent from natural language descriptions
 
-## 使用限制
+## Limitations
 
-- 仅支持生成PromQL查询
-- 生成的是查询语句，而非查询结果
+- Only supports generating PromQL queries
+- Generates query statements, not query results
 
-## 最佳实践
+## Best Practices
 
-- 提供清晰简洁的自然语言描述
-- 不要在描述中包含项目或时序库名称
-- 首次生成的查询可能不完全符合要求，可能需要多次尝试
+- Provide clear and concise natural language descriptions
+- Do not include project or metric store names in the description
+- The first generated query may not fully meet requirements; multiple attempts may be needed
 
-## 查询示例
+## Query Examples
 
-- "帮我生成 XXX 的PromQL查询语句"
-- "查询每个namespace下的Pod数量"`,
-		InputSchema: map[string]interface{}{
+- "Generate a PromQL query for XXX"
+- "Query the number of Pods per namespace"`,
+		InputSchema: map[string]any{
 			"type": "object",
-			"properties": map[string]interface{}{
-				"text": map[string]interface{}{
+			"properties": map[string]any{
+				"text": map[string]any{
 					"type":        "string",
-					"description": "用于生成PromQL的自然语言文本",
+					"description": "Natural language text for generating PromQL queries",
 				},
-				"project": map[string]interface{}{
+				"project": map[string]any{
 					"type":        "string",
-					"description": "SLS项目名称",
+					"description": "SLS project name",
 				},
-				"metricStore": map[string]interface{}{
+				"metricStore": map[string]any{
 					"type":        "string",
-					"description": "SLS指标库名称",
+					"description": "SLS metric store name",
 				},
-				"regionId": map[string]interface{}{
+				"regionId": map[string]any{
 					"type":        "string",
-					"description": "阿里云区域ID，如 'cn-hangzhou'",
+					"description": "Alibaba Cloud region ID, e.g. 'cn-hongkong'",
 				},
 			},
 			"required": []string{"text", "project", "metricStore", "regionId"},
@@ -489,7 +210,7 @@ func (h *cmsHandler) cmsTextToPromQLTool() toolkit.Tool {
 	}
 }
 
-func (h *cmsHandler) handleTextToPromQL(ctx context.Context, params map[string]interface{}) (interface{}, error) {
+func (h *cmsHandler) handleTextToPromQL(ctx context.Context, params map[string]any) (any, error) {
 	text := paramString(params, "text", "")
 	project := paramString(params, "project", "")
 	metricStore := paramString(params, "metricStore", "")
@@ -502,14 +223,13 @@ func (h *cmsHandler) handleTextToPromQL(ctx context.Context, params map[string]i
 	slog.InfoContext(ctx, "cms_text_to_promql",
 		"project", project, "metricStore", metricStore, "region", regionID)
 
-	// Use the SLS TextToSQL method which handles PromQL generation
 	promql, err := h.slsClient.TextToSQL(ctx, regionID, project, metricStore, text)
 	if err != nil {
 		slog.ErrorContext(ctx, "cms_text_to_promql failed", "error", err)
 		return buildResponse(nil, true, fmt.Sprintf("Text to PromQL failed: %s", err)), nil
 	}
 
-	return buildResponse(map[string]interface{}{
+	return buildResponse(map[string]any{
 		"query": promql,
 	}, false, ""), nil
 }

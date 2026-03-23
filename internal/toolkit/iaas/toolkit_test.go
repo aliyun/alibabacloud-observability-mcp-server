@@ -16,9 +16,9 @@ func TestIaaSToolkit_Name(t *testing.T) {
 
 func TestIaaSToolkit_ToolCount(t *testing.T) {
 	tk := NewIaaSToolkit(&mockSLSClient{}, &mockCMSClient{})
-	// 15 SLS (14 main + 1 deprecated alias) + 6 CMS (4 main + 2 aliases) = 21
-	if got := len(tk.Tools()); got != 21 {
-		t.Errorf("Tools() returned %d tools, want 21", got)
+	// 12 SLS (11 main + 1 deprecated alias) + 2 CMS = 14
+	if got := len(tk.Tools()); got != 14 {
+		t.Errorf("Tools() returned %d tools, want 14", got)
 	}
 }
 
@@ -30,9 +30,9 @@ func TestIaaSToolkit_SLSToolsHavePrefix(t *testing.T) {
 			slsCount++
 		}
 	}
-	// 15 from SLSTools (14 main + 1 deprecated alias) + 1 from CMSTools (sls_query_metricstore for PromQL) = 16
-	if slsCount != 16 {
-		t.Errorf("expected 16 sls_ tools, got %d", slsCount)
+	// 12 from SLSTools (11 main + 1 deprecated alias)
+	if slsCount != 12 {
+		t.Errorf("expected 12 sls_ tools, got %d", slsCount)
 	}
 }
 
@@ -44,9 +44,9 @@ func TestIaaSToolkit_CMSToolsHavePrefix(t *testing.T) {
 			cmsCount++
 		}
 	}
-	// 3 main cms_ tools + 2 aliases (cms_execute_promql, cms_text_to_promql) = 5
-	if cmsCount != 5 {
-		t.Errorf("expected 5 cms_ tools, got %d", cmsCount)
+	// 2 CMS tools: cms_execute_promql + cms_text_to_promql
+	if cmsCount != 2 {
+		t.Errorf("expected 2 cms_ tools, got %d", cmsCount)
 	}
 }
 

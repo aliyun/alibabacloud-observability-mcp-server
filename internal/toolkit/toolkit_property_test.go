@@ -33,6 +33,10 @@ func (s *stubCMS) TextToSQL(_ context.Context, _, _, _, _ string) (string, error
 	return "", nil
 }
 
+func (s *stubCMS) ChatWithSkill(_ context.Context, _, _, _, _, _ string) (string, error) {
+	return "", nil
+}
+
 func (s *stubCMS) DataAgentQuery(_ context.Context, _, _, _ string, _, _ int64) (*client.DataAgentResult, error) {
 	return &client.DataAgentResult{}, nil
 }

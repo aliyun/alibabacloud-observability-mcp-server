@@ -22,7 +22,7 @@
 - 模块化工具集架构：PaaS（云监控 2.0）、IaaS（SLS/CMS 直接访问）、Shared
 - 灵活的时间表达式解析：相对时间、绝对时间戳、Grafana 风格、预设关键词
 - 时序数据对比分析：统计计算、趋势分析、差异评分
-- 结构化错误处理：中文错误描述和解决方案建议
+- 结构化错误处理：英文错误描述和解决方案建议
 - 稳定性保障：重试（指数退避）、熔断器、优雅关闭
 - 结构化 JSON 日志（slog）
 - 单一二进制文件，零运行时依赖
@@ -407,17 +407,25 @@ make clean
 
 ### 测试
 
-项目采用单元测试 + 属性测试双轨策略：
+项目采用单元测试 + 属性测试 + 回归测试三轨策略：
 
 - 单元测试：表驱动测试，覆盖具体示例和边界条件
 - 属性测试：使用 [gopter](https://github.com/leanovate/gopter)，验证跨所有输入的通用正确性属性
+- 回归测试：集成测试（`//go:build integration`），对比 Python 版本参数一致性，需要真实阿里云凭证
 
 ```bash
-# 运行所有测试
+# 运行所有单元测试
 go test ./... -v
 
 # 仅运行属性测试
 go test ./... -run TestProperty_
+
+# 运行回归测试（需要配置环境变量）
+ALIBABA_CLOUD_ACCESS_KEY_ID=xxx \
+ALIBABA_CLOUD_ACCESS_KEY_SECRET=xxx \
+ALIBABA_CLOUD_REGION=cn-hongkong \
+ALIBABA_CLOUD_WORKSPACE=xxx \
+go test -tags=integration ./internal/toolkit/... -v
 ```
 
 ### AI Agent 开发规范
