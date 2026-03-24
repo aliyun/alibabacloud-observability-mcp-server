@@ -7,7 +7,7 @@
 ---
 
 > **📌 重要提示**
-> 
+>
 > 本项目已使用 **Go 语言重构**。如需使用原 Python 版本，请访问 [`v1`](./v1) 目录：
 > - 📖 [v1/README.md](./v1/README.md) - Python 版本文档
 > - 📦 Python 版本通过 `pip install mcp-server-aliyun-observability` 安装
@@ -22,7 +22,7 @@
 - 模块化工具集架构：PaaS（云监控 2.0）、IaaS（SLS/CMS 直接访问）、Shared
 - 灵活的时间表达式解析：相对时间、绝对时间戳、Grafana 风格、预设关键词
 - 时序数据对比分析：统计计算、趋势分析、差异评分
-- 结构化错误处理：中文错误描述和解决方案建议
+- 结构化错误处理：英文错误描述和解决方案建议
 - 稳定性保障：重试（指数退避）、熔断器、优雅关闭
 - 结构化 JSON 日志（slog）
 - 单一二进制文件，零运行时依赖
@@ -60,10 +60,10 @@ export ALIBABA_CLOUD_ACCESS_KEY_SECRET=<your_access_key_secret>
 ### 启动服务
 
 ```bash
-# stdio的方式启动
+# 以 stdio 模式启动（MCP 客户端直接调用）
 ./alibabacloud-observability-mcp-server start --stdio
 
-# 以sse的方式启动(默认的transport 在config.yaml中设置sse/streamable-http)
+# 以网络模式启动（默认 transport 在 config.yaml 中配置）
 ./alibabacloud-observability-mcp-server start --config config.yaml
 ```
 
@@ -83,7 +83,7 @@ export ALIBABA_CLOUD_ACCESS_KEY_SECRET=<your_access_key_secret>
 
 ### 前置条件
 
-- Go 1.22+
+- Go 1.23+
 
 ### 构建
 
@@ -95,7 +95,7 @@ cd alibabacloud-observability-mcp-server
 # 构建当前平台
 make build
 
-# 构建所有平台
+# 构建所有平台（linux/darwin/windows × amd64/arm64）
 make build-all
 ```
 
@@ -109,8 +109,6 @@ make build-all
 2. `.env` 文件或环境变量 - 凭证和运行时参数
 
 ### 配置文件
-
-复制示例文件开始配置：
 
 ```bash
 cp config.yaml config.yaml.bak       # 备份默认配置（可选）
@@ -142,7 +140,7 @@ toolkit:
   # enabled_tools:
   #   - list_workspace
   #   - umodel_get_entities
-  #   - sls_query_logstore
+  #   - sls_execute_sql
 
 # 网络配置
 network:
@@ -155,6 +153,19 @@ network:
 locale:
   timezone: Asia/Shanghai
   language: zh-CN
+
+# 运行时默认值（可选）
+# 优先级: 环境变量 > .env 文件 > config.yaml
+runtime:
+  region: cn-hangzhou
+  # workspace: ""
+
+# 端点覆盖（可选，用于内网访问）
+# endpoints:
+#   sls:
+#     cn-hongkong: "cn-hongkong-intranet.log.aliyuncs.com"
+#   cms:
+#     cn-hongkong: "cms.cn-hongkong.aliyuncs.com"
 ```
 
 #### 精细化工具选择
@@ -169,7 +180,7 @@ toolkit:
     - list_domains
     - umodel_get_entities
     - umodel_get_metrics
-    - sls_query_logstore
+    - sls_execute_sql
 ```
 
 当 `enabled_tools` 非空时，只有列表中的工具会被注册，其余工具不可用。`scope` 仍然决定加载哪些 toolkit 模块，`enabled_tools` 在此基础上进一步过滤。
@@ -181,6 +192,7 @@ toolkit:
 | 参数 | 说明 | 默认值 |
 |------|------|--------|
 | `--config` | 指定配置文件路径 | 自动搜索 |
+| `--stdio` | 强制使用 stdio 传输模式 | false |
 
 ### 环境变量（凭证和运行时参数）
 
@@ -195,7 +207,7 @@ toolkit:
 凭证优先从 `.env` 文件读取，如未找到则从 shell 环境变量读取。
 
 > **💡 默认值自动填充**
-> 
+>
 > 当设置了 `ALIBABA_CLOUD_REGION` 或 `ALIBABA_CLOUD_WORKSPACE` 时，如果工具调用中未提供 `regionId` 或 `workspace` 参数，服务会自动使用环境变量中的值作为默认值。用户显式传入的值不会被覆盖。
 
 ## AI 工具集成
@@ -207,7 +219,7 @@ toolkit:
 1. 配置 `config.yaml`（设置 `server.transport: streamable-http`）
 2. 启动服务：
 ```bash
-./bin/alibabacloud-observability-mcp-serve start
+./bin/alibabacloud-observability-mcp-server start
 ```
 
 3. 配置 `mcp.json`：
@@ -223,14 +235,13 @@ toolkit:
 
 **stdio 模式：**
 
-1. 配置 `config.yaml`（设置 `server.transport: stdio`，或使用默认值）
-2. 配置 `mcp.json`：
+1. 配置 `mcp.json`：
 ```json
 {
   "mcpServers": {
     "alibaba_cloud_observability": {
-      "command": "./bin/alibabacloud-observability-mcp-serve",
-      "args": ["start"],
+      "command": "./bin/alibabacloud-observability-mcp-server",
+      "args": ["start", "--stdio"],
       "env": {
         "ALIBABA_CLOUD_ACCESS_KEY_ID": "<your_access_key_id>",
         "ALIBABA_CLOUD_ACCESS_KEY_SECRET": "<your_access_key_secret>"
@@ -244,16 +255,18 @@ toolkit:
 
 ## 工具集
 
+共 33 个工具，分为三个层级。
+
 ### PaaS 工具集（云监控 2.0，推荐）
 
-基于统一数据模型，工具名以 `umodel_` 为前缀。
+基于统一数据模型，工具名以 `umodel_` 或 `cms_` 为前缀。共 16 个工具。
 
 #### 实体管理工具
 
 | 工具 | 说明 | 关键参数 |
 |------|------|---------|
-| `umodel_get_entities` | 获取实体列表 | `workspace`、`domain`、`entity_set_name`、`regionId`（必需） |
-| `umodel_get_neighbor_entities` | 获取实体邻居关系 | `workspace`、`domain`、`entity_set_name`、`entity_ids`、`regionId`（必需） |
+| `umodel_get_entities` | 获取实体列表 | `workspace`、`domain`、`entity_set_name`、`regionId`（必需）；`entity_filter`（可选） |
+| `umodel_get_neighbor_entities` | 获取实体邻居关系 | `workspace`、`src_entity_domain`、`src_name`、`src_entity_ids`、`regionId`（必需） |
 | `umodel_search_entities` | 搜索实体 | `workspace`、`search_text`、`regionId`（必需） |
 
 #### 数据集管理工具
@@ -271,47 +284,45 @@ toolkit:
 |------|------|---------|
 | `umodel_get_metrics` | 查询指标数据 | `workspace`、`domain`、`entity_set_name`、`metric_domain_name`、`metric`、`regionId`（必需）；`analysis_mode`（basic/cluster/forecast/anomaly_detection）、`offset`（时序对比）、`time_range`（可选） |
 | `umodel_get_golden_metrics` | 查询黄金指标 | `workspace`、`domain`、`entity_set_name`、`regionId`（必需）；`offset`、`time_range`（可选） |
-| `umodel_get_relation_metrics` | 查询关系指标 | `workspace`、`src_domain`、`src_entity_set_name`、`src_entity_ids`、`relation_type`、`direction`、`regionId`（必需） |
-| `umodel_get_logs` | 查询日志数据 | `workspace`、`domain`、`entity_set_name`、`log_set_domain`、`log_set_name`、`regionId`（必需） |
-| `umodel_get_events` | 查询事件数据 | `workspace`、`domain`、`entity_set_name`、`event_set_domain`、`event_set_name`、`regionId`（必需） |
-| `umodel_get_traces` | 查询链路数据 | `workspace`、`domain`、`entity_set_name`、`trace_set_domain`、`trace_set_name`、`trace_ids`、`regionId`（必需） |
-| `umodel_search_traces` | 搜索链路 | `workspace`、`domain`、`entity_set_name`、`trace_set_domain`、`trace_set_name`、`regionId`（必需）；`conditions`、`limit`（可选） |
-| `umodel_get_profiling` | 查询性能剖析数据 | `workspace`、`domain`、`entity_set_name`、`profile_set_domain`、`profile_set_name`、`entity_ids`、`regionId`（必需） |
-| `umodel_data_agent_query` | 自然语言数据查询 | `query`、`workspace`、`regionId`（必需）；`time_range`（可选） |
+| `umodel_get_relation_metrics` | 查询关系指标 | `workspace`、`src_domain`、`src_entity_set_name`、`relation_type`、`direction`（in/out）、`metric`、`metric_set_domain`、`regionId`（必需）；`dest_entity_set_name`（可选） |
+| `umodel_get_logs` | 查询日志数据 | `workspace`、`domain`、`entity_set_name`、`log_set_domain`、`log_set_name`、`regionId`（必需）；`time_range`、`limit`（可选） |
+| `umodel_get_events` | 查询事件数据 | `workspace`、`domain`、`entity_set_name`、`event_set_domain`、`event_set_name`、`regionId`（必需）；`time_range`、`limit`（可选） |
+| `umodel_get_traces` | 查询链路数据 | `workspace`、`domain`、`entity_set_name`、`trace_set_domain`、`trace_set_name`、`trace_ids`、`regionId`（必需）；`time_range`（可选） |
+| `umodel_search_traces` | 搜索链路 | `workspace`、`domain`、`entity_set_name`、`trace_set_domain`、`trace_set_name`、`regionId`（必需）；`conditions`、`limit`、`time_range`（可选） |
+| `umodel_get_profiles` | 查询性能剖析数据 | `workspace`、`domain`、`entity_set_name`、`profile_set_domain`、`profile_set_name`、`entity_ids`、`regionId`（必需）；`time_range`、`limit`（可选） |
+| `cms_natural_language_query` | 自然语言数据查询 | `query`、`workspace`、`regionId`（必需）；`time_range`（可选） |
 
 ### IaaS 工具集（SLS/CMS 直接访问）
 
-直接访问底层 API，工具名以 `sls_` 或 `cms_` 为前缀。
+直接访问底层 API，工具名以 `sls_` 或 `cms_` 为前缀。共 14 个工具。
 
 #### SLS 工具
 
 | 工具 | 说明 | 关键参数 |
 |------|------|---------|
-| `sls_query_logstore` | 查询日志库 | `project`、`logStore`、`query`、`regionId`（必需）；`from_time`、`to_time`（可选） |
-| `sls_query_metricstore` | 查询指标库（PromQL） | `project`、`metricStore`、`query`、`regionId`（必需）；`from_time`、`to_time`（可选） |
-| `sls_list_projects` | 列出项目 | `regionId`（必需） |
+| `sls_list_projects` | 列出项目 | `regionId`（必需）；`project`（可选，模糊搜索） |
 | `sls_list_logstores` | 列出日志库 | `project`、`regionId`（必需） |
-| `sls_list_metricstores` | 列出指标库 | `project`、`regionId`（必需） |
 | `sls_text_to_sql` | 自然语言转 SQL | `text`、`project`、`logStore`、`regionId`（必需） |
+| `sls_text_to_sql_old` | 自然语言转 SQL（旧版，兼容 Python 版本） | `text`、`project`、`logStore`、`regionId`（必需） |
 | `sls_text_to_promql` | 自然语言转 PromQL | `text`、`project`、`metricStore`、`regionId`（必需） |
 | `sls_text_to_spl` | 自然语言转 SPL | `text`、`project`、`logStore`、`data_sample`、`regionId`（必需） |
-| `sls_execute_sql` | 执行 SQL 查询 | `project`、`logStore`、`query`、`regionId`（必需）；`from_time`、`to_time`、`limit`、`offset`、`reverse`（可选） |
-| `sls_execute_spl` | 执行原生 SPL 查询 | `query`、`project`、`logStore`、`regionId`（必需）；`from_time`、`to_time`（可选） |
+| `sls_execute_sql` | 执行 SQL 查询 | `project`、`logStore`、`query`、`regionId`（必需）；`from_time`、`to_time`（可选） |
+| `sls_execute_spl` | 执行原生 SPL 查询 | `query`、`workspace`、`regionId`（必需）；`from_time`、`to_time`（可选） |
 | `sls_get_context_logs` | 获取日志上下文 | `project`、`logStore`、`pack_id`、`pack_meta`、`regionId`（必需）；`back_lines`、`forward_lines`（可选） |
-| `sls_log_explore` | 日志探索分析 | `project`、`logStore`、`regionId`（必需）；`query`、`from_time`、`to_time`、`max_patterns`、`sample_size`（可选） |
-| `sls_log_compare` | 日志对比分析 | `project`、`logStore`、`regionId`（必需）；`current_from_time`、`current_to_time`、`baseline_from_time`、`baseline_to_time`（可选） |
+| `sls_log_explore` | 日志探索分析 | `project`、`logStore`、`logField`、`regionId`（必需）；`from_time`、`to_time`、`filter_query`、`groupField`（可选） |
+| `sls_log_compare` | 日志对比分析 | `project`、`logStore`、`logField`、`regionId`（必需）；`test_from_time`、`test_to_time`、`control_from_time`、`control_to_time`、`filter_query`、`groupField`（可选） |
 | `sls_sop` | SLS 运维助手 | `text`、`regionId`（必需） |
 
 #### CMS 工具
 
 | 工具 | 说明 | 关键参数 |
 |------|------|---------|
-| `cms_query_metric` | 查询云监控指标 | `namespace`、`metricName`、`regionId`（必需）；`dimensions`、`from_time`、`to_time`（可选） |
-| `cms_list_metrics` | 列出可用指标 | `namespace`、`regionId`（必需） |
-| `cms_list_namespaces` | 列出命名空间 | `regionId`（必需） |
 | `cms_execute_promql` | 执行 PromQL 查询 | `project`、`metricStore`、`query`、`regionId`（必需）；`from_time`、`to_time`（可选） |
+| `cms_text_to_promql` | 自然语言转 PromQL | `text`、`project`、`metricStore`、`regionId`（必需） |
 
 ### Shared 工具集
+
+共 3 个工具。
 
 | 工具 | 说明 | 关键参数 |
 |------|------|---------|
@@ -368,22 +379,20 @@ umodel_get_metrics(
 
 ```
 ├── cmd/server/          # CLI 入口（cobra）
-├── internal/
-│   ├── config/          # 配置管理（viper + sync.Once）
-│   ├── server/          # MCP Server 核心
-│   ├── toolkit/         # 工具集接口与注册中心
-│   │   ├── paas/        # PaaS 工具集
-│   │   ├── iaas/        # IaaS 工具集
-│   │   └── shared/      # Shared 工具集
-│   ├── client/          # SLS/CMS 客户端封装
-│   ├── errors/          # 结构化错误与错误码映射
-│   ├── stability/       # 重试与熔断器
-│   └── logger/          # 结构化日志
 ├── pkg/
+│   ├── client/          # SLS/CMS 客户端封装
+│   ├── config/          # 配置管理（viper + sync.Once）
+│   ├── endpoint/        # 端点解析
+│   ├── errors/          # 结构化错误与错误码映射
+│   ├── logger/          # 结构化日志（slog）
+│   ├── server/          # MCP Server 核心（传输层、生命周期、健康检查）
+│   ├── stability/       # 重试与熔断器
 │   ├── timeparse/       # 时间表达式解析
-│   └── endpoint/        # 端点解析
-├── docs/
-│   └── AGENTS.md        # AI Agent 开发规范
+│   └── toolkit/         # 工具集接口与注册中心
+│       ├── paas/        # PaaS 工具集（umodel_*、cms_natural_language_query）
+│       ├── iaas/        # IaaS 工具集（sls_*、cms_execute_promql、cms_text_to_promql）
+│       └── shared/      # Shared 工具集（list_workspace、list_domains、introduction）
+├── v1/                  # Python 版本（历史参考）
 ├── Makefile
 ├── go.mod
 └── go.sum
@@ -407,17 +416,25 @@ make clean
 
 ### 测试
 
-项目采用单元测试 + 属性测试双轨策略：
+项目采用单元测试 + 属性测试 + 回归测试三轨策略：
 
 - 单元测试：表驱动测试，覆盖具体示例和边界条件
 - 属性测试：使用 [gopter](https://github.com/leanovate/gopter)，验证跨所有输入的通用正确性属性
+- 回归测试：集成测试（`//go:build integration`），对比 Python 版本参数一致性，需要真实阿里云凭证
 
 ```bash
-# 运行所有测试
+# 运行所有单元测试
 go test ./... -v
 
 # 仅运行属性测试
 go test ./... -run TestProperty_
+
+# 运行回归测试（需要配置环境变量）
+ALIBABA_CLOUD_ACCESS_KEY_ID=xxx \
+ALIBABA_CLOUD_ACCESS_KEY_SECRET=xxx \
+ALIBABA_CLOUD_REGION=cn-hongkong \
+ALIBABA_CLOUD_WORKSPACE=xxx \
+go test -tags=integration ./pkg/toolkit/... -v
 ```
 
 ### AI Agent 开发规范
@@ -450,7 +467,7 @@ go test ./... -run TestProperty_
 
 **特殊权限说明**：
 - 使用 SQL 生成类工具（如 `sls_text_to_sql`）需要单独授予 `sls:CallAiTools` 权限
-- 使用数字员工对话功能需要授予：`cms:CreateChat`、`cms:CreateThread`、`cms:GetThread`、`cms:ListThreads`
+- 使用自然语言查询功能（`cms_natural_language_query`）需要授予：`cms:CreateChat`、`cms:CreateThread`、`cms:GetThread`、`cms:ListThreads`
 
 ## 安全建议
 

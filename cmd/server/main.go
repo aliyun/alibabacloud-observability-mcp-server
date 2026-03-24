@@ -10,14 +10,14 @@ import (
 	"os"
 	"text/tabwriter"
 
-	"github.com/alibabacloud-observability-mcp-server-go/internal/client"
-	"github.com/alibabacloud-observability-mcp-server-go/internal/config"
-	"github.com/alibabacloud-observability-mcp-server-go/internal/logger"
-	"github.com/alibabacloud-observability-mcp-server-go/internal/server"
-	"github.com/alibabacloud-observability-mcp-server-go/internal/toolkit"
-	"github.com/alibabacloud-observability-mcp-server-go/internal/toolkit/iaas"
-	"github.com/alibabacloud-observability-mcp-server-go/internal/toolkit/paas"
-	"github.com/alibabacloud-observability-mcp-server-go/internal/toolkit/shared"
+	"github.com/alibabacloud-observability-mcp-server-go/pkg/client"
+	"github.com/alibabacloud-observability-mcp-server-go/pkg/config"
+	"github.com/alibabacloud-observability-mcp-server-go/pkg/logger"
+	"github.com/alibabacloud-observability-mcp-server-go/pkg/server"
+	"github.com/alibabacloud-observability-mcp-server-go/pkg/toolkit"
+	"github.com/alibabacloud-observability-mcp-server-go/pkg/toolkit/iaas"
+	"github.com/alibabacloud-observability-mcp-server-go/pkg/toolkit/paas"
+	"github.com/alibabacloud-observability-mcp-server-go/pkg/toolkit/shared"
 	"github.com/spf13/cobra"
 )
 
