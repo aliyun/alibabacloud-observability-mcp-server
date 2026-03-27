@@ -120,7 +120,7 @@ class IaaSToolkit:
             try:
                 sls_client: SLSClient = ctx.request_context.lifespan_context[
                     "sls_client"
-                ].with_region("cn-shanghai")
+                ].with_region(regionId)
                 request: CallAiToolsRequest = CallAiToolsRequest()
                 request.tool_name = "text_to_promql"
                 request.region_id = regionId
