@@ -10,6 +10,8 @@ import (
 	"strings"
 	"time"
 
+	sls "github.com/alibabacloud-go/sls-20201230/v6/client"
+	"github.com/alibabacloud-go/tea/tea"
 	"github.com/alibabacloud-observability-mcp-server-go/pkg/client"
 	"github.com/alibabacloud-observability-mcp-server-go/pkg/timeparse"
 	"github.com/alibabacloud-observability-mcp-server-go/pkg/toolkit"
@@ -719,7 +721,12 @@ func (h *slsHandler) handleExecuteSQL(ctx context.Context, params map[string]int
 		"project", project, "logStore", logStore, "region", regionID,
 		"limit", limit, "offset", offset, "reverse", reverse)
 
-	results, err := h.slsClient.Query(ctx, regionID, project, logStore, query, fromTS, toTS)
+	results, err := h.slsClient.Query(ctx, regionID, project, logStore, &sls.GetLogsRequest{
+		Query: tea.String(query),
+		From:  tea.Int32(int32(fromTS)),
+		To:    tea.Int32(int32(toTS)),
+		Line:  tea.Int64(int64(limit)),
+	})
 	if err != nil {
 		slog.ErrorContext(ctx, "sls_execute_sql failed", "error", err)
 		return buildResponse(nil, true, fmt.Sprintf("Query failed: %s", err)), nil
@@ -1149,7 +1156,11 @@ func (h *slsHandler) handleLogExplore(ctx context.Context, params map[string]int
 
 	// Step 1: Get total count to determine sampling rate
 	countQuery := fmt.Sprintf("%s | select count(1) as cnt", baseQuery)
-	countResult, err := h.slsClient.Query(ctx, regionID, project, logStore, countQuery, fromTS, toTS)
+	countResult, err := h.slsClient.Query(ctx, regionID, project, logStore, &sls.GetLogsRequest{
+		Query: tea.String(countQuery),
+		From:  tea.Int32(int32(fromTS)),
+		To:    tea.Int32(int32(toTS)),
+	})
 	if err != nil {
 		slog.ErrorContext(ctx, "sls_log_explore count query failed", "error", err)
 		return map[string]interface{}{
@@ -1198,7 +1209,11 @@ func (h *slsHandler) handleLogExplore(ctx context.Context, params map[string]int
     | limit 50000`, baseQuery, logField, samplingRate, logField, logField, groupField, logField)
 	}
 
-	modelResult, err := h.slsClient.Query(ctx, regionID, project, logStore, splQuery, fromTS, toTS)
+	modelResult, err := h.slsClient.Query(ctx, regionID, project, logStore, &sls.GetLogsRequest{
+		Query: tea.String(splQuery),
+		From:  tea.Int32(int32(fromTS)),
+		To:    tea.Int32(int32(toTS)),
+	})
 	if err != nil {
 		slog.ErrorContext(ctx, "sls_log_explore pattern generation failed", "error", err)
 		return map[string]interface{}{
@@ -1256,7 +1271,11 @@ func (h *slsHandler) handleLogExplore(ctx context.Context, params map[string]int
 | limit 200000`, baseQuery, logField, matchSamplingRate, logField, logField, groupField, modelID, logField, timeBucketSize, logField)
 	}
 
-	matchResult, err := h.slsClient.Query(ctx, regionID, project, logStore, matchQuery, fromTS, toTS)
+	matchResult, err := h.slsClient.Query(ctx, regionID, project, logStore, &sls.GetLogsRequest{
+		Query: tea.String(matchQuery),
+		From:  tea.Int32(int32(fromTS)),
+		To:    tea.Int32(int32(toTS)),
+	})
 	if err != nil {
 		slog.ErrorContext(ctx, "sls_log_explore pattern matching failed", "error", err)
 		return map[string]interface{}{
@@ -1660,7 +1679,11 @@ func (h *slsHandler) handleLogCompare(ctx context.Context, params map[string]int
 
 	// Step 1: Get total count to determine sampling rate
 	countQuery := fmt.Sprintf("%s | select count(1) as cnt", baseQuery)
-	countResult, err := h.slsClient.Query(ctx, regionID, project, logStore, countQuery, testFromTS, testToTS)
+	countResult, err := h.slsClient.Query(ctx, regionID, project, logStore, &sls.GetLogsRequest{
+		Query: tea.String(countQuery),
+		From:  tea.Int32(int32(testFromTS)),
+		To:    tea.Int32(int32(testToTS)),
+	})
 	if err != nil {
 		slog.ErrorContext(ctx, "sls_log_compare count query failed", "error", err)
 		return map[string]interface{}{
@@ -1709,7 +1732,11 @@ func (h *slsHandler) handleLogCompare(ctx context.Context, params map[string]int
     | limit 50000`, baseQuery, logField, samplingRate, logField, logField, groupField, logField)
 	}
 
-	testModelResult, err := h.slsClient.Query(ctx, regionID, project, logStore, splQuery, testFromTS, testToTS)
+	testModelResult, err := h.slsClient.Query(ctx, regionID, project, logStore, &sls.GetLogsRequest{
+		Query: tea.String(splQuery),
+		From:  tea.Int32(int32(testFromTS)),
+		To:    tea.Int32(int32(testToTS)),
+	})
 	if err != nil {
 		slog.ErrorContext(ctx, "sls_log_compare test pattern generation failed", "error", err)
 		return map[string]interface{}{
@@ -1728,7 +1755,11 @@ func (h *slsHandler) handleLogCompare(ctx context.Context, params map[string]int
 	}
 
 	// Step 3: Generate log patterns for control group
-	controlModelResult, err := h.slsClient.Query(ctx, regionID, project, logStore, splQuery, controlFromTS, controlToTS)
+	controlModelResult, err := h.slsClient.Query(ctx, regionID, project, logStore, &sls.GetLogsRequest{
+		Query: tea.String(splQuery),
+		From:  tea.Int32(int32(controlFromTS)),
+		To:    tea.Int32(int32(controlToTS)),
+	})
 	if err != nil {
 		slog.ErrorContext(ctx, "sls_log_compare control pattern generation failed", "error", err)
 		return map[string]interface{}{
@@ -1754,7 +1785,11 @@ func (h *slsHandler) handleLogCompare(ctx context.Context, params map[string]int
 | extend model_id = ret.model_id, error_msg = ret.error_msg
 | project model_id, error_msg`, baseQuery, logField, logField, logField, testModelID, controlModelID)
 
-	mergeResult, err := h.slsClient.Query(ctx, regionID, project, logStore, mergeQuery, testFromTS, testToTS)
+	mergeResult, err := h.slsClient.Query(ctx, regionID, project, logStore, &sls.GetLogsRequest{
+		Query: tea.String(mergeQuery),
+		From:  tea.Int32(int32(testFromTS)),
+		To:    tea.Int32(int32(testToTS)),
+	})
 	if err != nil {
 		slog.ErrorContext(ctx, "sls_log_compare merge models failed", "error", err)
 		return map[string]interface{}{
@@ -1820,7 +1855,11 @@ func (h *slsHandler) handleLogCompare(ctx context.Context, params map[string]int
 | limit 200000`, baseQuery, logField, groupField, testFromTS, testToTS, controlFromTS, controlToTS, matchSamplingRate, logField, logField, groupField, modelID, logField, logField)
 	}
 
-	matchResult, err := h.slsClient.Query(ctx, regionID, project, logStore, matchQuery, fromTimestamp, toTimestamp)
+	matchResult, err := h.slsClient.Query(ctx, regionID, project, logStore, &sls.GetLogsRequest{
+		Query: tea.String(matchQuery),
+		From:  tea.Int32(int32(fromTimestamp)),
+		To:    tea.Int32(int32(toTimestamp)),
+	})
 	if err != nil {
 		slog.ErrorContext(ctx, "sls_log_compare pattern matching failed", "error", err)
 		return map[string]interface{}{
