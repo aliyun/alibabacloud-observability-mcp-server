@@ -523,8 +523,8 @@ func SortByDiffScore(results []TimeSeriesCompareResult) {
 
 // FormatTimeRange creates a TimeRangeInfo from unix timestamps (seconds).
 func FormatTimeRange(fromTS, toTS int64) TimeRangeInfo {
-	fromDT := time.Unix(fromTS, 0).UTC()
-	toDT := time.Unix(toTS, 0).UTC()
+	fromDT := time.Unix(fromTS, 0)
+	toDT := time.Unix(toTS, 0)
 	return TimeRangeInfo{
 		FromTime: fromDT.Format("2006-01-02 15:04:05"),
 		ToTime:   toDT.Format("2006-01-02 15:04:05"),
