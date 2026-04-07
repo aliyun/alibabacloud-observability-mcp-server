@@ -6,6 +6,8 @@ import (
 	"testing"
 	"time"
 
+	sls "github.com/alibabacloud-go/sls-20201230/v6/client"
+	"github.com/alibabacloud-go/tea/tea"
 	"github.com/alibabacloud-observability-mcp-server-go/pkg/config"
 )
 
@@ -70,7 +72,12 @@ func TestSLSClient_Query(t *testing.T) {
 	client := NewSLSClient(testCredential(), cfg)
 
 	ctx := context.Background()
-	results, err := client.Query(ctx, "cn-hongkong", "my-project", "my-logstore", "* | SELECT count(*)", 1700000000, 1700003600)
+	requestParams := &sls.GetLogsRequest{
+		Query: tea.String("* | SELECT count(*)"),
+		From: tea.Int32(1700000000),
+		To: tea.Int32(1700003600),
+	}
+	results, err := client.Query(ctx, "cn-hongkong", "my-project", "my-logstore", requestParams)
 	if err != nil {
 		t.Fatalf("Query() error = %v; want nil", err)
 	}
@@ -155,7 +162,12 @@ func TestSLSClient_EmptyRegion(t *testing.T) {
 	client := NewSLSClient(testCredential(), cfg)
 	ctx := context.Background()
 
-	_, err := client.Query(ctx, "", "proj", "store", "*", 0, 1)
+	
+	_, err := client.Query(ctx, "", "proj", "store", &sls.GetLogsRequest{
+		Query: tea.String("*"),
+		From:  tea.Int32(0),
+		To:    tea.Int32(1),	
+	})
 	if err == nil {
 		t.Fatal("Query() with empty region should return error")
 	}
@@ -194,7 +206,11 @@ func TestSLSClient_ContextCancellation(t *testing.T) {
 	// The placeholder implementation succeeds on first try, so this tests
 	// that context is checked. For a real SDK call that blocks, the context
 	// cancellation would propagate through the HTTP client.
-	_, err := client.Query(ctx, "cn-hongkong", "proj", "store", "*", 0, 1)
+	_, err := client.Query(ctx, "cn-hongkong", "proj", "store", &sls.GetLogsRequest{
+		Query: tea.String("*"),
+		From:  tea.Int32(0),
+		To:    tea.Int32(1),
+	})
 	// Placeholder succeeds immediately even with cancelled context, which is
 	// acceptable. The important thing is it doesn't hang.
 	_ = err

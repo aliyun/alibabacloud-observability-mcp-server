@@ -5,6 +5,7 @@ import (
 	"strings"
 	"testing"
 
+	sls "github.com/alibabacloud-go/sls-20201230/v6/client"
 	"github.com/alibabacloud-observability-mcp-server-go/pkg/client"
 	"github.com/alibabacloud-observability-mcp-server-go/pkg/toolkit"
 	"github.com/alibabacloud-observability-mcp-server-go/pkg/toolkit/iaas"
@@ -45,7 +46,7 @@ var _ client.CMSClient = (*stubCMS)(nil)
 
 type stubSLS struct{}
 
-func (s *stubSLS) Query(_ context.Context, _, _, _, _ string, _, _ int64) ([]map[string]interface{}, error) {
+func (s *stubSLS) Query(_ context.Context, _, _, _ string, _ *sls.GetLogsRequest) ([]map[string]interface{}, error) {
 	return nil, nil
 }
 func (s *stubSLS) GetContextLogs(_ context.Context, _, _, _, _, _ string, _, _ int) (map[string]interface{}, error) {

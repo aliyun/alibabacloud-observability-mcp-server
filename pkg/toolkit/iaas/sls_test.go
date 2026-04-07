@@ -6,6 +6,7 @@ import (
 	"strings"
 	"testing"
 
+	sls "github.com/alibabacloud-go/sls-20201230/v6/client"
 	"github.com/alibabacloud-observability-mcp-server-go/pkg/client"
 	"github.com/alibabacloud-observability-mcp-server-go/pkg/toolkit"
 )
@@ -36,7 +37,7 @@ type mockSLSClient struct {
 	textToSQLErr                  error
 }
 
-func (m *mockSLSClient) Query(_ context.Context, _, _, _, _ string, _, _ int64) ([]map[string]interface{}, error) {
+func (m *mockSLSClient) Query(_ context.Context, _, _, _ string, _ *sls.GetLogsRequest) ([]map[string]interface{}, error) {
 	return m.queryResult, m.queryErr
 }
 

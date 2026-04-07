@@ -765,7 +765,7 @@ func (c *CMSClientImpl) DataAgentQuery(ctx context.Context, region, workspace, q
 	}
 
 	const digitalEmployeeName = "apsara-ops"
-	const skill = "data-agent"
+	const skill = "data-agent-pro"
 
 	language := os.Getenv("LANGUAGE")
 	if language == "" {

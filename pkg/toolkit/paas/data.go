@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"math"
 	"strings"
 
 	"github.com/alibabacloud-observability-mcp-server-go/pkg/client"
@@ -91,6 +92,24 @@ func validateMetricCompatibility(entitySetName, metricDomainName string) string 
 		)
 	}
 	return msg
+}
+
+// calculateTimeRange adjusts a time range to fit within [minDays, maxDays].
+// If the current duration is shorter than minDays, it extends from toTS backwards.
+// If longer than maxDays, it truncates from toTS backwards.
+func calculateTimeRange(fromTS, toTS int64, minDays, maxDays int) (int64, int64) {
+	currentDuration := toTS - fromTS
+	minDuration := int64(minDays) * 86400
+	maxDuration := int64(maxDays) * 86400
+
+	finalDuration := currentDuration
+	if finalDuration < minDuration {
+		finalDuration = minDuration
+	}
+	if finalDuration > maxDuration {
+		finalDuration = maxDuration
+	}
+	return toTS - finalDuration, toTS
 }
 
 // dataHandler holds the CMS client and provides tool constructors and handlers.
@@ -214,14 +233,6 @@ func (h *dataHandler) handleGetMetrics(ctx context.Context, params map[string]in
 	forecastDuration := paramString(params, "forecast_duration", "")
 	offset := paramString(params, "offset", "")
 
-	// Parse aggregate param (default true)
-	aggregate := true
-	if v, ok := params["aggregate"]; ok && v != nil {
-		if b, ok := v.(bool); ok {
-			aggregate = b
-		}
-	}
-
 	if domain == "" || entitySetName == "" || metricDomainName == "" || metric == "" || workspace == "" || regionID == "" {
 		return buildStandardResponse(nil, "", 0, 0, true,
 			"domain, entity_set_name, metric_domain_name, metric, workspace and regionId are required", timeRange), nil
@@ -241,12 +252,6 @@ func (h *dataHandler) handleGetMetrics(ctx context.Context, params map[string]in
 			fmt.Sprintf("invalid analysis_mode '%s', must be one of: basic, cluster, forecast, anomaly_detection", analysisMode), timeRange), nil
 	}
 
-	// Validate forecast_duration for forecast mode
-	if analysisMode == "forecast" && forecastDuration == "" {
-		return buildStandardResponse(nil, "", 0, 0, true,
-			"forecast_duration is required when analysis_mode is 'forecast'", timeRange), nil
-	}
-
 	// Validate offset is only used with basic mode
 	if offset != "" && analysisMode != "basic" {
 		return buildStandardResponse(nil, "", 0, 0, true,
@@ -260,17 +265,23 @@ func (h *dataHandler) handleGetMetrics(ctx context.Context, params map[string]in
 
 	entityIDsParam := buildEntityIDsParam(entityIDs)
 	stepParam := "''" // Auto step
-	aggregateParam := "true"
-	if !aggregate {
-		aggregateParam = "false"
+
+	// Calculate entity count (used for cluster mode n_clusters calculation)
+	entityCount := 0
+	if entityIDs != "" {
+		for _, id := range strings.Split(entityIDs, ",") {
+			if strings.TrimSpace(id) != "" {
+				entityCount++
+			}
+		}
 	}
 
 	// Build base query for getting metrics
-	// SPL format: get_metric(domain, metric_domain_name, metric, query_type, step, aggregate)
+	// SPL format: get_metric(domain, metric_domain_name, metric, query_type, step)
 	baseQuery := fmt.Sprintf(
-		".entity_set with(domain='%s', name='%s'%s) | entity-call get_metric('%s', '%s', '%s', '%s', %s, %s)",
+		".entity_set with(domain='%s', name='%s'%s) | entity-call get_metric('%s', '%s', '%s', '%s', %s)",
 		domain, entitySetName, entityIDsParam,
-		domain, metricDomainName, metric, queryType, stepParam, aggregateParam,
+		domain, metricDomainName, metric, queryType, stepParam,
 	)
 
 	var query string
@@ -341,8 +352,36 @@ func (h *dataHandler) handleGetMetrics(ctx context.Context, params map[string]in
 		return buildStandardResponse(data, query, fromTS, toTS, false, "", timeRange), nil
 
 	case "cluster":
-		// Cluster mode: K-Means clustering analysis
-		query = fmt.Sprintf("%s | ml-call kmeans()", baseQuery)
+		// Cluster mode: K-Means clustering analysis (matching Python implementation)
+		// Calculate n_clusters: ceil(entityCount / 2), clamped to [2, 7]
+		nClusters := 2
+		if entityCount > 0 {
+			nClusters = int(math.Ceil(float64(entityCount) / 2))
+			if nClusters < 2 {
+				nClusters = 2
+			}
+			if nClusters > 7 {
+				nClusters = 7
+			}
+		}
+
+		// Cluster mode needs aggregate=false in the base query
+		clusterBaseQuery := fmt.Sprintf(
+			".entity_set with(domain='%s', name='%s'%s) | entity-call get_metric('%s', '%s', '%s', '%s', %s, aggregate=false)",
+			domain, entitySetName, entityIDsParam,
+			domain, metricDomainName, metric, queryType, stepParam,
+		)
+
+		query = fmt.Sprintf(`%s
+| stats __entity_id_array__ = array_agg(__entity_id__), __labels_array__ = array_agg(__labels__), ts_array = array_agg(__ts__), ds_array = array_agg(__value__)
+| extend ret = cluster(ds_array, 'kmeans', '{"n_clusters":"%d"}')
+| extend __cluster_index__ = ret.assignments, error_msg = ret.error_msg, __entity_id__ = __entity_id_array__, __labels__ = __labels_array__, __value__ = ds_array, __ts__ = ts_array
+| project __entity_id__, __labels__, __ts__, __value__, __cluster_index__
+| unnest
+| stats cnt = count(1), __entities__ = array_agg(__entity_id__), __labels_agg__ = array_agg(__ts__), __value_agg__ = array_agg(__value__) by __cluster_index__
+| extend __sample_value__ = __value_agg__[1], __sample_ts__ = __labels_agg__[1]
+| extend __sample_value_min__ = array_min(__sample_value__), __sample_value_max__ = array_max(__sample_value__), __sample_value_avg__ = reduce(__sample_value__, 0.0, (s, x) -> s + x, s -> s) / cast(cardinality(__sample_value__) as double)
+| project __cluster_index__, __entities__, __sample_ts__, __sample_value__, __sample_value_max__, __sample_value_min__, __sample_value_avg__`, clusterBaseQuery, nClusters)
 
 		slog.InfoContext(ctx, "umodel_get_metrics",
 			"workspace", workspace, "domain", domain, "metric", metric,
@@ -359,48 +398,96 @@ func (h *dataHandler) handleGetMetrics(ctx context.Context, params map[string]in
 		return buildStandardResponse(data, query, fromTS, toTS, false, "", timeRange), nil
 
 	case "forecast":
-		// Forecast mode: time series prediction
-		// Parse forecast duration to get the prediction period
+		// Forecast mode: time series prediction (matching Python implementation)
+		// Default forecast_duration to 30 minutes if not provided
+		if forecastDuration == "" {
+			forecastDuration = "30m"
+		}
 		forecastSeconds := ParseDurationToSeconds(forecastDuration)
 		if forecastSeconds <= 0 {
-			return buildStandardResponse(nil, "", 0, 0, true,
-				fmt.Sprintf("invalid forecast_duration '%s', use format like '1h', '30m', '1d'", forecastDuration), timeRange), nil
+			forecastSeconds = 1800 // Default 30 minutes
 		}
 
-		// Build forecast query with duration parameter
-		query = fmt.Sprintf("%s | ml-call forecast('%s')", baseQuery, forecastDuration)
+		// Adjust time range: 1-5 days
+		adjustedFrom, adjustedTo := calculateTimeRange(fromTS, toTS, 1, 5)
+		learningDuration := adjustedTo - adjustedFrom
+
+		// Calculate forecast points
+		forecastPoints := int(forecastSeconds * 200 / learningDuration)
+		if forecastPoints < 3 {
+			forecastPoints = 3
+		}
+
+		// Forecast mode needs aggregate=false in the base query
+		forecastBaseQuery := fmt.Sprintf(
+			".entity_set with(domain='%s', name='%s'%s) | entity-call get_metric('%s', '%s', '%s', '%s', %s, aggregate=false)",
+			domain, entitySetName, entityIDsParam,
+			domain, metricDomainName, metric, queryType, stepParam,
+		)
+
+		query = fmt.Sprintf(`%s
+| extend r = series_forecast(__value__, %d)
+| extend __forecast_rst_m__ = zip(r.time_series, r.forecast_metric_series, r.forecast_metric_lower_series, r.forecast_metric_upper_series), __forecast_msg__ = r.error_msg
+| extend __forecast_rst__ = slice(__forecast_rst_m__, cardinality(__forecast_rst_m__) - %d + 1, %d)
+| project __labels__, __name__, __ts__, __value__, __forecast_rst__, __forecast_msg__, __entity_id__
+| extend __forecast_ts__ = transform(__forecast_rst__, x->x.field0), __forecast_value__ = transform(__forecast_rst__, x->x.field1), __forecast_lower_value__ = transform(__forecast_rst__, x->x.field2), __forecast_upper_value__ = transform(__forecast_rst__, x->x.field3)
+| project __labels__, __name__, __entity_id__, __forecast_ts__, __forecast_value__, __forecast_lower_value__, __forecast_upper_value__`,
+			forecastBaseQuery, forecastPoints, forecastPoints, forecastPoints)
 
 		slog.InfoContext(ctx, "umodel_get_metrics",
 			"workspace", workspace, "domain", domain, "metric", metric,
 			"analysis_mode", analysisMode, "forecast_duration", forecastDuration, "region", regionID)
 
-		result, err := h.cmsClient.ExecuteSPL(ctx, regionID, workspace, query, fromTS, toTS, 1000)
+		result, err := h.cmsClient.ExecuteSPL(ctx, regionID, workspace, query, adjustedFrom, adjustedTo, 1000)
 		if err != nil {
 			slog.ErrorContext(ctx, "umodel_get_metrics forecast failed", "error", err)
-			return buildStandardResponse(nil, query, fromTS, toTS, true,
+			return buildStandardResponse(nil, query, adjustedFrom, adjustedTo, true,
 				fmt.Sprintf("Failed to perform forecast analysis: %s", err), timeRange), nil
 		}
 
 		data := result["data"]
-		return buildStandardResponse(data, query, fromTS, toTS, false, "", timeRange), nil
+		return buildStandardResponse(data, query, adjustedFrom, adjustedTo, false, "", timeRange), nil
 
 	case "anomaly_detection":
-		// Anomaly detection mode: detect anomalies in time series
-		query = fmt.Sprintf("%s | ml-call anomaly_detection()", baseQuery)
+		// Anomaly detection mode: detect anomalies in time series (matching Python implementation)
+		// Adjust time range: 1-3 days
+		adjustedFrom, adjustedTo := calculateTimeRange(fromTS, toTS, 1, 3)
+		// Convert to nanosecond timestamp
+		startTimeNs := adjustedFrom * 1_000_000_000
+
+		// Anomaly detection mode needs aggregate=false in the base query
+		anomalyBaseQuery := fmt.Sprintf(
+			".entity_set with(domain='%s', name='%s'%s) | entity-call get_metric('%s', '%s', '%s', '%s', %s, aggregate=false)",
+			domain, entitySetName, entityIDsParam,
+			domain, metricDomainName, metric, queryType, stepParam,
+		)
+
+		query = fmt.Sprintf(`%s
+| extend slice_index = find_first_index(__ts__, x -> x > %d)
+| extend len = cardinality(__ts__)
+| extend r = series_decompose_anomalies(__value__)
+| extend anomaly_b = r.anomalies_score_series, anomaly_type = r.anomalies_type_series, __anomaly_msg__ = r.error_msg
+| extend x = zip(anomaly_b, __ts__, anomaly_type, __value__)
+| extend __anomaly_rst__ = filter(x, x-> x.field0 > 0 and x.field1 >= %d)
+| extend __anomaly_list_ = transform(__anomaly_rst__, x-> map(ARRAY['anomary_time', 'anomary_type', 'value'], ARRAY[cast(x.field1 as varchar), x.field2, cast(x.field3 as varchar)]))
+| extend __detection_value__ = slice(__value__, slice_index, len - slice_index)
+| extend __value_min__ = array_min(__detection_value__), __value_max__ = array_max(__detection_value__), __value_avg__ = reduce(__detection_value__, 0.0, (s, x) -> s + x, s -> s) / cast(len as double)
+| project __entity_id__, __anomaly_list_, __anomaly_msg__, __value_min__, __value_max__, __value_avg__`,
+			anomalyBaseQuery, startTimeNs, startTimeNs)
 
 		slog.InfoContext(ctx, "umodel_get_metrics",
 			"workspace", workspace, "domain", domain, "metric", metric,
 			"analysis_mode", analysisMode, "region", regionID)
 
-		result, err := h.cmsClient.ExecuteSPL(ctx, regionID, workspace, query, fromTS, toTS, 1000)
+		result, err := h.cmsClient.ExecuteSPL(ctx, regionID, workspace, query, adjustedFrom, adjustedTo, 1000)
 		if err != nil {
 			slog.ErrorContext(ctx, "umodel_get_metrics anomaly_detection failed", "error", err)
-			return buildStandardResponse(nil, query, fromTS, toTS, true,
+			return buildStandardResponse(nil, query, adjustedFrom, adjustedTo, true,
 				fmt.Sprintf("Failed to perform anomaly detection: %s", err), timeRange), nil
 		}
 
 		data := result["data"]
-		return buildStandardResponse(data, query, fromTS, toTS, false, "", timeRange), nil
+		return buildStandardResponse(data, query, adjustedFrom, adjustedTo, false, "", timeRange), nil
 
 	default:
 		return buildStandardResponse(nil, "", 0, 0, true,

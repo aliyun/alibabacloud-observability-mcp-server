@@ -19,7 +19,7 @@ import (
 // SLSClient is the interface for interacting with Alibaba Cloud Simple Log Service.
 type SLSClient interface {
 	// Query executes a log query against the specified logstore.
-	Query(ctx context.Context, region, project, logstore, query string, from, to int64) ([]map[string]interface{}, error)
+	Query(ctx context.Context, region, project, logstore string, requestParams *sls.GetLogsRequest) ([]map[string]interface{}, error)
 	// GetContextLogs retrieves context logs around an anchor log identified by pack_id and pack_meta.
 	GetContextLogs(ctx context.Context, region, project, logstore, packID, packMeta string, backLines, forwardLines int) (map[string]interface{}, error)
 	// ListProjects returns all SLS project names in the given region.
@@ -127,7 +127,7 @@ func (c *SLSClientImpl) runtimeOptions() *util.RuntimeOptions {
 }
 
 // Query executes a log query against the specified logstore.
-func (c *SLSClientImpl) Query(ctx context.Context, region, project, logstore, query string, from, to int64) ([]map[string]interface{}, error) {
+func (c *SLSClientImpl) Query(ctx context.Context, region, project, logstore string, requestParams *sls.GetLogsRequest) ([]map[string]interface{}, error) { 
 	client, err := c.createClient(region)
 	if err != nil {
 		return nil, err
@@ -140,17 +140,12 @@ func (c *SLSClientImpl) Query(ctx context.Context, region, project, logstore, qu
 			"region", region,
 			"project", project,
 			"logstore", logstore,
-			"from", from,
-			"to", to,
+			"from", requestParams.From,
+			"to", requestParams.To,
 		)
 
-		request := &sls.GetLogsRequest{
-			From:  tea.Int32(int32(from)),
-			To:    tea.Int32(int32(to)),
-			Query: tea.String(query),
-		}
 
-		resp, err := client.GetLogsWithOptions(tea.String(project), tea.String(logstore), request, map[string]*string{}, c.runtimeOptions())
+		resp, err := client.GetLogsWithOptions(tea.String(project), tea.String(logstore), requestParams, map[string]*string{}, c.runtimeOptions())
 		if err != nil {
 			return fmt.Errorf("sls api error: %w", err)
 		}

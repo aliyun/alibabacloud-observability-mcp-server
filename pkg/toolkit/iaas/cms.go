@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"log/slog"
 
+	sls "github.com/alibabacloud-go/sls-20201230/v6/client"
+	"github.com/alibabacloud-go/tea/tea"
 	"github.com/alibabacloud-observability-mcp-server-go/pkg/client"
 	"github.com/alibabacloud-observability-mcp-server-go/pkg/toolkit"
 )
@@ -129,7 +131,11 @@ func (h *cmsHandler) handleExecutePromQL(ctx context.Context, params map[string]
         latest_val = array_agg(latest_val)
 | project title_agg, cnt, latest_ts, latest_val`, query)
 
-	results, err := h.slsClient.Query(ctx, regionID, project, metricStore, splQuery, fromTS, toTS)
+	results, err := h.slsClient.Query(ctx, regionID, project, metricStore, &sls.GetLogsRequest{
+		Query: tea.String(splQuery),
+		From:  tea.Int32(int32(fromTS)),
+		To:    tea.Int32(int32(toTS)),
+	})
 	if err != nil {
 		slog.ErrorContext(ctx, "cms_execute_promql failed", "error", err)
 		if isMetricStoreNotFoundError(err) {
