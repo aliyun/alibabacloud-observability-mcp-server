@@ -41,7 +41,7 @@ var _ client.CMSClient = (*stubCMS)(nil)
 
 type stubSLS struct{}
 
-func (s *stubSLS) Query(_ context.Context, _, _, _, _ string, _, _ int64) ([]map[string]interface{}, error) {
+func (s *stubSLS) Query(_ context.Context, _, _, _, _ string, _, _ int64, _, _ int, _ bool) ([]map[string]interface{}, error) {
 	return nil, nil
 }
 func (s *stubSLS) GetContextLogs(_ context.Context, _, _, _, _, _ string, _, _ int) (map[string]interface{}, error) {

@@ -19,7 +19,8 @@ import (
 // SLSClient is the interface for interacting with Alibaba Cloud Simple Log Service.
 type SLSClient interface {
 	// Query executes a log query against the specified logstore.
-	Query(ctx context.Context, region, project, logstore, query string, from, to int64) ([]map[string]interface{}, error)
+	// limit controls max rows returned (1-100, 0 means use server default); offset is for pagination; reverse returns logs in reverse chronological order.
+	Query(ctx context.Context, region, project, logstore, query string, from, to int64, limit, offset int, reverse bool) ([]map[string]interface{}, error)
 	// GetContextLogs retrieves context logs around an anchor log identified by pack_id and pack_meta.
 	GetContextLogs(ctx context.Context, region, project, logstore, packID, packMeta string, backLines, forwardLines int) (map[string]interface{}, error)
 	// ListProjects returns all SLS project names in the given region.
@@ -127,7 +128,9 @@ func (c *SLSClientImpl) runtimeOptions() *util.RuntimeOptions {
 }
 
 // Query executes a log query against the specified logstore.
-func (c *SLSClientImpl) Query(ctx context.Context, region, project, logstore, query string, from, to int64) ([]map[string]interface{}, error) {
+// limit controls the max number of rows returned (0 means use the server default of 100).
+// offset is used for pagination; reverse returns logs in reverse chronological order.
+func (c *SLSClientImpl) Query(ctx context.Context, region, project, logstore, query string, from, to int64, limit, offset int, reverse bool) ([]map[string]interface{}, error) {
 	client, err := c.createClient(region)
 	if err != nil {
 		return nil, err
@@ -142,12 +145,18 @@ func (c *SLSClientImpl) Query(ctx context.Context, region, project, logstore, qu
 			"logstore", logstore,
 			"from", from,
 			"to", to,
+			"limit", limit,
+			"offset", offset,
+			"reverse", reverse,
 		)
 
 		request := &sls.GetLogsRequest{
-			From:  tea.Int32(int32(from)),
-			To:    tea.Int32(int32(to)),
-			Query: tea.String(query),
+			From:    tea.Int32(int32(from)),
+			To:      tea.Int32(int32(to)),
+			Query:   tea.String(query),
+			Line:    tea.Int64(int64(limit)),
+			Offset:  tea.Int64(int64(offset)),
+			Reverse: tea.Bool(reverse),
 		}
 
 		resp, err := client.GetLogsWithOptions(tea.String(project), tea.String(logstore), request, map[string]*string{}, c.runtimeOptions())

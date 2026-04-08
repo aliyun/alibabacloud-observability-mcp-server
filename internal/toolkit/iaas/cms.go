@@ -345,7 +345,7 @@ func (h *cmsHandler) handleExecutePromQL(ctx context.Context, params map[string]
 	// SPL format: .metricstore with(promql_query='<query>')
 	splQuery := fmt.Sprintf(".%s with(promql_query='%s')", metricStore, query)
 
-	results, err := h.slsClient.Query(ctx, regionID, project, metricStore, splQuery, fromTS, toTS)
+	results, err := h.slsClient.Query(ctx, regionID, project, metricStore, splQuery, fromTS, toTS, 100, 0, false)
 	if err != nil {
 		slog.ErrorContext(ctx, "cms_execute_promql failed", "error", err)
 		if isMetricStoreNotFoundError(err) {

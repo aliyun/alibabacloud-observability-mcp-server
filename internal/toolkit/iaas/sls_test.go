@@ -36,7 +36,7 @@ type mockSLSClient struct {
 	textToSQLErr    error
 }
 
-func (m *mockSLSClient) Query(_ context.Context, _, _, _, _ string, _, _ int64) ([]map[string]interface{}, error) {
+func (m *mockSLSClient) Query(_ context.Context, _, _, _, _ string, _, _ int64, _, _ int, _ bool) ([]map[string]interface{}, error) {
 	return m.queryResult, m.queryErr
 }
 

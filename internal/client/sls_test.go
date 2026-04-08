@@ -70,7 +70,7 @@ func TestSLSClient_Query(t *testing.T) {
 	client := NewSLSClient(testCredential(), cfg)
 
 	ctx := context.Background()
-	results, err := client.Query(ctx, "cn-hangzhou", "my-project", "my-logstore", "* | SELECT count(*)", 1700000000, 1700003600)
+	results, err := client.Query(ctx, "cn-hangzhou", "my-project", "my-logstore", "* | SELECT count(*)", 1700000000, 1700003600, 100, 0, false)
 	if err != nil {
 		t.Fatalf("Query() error = %v; want nil", err)
 	}
@@ -155,7 +155,7 @@ func TestSLSClient_EmptyRegion(t *testing.T) {
 	client := NewSLSClient(testCredential(), cfg)
 	ctx := context.Background()
 
-	_, err := client.Query(ctx, "", "proj", "store", "*", 0, 1)
+	_, err := client.Query(ctx, "", "proj", "store", "*", 0, 1, 100, 0, false)
 	if err == nil {
 		t.Fatal("Query() with empty region should return error")
 	}
@@ -194,7 +194,7 @@ func TestSLSClient_ContextCancellation(t *testing.T) {
 	// The placeholder implementation succeeds on first try, so this tests
 	// that context is checked. For a real SDK call that blocks, the context
 	// cancellation would propagate through the HTTP client.
-	_, err := client.Query(ctx, "cn-hangzhou", "proj", "store", "*", 0, 1)
+	_, err := client.Query(ctx, "cn-hangzhou", "proj", "store", "*", 0, 1, 100, 0, false)
 	// Placeholder succeeds immediately even with cancelled context, which is
 	// acceptable. The important thing is it doesn't hang.
 	_ = err
