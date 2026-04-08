@@ -14,6 +14,7 @@ import (
 	"github.com/alibabacloud-observability-mcp-server-go/pkg/config"
 	"github.com/alibabacloud-observability-mcp-server-go/pkg/logger"
 	"github.com/alibabacloud-observability-mcp-server-go/pkg/server"
+	"github.com/alibabacloud-observability-mcp-server-go/pkg/timeparse"
 	"github.com/alibabacloud-observability-mcp-server-go/pkg/toolkit"
 	"github.com/alibabacloud-observability-mcp-server-go/pkg/toolkit/iaas"
 	"github.com/alibabacloud-observability-mcp-server-go/pkg/toolkit/paas"
@@ -94,6 +95,12 @@ func runStart(cmd *cobra.Command, _ []string) error {
 
 	// Initialize structured logger.
 	logger.Init(cfg.Logging.Level, cfg.Logging.DebugMode)
+
+	// Set timezone for time formatting/parsing.
+	if loc, err := cfg.GetTimezoneLocation(); err == nil {
+		timeparse.SetLocation(loc)
+	}
+
 	slog.Info("starting server",
 		"version", version,
 		"transport", cfg.Server.Transport,
@@ -103,7 +110,7 @@ func runStart(cmd *cobra.Command, _ []string) error {
 	)
 
 	// Create credential provider.
-	cred := client.NewCredentialProvider(cfg.Credentials.AccessKeyID, cfg.Credentials.AccessKeySecret)
+	cred := client.NewCredentialProvider(cfg.Credentials.AccessKeyID, cfg.Credentials.AccessKeySecret, cfg.Credentials.SecurityToken)
 
 	// Validate credentials early.
 	if _, err := cred.GetAccessKeyID(); err != nil {

@@ -196,9 +196,11 @@ func parseTimestamp(expr string) (int64, error) {
 }
 
 // parseDateTimeString handles date-time strings in various formats.
+// Uses the configured timezone (default Asia/Shanghai) for formats without
+// explicit timezone info, matching the Python implementation behavior.
 func parseDateTimeString(expr string) (int64, error) {
 	for _, layout := range dateTimeFormats {
-		t, err := time.Parse(layout, expr)
+		t, err := time.ParseInLocation(layout, expr, location)
 		if err == nil {
 			return t.Unix(), nil
 		}

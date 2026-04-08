@@ -231,7 +231,7 @@ func (h *datasetHandler) handleSearchEntitySet(ctx context.Context, params map[s
 	query += fmt.Sprintf(" | where strpos(metadata, '%s') > 0 or strpos(spec, '%s') > 0", searchText, searchText)
 
 	// Project name column and limit
-	query += " | extend name = json_extract_scalar(metadata, '$.name') | project name | limit 100"
+	query += fmt.Sprintf(" | extend name = json_extract_scalar(metadata, '$.name') | project name | limit %d", limit)
 
 	slog.InfoContext(ctx, "umodel_search_entity_set", "workspace", workspace, "search_text", searchText, "domain", domain, "region", regionID)
 

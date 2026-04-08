@@ -198,13 +198,15 @@ toolkit:
 
 | 环境变量 | 说明 | 必需 |
 |---------|------|------|
-| `ALIBABA_CLOUD_ACCESS_KEY_ID` | AccessKey ID | 是 |
-| `ALIBABA_CLOUD_ACCESS_KEY_SECRET` | AccessKey Secret | 是 |
+| `ALIBABA_CLOUD_ACCESS_KEY_ID` | AccessKey ID | 否* |
+| `ALIBABA_CLOUD_ACCESS_KEY_SECRET` | AccessKey Secret | 否* |
 | `ALIBABA_CLOUD_SECURITY_TOKEN` | STS Token（临时凭证） | 否 |
 | `ALIBABA_CLOUD_REGION` | 默认区域 | 否 |
 | `ALIBABA_CLOUD_WORKSPACE` | 默认工作空间（PaaS 工具需要） | 否 |
 
-凭证优先从 `.env` 文件读取，如未找到则从 shell 环境变量读取。
+> \* 当未配置 AccessKey 时，服务会自动使用[默认凭据链](https://help.aliyun.com/zh/sdk/developer-reference/v2-manage-go-access-credentials)获取凭证（支持 ECS RAM Role、OIDC、配置文件等方式）。在 ECS、函数计算等云环境中无需手动配置 AccessKey。
+
+凭证解析优先级：CLI 参数 / `.env` 文件 > shell 环境变量 > 默认凭据链。
 
 > **💡 默认值自动填充**
 >
@@ -447,9 +449,11 @@ go test -tags=integration ./pkg/toolkit/... -v
 
 ### 阿里云访问密钥 (AccessKey)
 
-- 服务运行需要有效的阿里云 AccessKey ID 和 AccessKey Secret
+- 服务运行需要有效的阿里云凭证，支持以下方式（按优先级排列）：
+  1. AccessKey ID + AccessKey Secret（通过 `.env` 文件、环境变量或 CLI 参数传入）
+  2. STS 临时凭证（设置 `ALIBABA_CLOUD_SECURITY_TOKEN` 环境变量）
+  3. [默认凭据链](https://help.aliyun.com/zh/sdk/developer-reference/v2-manage-go-access-credentials)自动发现（ECS RAM Role、OIDC、凭据配置文件等）
 - 获取和管理 AccessKey，请参考 [阿里云 AccessKey 管理官方文档](https://help.aliyun.com/document_detail/53045.html)
-- 支持使用 STS Token 临时凭证（设置 `ALIBABA_CLOUD_SECURITY_TOKEN` 环境变量）
 
 ### RAM 授权
 

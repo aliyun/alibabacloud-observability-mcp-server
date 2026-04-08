@@ -113,6 +113,7 @@ func TestParseTimeExpression_GrafanaStyle(t *testing.T) {
 }
 
 func TestParseTimeExpression_DateTimeString(t *testing.T) {
+	loc := GetLocation() // Asia/Shanghai by default
 	tests := []struct {
 		name string
 		expr string
@@ -121,27 +122,27 @@ func TestParseTimeExpression_DateTimeString(t *testing.T) {
 		{
 			"YYYY-MM-DD HH:MM:SS",
 			"2024-01-01 00:00:00",
-			time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC).Unix(),
+			time.Date(2024, 1, 1, 0, 0, 0, 0, loc).Unix(),
 		},
 		{
 			"ISO 8601 with Z",
 			"2024-01-01T00:00:00Z",
-			time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC).Unix(),
+			time.Date(2024, 1, 1, 0, 0, 0, 0, loc).Unix(),
 		},
 		{
 			"ISO 8601 without Z",
 			"2024-01-01T00:00:00",
-			time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC).Unix(),
+			time.Date(2024, 1, 1, 0, 0, 0, 0, loc).Unix(),
 		},
 		{
 			"YYYY-MM-DD HH:MM",
 			"2024-06-15 14:30",
-			time.Date(2024, 6, 15, 14, 30, 0, 0, time.UTC).Unix(),
+			time.Date(2024, 6, 15, 14, 30, 0, 0, loc).Unix(),
 		},
 		{
 			"YYYY-MM-DD only",
 			"2024-06-15",
-			time.Date(2024, 6, 15, 0, 0, 0, 0, time.UTC).Unix(),
+			time.Date(2024, 6, 15, 0, 0, 0, 0, loc).Unix(),
 		},
 	}
 

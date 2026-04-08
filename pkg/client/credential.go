@@ -4,7 +4,11 @@ package client
 
 import (
 	"errors"
+	"fmt"
+	"log/slog"
 	"os"
+
+	"github.com/aliyun/credentials-go/credentials"
 )
 
 // ErrNoCredentials is returned when no credential source provides valid
@@ -128,13 +132,75 @@ func (p *ChainCredentialProvider) GetSecurityToken() (string, error) {
 	return "", nil
 }
 
+// --- SDKCredentialProvider ---
+
+// SDKCredentialProvider wraps the Alibaba Cloud credentials SDK default
+// credential chain. It supports automatic credential discovery including:
+//   - Environment variables (ALIBABA_CLOUD_ACCESS_KEY_ID, etc.)
+//   - RAM Role ARN (ALIBABA_CLOUD_ROLE_ARN)
+//   - ECS RAM Role (for ECS/FC instances)
+//   - OIDC Role ARN
+//   - Credentials file (~/.alibabacloud/credentials)
+//
+// This matches the Python SDK's CredClient() behavior.
+type SDKCredentialProvider struct {
+	cred credentials.Credential
+}
+
+// NewSDKCredentialProvider creates a provider using the Alibaba Cloud default
+// credential chain. Returns nil if the SDK cannot initialize.
+func NewSDKCredentialProvider() *SDKCredentialProvider {
+	cred, err := credentials.NewCredential(nil)
+	if err != nil {
+		slog.Debug("sdk default credential chain not available", "error", err)
+		return nil
+	}
+	return &SDKCredentialProvider{cred: cred}
+}
+
+func (p *SDKCredentialProvider) GetAccessKeyID() (string, error) {
+	model, err := p.cred.GetCredential()
+	if err != nil {
+		return "", fmt.Errorf("sdk credential: %w", err)
+	}
+	if model.AccessKeyId == nil || *model.AccessKeyId == "" {
+		return "", ErrNoCredentials
+	}
+	return *model.AccessKeyId, nil
+}
+
+func (p *SDKCredentialProvider) GetAccessKeySecret() (string, error) {
+	model, err := p.cred.GetCredential()
+	if err != nil {
+		return "", fmt.Errorf("sdk credential: %w", err)
+	}
+	if model.AccessKeySecret == nil || *model.AccessKeySecret == "" {
+		return "", ErrNoCredentials
+	}
+	return *model.AccessKeySecret, nil
+}
+
+func (p *SDKCredentialProvider) GetSecurityToken() (string, error) {
+	model, err := p.cred.GetCredential()
+	if err != nil {
+		return "", fmt.Errorf("sdk credential: %w", err)
+	}
+	if model.SecurityToken == nil {
+		return "", nil
+	}
+	return *model.SecurityToken, nil
+}
+
 // --- Factory ---
 
 // NewCredentialProvider builds a ChainCredentialProvider with the standard
-// priority order: CLI parameters (static) > environment variables.
-// If accessKeyID and accessKeySecret are non-empty, a StaticCredentialProvider
-// is placed first in the chain.
-func NewCredentialProvider(accessKeyID, accessKeySecret string) CredentialProvider {
+// priority order:
+//  1. CLI parameters (static) — highest priority
+//  2. Environment variables (ALIBABA_CLOUD_ACCESS_KEY_ID, etc.)
+//  3. Alibaba Cloud SDK default credential chain (ECS RAM Role, OIDC, etc.)
+//
+// This matches the Python SDK's credential resolution behavior.
+func NewCredentialProvider(accessKeyID, accessKeySecret, securityToken string) CredentialProvider {
 	var providers []CredentialProvider
 
 	// CLI / static credentials have highest priority.
@@ -142,11 +208,17 @@ func NewCredentialProvider(accessKeyID, accessKeySecret string) CredentialProvid
 		providers = append(providers, &StaticCredentialProvider{
 			AccessKeyID:     accessKeyID,
 			AccessKeySecret: accessKeySecret,
+			SecurityToken:   securityToken,
 		})
 	}
 
 	// Environment variables are next.
 	providers = append(providers, &EnvCredentialProvider{})
+
+	// Alibaba Cloud SDK default credential chain as final fallback.
+	if sdkProvider := NewSDKCredentialProvider(); sdkProvider != nil {
+		providers = append(providers, sdkProvider)
+	}
 
 	return &ChainCredentialProvider{Providers: providers}
 }
