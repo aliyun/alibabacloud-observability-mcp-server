@@ -128,7 +128,7 @@ func (c *SLSClientImpl) runtimeOptions() *util.RuntimeOptions {
 }
 
 // Query executes a log query against the specified logstore.
-// limit controls the max number of rows returned (0 means use the server default of 100).
+// limit controls the max number of rows returned (0 or negative means use the server default of 100).
 // offset is used for pagination; reverse returns logs in reverse chronological order.
 func (c *SLSClientImpl) Query(ctx context.Context, region, project, logstore, query string, from, to int64, limit, offset int, reverse bool) ([]map[string]interface{}, error) {
 	client, err := c.createClient(region)
@@ -154,9 +154,12 @@ func (c *SLSClientImpl) Query(ctx context.Context, region, project, logstore, qu
 			From:    tea.Int32(int32(from)),
 			To:      tea.Int32(int32(to)),
 			Query:   tea.String(query),
-			Line:    tea.Int64(int64(limit)),
 			Offset:  tea.Int64(int64(offset)),
 			Reverse: tea.Bool(reverse),
+		}
+		// Only set Line if a positive limit is specified; otherwise the server uses its default (100).
+		if limit > 0 {
+			request.Line = tea.Int64(int64(limit))
 		}
 
 		resp, err := client.GetLogsWithOptions(tea.String(project), tea.String(logstore), request, map[string]*string{}, c.runtimeOptions())
