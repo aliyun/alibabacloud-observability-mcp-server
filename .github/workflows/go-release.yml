@@ -1,0 +1,112 @@
+name: Go Binary Release
+
+on:
+  # Tag 触发：推送 go/v* tag 时自动发布
+  push:
+    tags:
+      - 'go/v*'
+
+  # 手动触发：仅用于 dry_run 测试
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: '试运行 (仅构建验证，不发布)'
+        required: false
+        type: boolean
+        default: true
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: read
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Extract version
+        id: version
+        run: |
+          if [[ "${{ github.ref_type }}" == "tag" ]]; then
+            VERSION="${GITHUB_REF#refs/tags/go/v}"
+          else
+            VERSION="dev"
+          fi
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "Version: $VERSION"
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.23'
+
+      - name: Run tests
+        run: go test ./... -v -count=1
+
+      - name: Build all platforms
+        run: make build-all VERSION=v${{ steps.version.outputs.version }}
+
+      - name: List built binaries
+        run: ls -la bin/
+
+      - name: Generate release notes
+        if: github.ref_type == 'tag'
+        id: notes
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          VERSION="${{ steps.version.outputs.version }}"
+
+          # 找到上一个 go release tag
+          PREV_TAG=$(git tag --list 'go/v*' --sort=-version:refname | grep -v "go/v${VERSION}" | head -n1)
+
+          echo "## Go v${VERSION}" > /tmp/release_notes.md
+          echo "" >> /tmp/release_notes.md
+
+          if [ -n "$PREV_TAG" ]; then
+            echo "**Changes since ${PREV_TAG}:**" >> /tmp/release_notes.md
+            echo "" >> /tmp/release_notes.md
+            PREV_DATE=$(git log -1 --format=%aI "$PREV_TAG")
+            gh pr list --state merged --base master --limit 50 \
+              --search "merged:>=${PREV_DATE}" \
+              --json number,title,author \
+              --jq '.[] | "- \(.title) (#\(.number)) @\(.author.login)"' >> /tmp/release_notes.md
+          else
+            echo "**Initial release**" >> /tmp/release_notes.md
+          fi
+
+          echo "" >> /tmp/release_notes.md
+          echo "### Supported Platforms" >> /tmp/release_notes.md
+          echo "- linux/amd64, linux/arm64" >> /tmp/release_notes.md
+          echo "- darwin/amd64, darwin/arm64" >> /tmp/release_notes.md
+          echo "- windows/amd64, windows/arm64" >> /tmp/release_notes.md
+
+          echo "notes<<EOF" >> $GITHUB_OUTPUT
+          cat /tmp/release_notes.md >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+
+          cat /tmp/release_notes.md
+
+      - name: Create GitHub Release
+        if: github.ref_type == 'tag'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          VERSION="${{ steps.version.outputs.version }}"
+          gh release create "go/v${VERSION}" \
+            --title "Go v${VERSION}" \
+            --notes "${{ steps.notes.outputs.notes }}" \
+            bin/*
+
+      - name: Dry run summary
+        if: github.ref_type != 'tag'
+        run: |
+          echo "🏁 Dry run completed successfully"
+          echo "Binaries built and tested, but NOT released"
+          echo "To release, create and push a tag:"
+          echo "  git tag go/v${{ steps.version.outputs.version }}"
+          echo "  git push origin go/v${{ steps.version.outputs.version }}"

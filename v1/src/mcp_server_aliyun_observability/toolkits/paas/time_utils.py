@@ -1,14 +1,25 @@
 import re
 import time
+from datetime import datetime
 from typing import Tuple, Union
+
+# 支持的日期时间字符串格式列表
+_DATETIME_FORMATS = [
+    "%Y-%m-%d %H:%M:%S",   # 2026-03-06 17:30:00
+    "%Y-%m-%dT%H:%M:%S",   # 2026-03-06T17:30:00 (ISO 8601)
+    "%Y-%m-%dT%H:%M:%SZ",  # 2026-03-06T17:30:00Z (UTC ISO 8601)
+    "%Y/%m/%d %H:%M:%S",   # 2026/03/06 17:30:00
+    "%Y-%m-%d",            # 2026-03-06
+]
 
 
 class TimeRangeParser:
     """时间范围解析工具类
     
-    支持两种时间格式的解析：
+    支持以下时间格式的解析：
     1. Unix时间戳（整数）
     2. 相对时间表达式（如 "now-1h", "now-30m", "now-1d"）
+    3. 日期时间字符串（如 "2026-03-06 17:30:00", "2026-03-06T17:30:00"）
     """
 
     @staticmethod
@@ -19,6 +30,7 @@ class TimeRangeParser:
             time_expr: 时间表达式，支持：
                 - Unix时间戳（整数，秒或毫秒）
                 - 相对时间表达式：now-1h, now-30m, now-1d, now-7d
+                - 日期时间字符串：2026-03-06 17:30:00, 2026-03-06T17:30:00
                 
         Returns:
             Unix时间戳（秒）
@@ -28,6 +40,7 @@ class TimeRangeParser:
             parse_time_expression(1640995200000) -> 1640995200 (毫秒转秒)
             parse_time_expression("now-1h") -> 当前时间-1小时的时间戳
             parse_time_expression("now-30m") -> 当前时间-30分钟的时间戳
+            parse_time_expression("2026-03-06 17:30:00") -> 对应的Unix时间戳
         """
         # 如果是整数，需要判断是秒还是毫秒时间戳
         if isinstance(time_expr, int):
@@ -40,12 +53,36 @@ class TimeRangeParser:
         if isinstance(time_expr, str) and time_expr.startswith("now"):
             return TimeRangeParser._parse_relative_time(time_expr)
         
+        # 尝试解析日期时间字符串
+        if isinstance(time_expr, str):
+            parsed = TimeRangeParser._parse_datetime_string(time_expr)
+            if parsed is not None:
+                return parsed
+        
         # 如果都不匹配，尝试直接转换为整数
         try:
             timestamp = int(time_expr)
             return TimeRangeParser._normalize_timestamp(timestamp)
         except (ValueError, TypeError):
             raise ValueError(f"不支持的时间格式: {time_expr}")
+
+    @staticmethod
+    def _parse_datetime_string(time_expr: str) -> Union[int, None]:
+        """尝试将日期时间字符串解析为Unix时间戳（秒）
+        
+        Args:
+            time_expr: 日期时间字符串
+            
+        Returns:
+            Unix时间戳（秒），如果无法解析则返回 None
+        """
+        for fmt in _DATETIME_FORMATS:
+            try:
+                dt = datetime.strptime(time_expr.strip(), fmt)
+                return int(dt.timestamp())
+            except ValueError:
+                continue
+        return None
 
     @staticmethod
     def _normalize_timestamp(timestamp: int) -> int:

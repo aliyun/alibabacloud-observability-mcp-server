@@ -251,7 +251,7 @@ def call_data_query(
             query=query,
             region_id=region_id,
             workspace=workspace,
-            sls_client=client_wrapper.with_region("cn-shanghai"),
+            sls_client=client_wrapper.with_region(region_id),
             user_context=user_context or [],
         )
         return {

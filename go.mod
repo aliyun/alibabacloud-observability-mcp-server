@@ -1,6 +1,6 @@
 module github.com/alibabacloud-observability-mcp-server-go
 
-go 1.25.5
+go 1.23
 
 require (
 	github.com/alibabacloud-go/cms-20240330/v6 v6.1.0

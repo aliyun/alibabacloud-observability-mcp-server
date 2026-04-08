@@ -1,0 +1,151 @@
+name: Python Package Release
+
+on:
+  # Tag 触发：推送 python/v* tag 时自动发布
+  push:
+    tags:
+      - 'python/v*'
+
+  # 手动触发：仅用于 dry_run 测试
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: '试运行 (仅打包验证，不发布到 PyPI)'
+        required: false
+        type: boolean
+        default: true
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: read
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Extract version
+        id: version
+        run: |
+          if [[ "${{ github.ref_type }}" == "tag" ]]; then
+            # 从 tag 中提取版本号: python/v1.0.9 -> 1.0.9
+            VERSION="${GITHUB_REF#refs/tags/python/v}"
+          else
+            # 手动触发时从 pyproject.toml 读取
+            VERSION=$(grep '^version' v1/pyproject.toml | sed 's/version = "\(.*\)"/\1/')
+          fi
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "Version: $VERSION"
+
+      - name: Validate version consistency
+        run: |
+          VERSION="${{ steps.version.outputs.version }}"
+          TOML_VERSION=$(grep '^version' v1/pyproject.toml | sed 's/version = "\(.*\)"/\1/')
+          CLI_VERSION=$(grep '__version__' v1/src/mcp_server_aliyun_observability/cli.py | sed 's/__version__ = "\(.*\)"/\1/' | tr -d ' ')
+
+          echo "Tag version:         $VERSION"
+          echo "pyproject.toml:      $TOML_VERSION"
+          echo "cli.py __version__:  $CLI_VERSION"
+
+          if [[ "${{ github.ref_type }}" == "tag" ]]; then
+            if [[ "$TOML_VERSION" != "$VERSION" ]]; then
+              echo "::error::pyproject.toml version ($TOML_VERSION) does not match tag ($VERSION)"
+              exit 1
+            fi
+            if [[ "$CLI_VERSION" != "$VERSION" ]]; then
+              echo "::error::cli.py __version__ ($CLI_VERSION) does not match tag ($VERSION)"
+              exit 1
+            fi
+          fi
+
+          echo "Version check passed"
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+
+      - name: Install build tools
+        run: pip install build twine
+
+      - name: Build package
+        working-directory: v1
+        run: python -m build
+
+      - name: Verify package
+        working-directory: v1
+        run: |
+          twine check dist/*
+          echo "--- Built packages ---"
+          ls -la dist/
+
+      - name: Generate release notes
+        if: github.ref_type == 'tag'
+        id: notes
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          VERSION="${{ steps.version.outputs.version }}"
+
+          # 找到上一个 python release tag
+          PREV_TAG=$(git tag --list 'python/v*' --sort=-version:refname | grep -v "python/v${VERSION}" | head -n1)
+
+          echo "## Python v${VERSION}" > /tmp/release_notes.md
+          echo "" >> /tmp/release_notes.md
+
+          if [ -n "$PREV_TAG" ]; then
+            echo "**Changes since ${PREV_TAG}:**" >> /tmp/release_notes.md
+            echo "" >> /tmp/release_notes.md
+            # 收集两个 tag 之间合并的 PR
+            PREV_DATE=$(git log -1 --format=%aI "$PREV_TAG")
+            gh pr list --state merged --base master --limit 50 \
+              --search "merged:>=${PREV_DATE}" \
+              --json number,title,author \
+              --jq '.[] | "- \(.title) (#\(.number)) @\(.author.login)"' >> /tmp/release_notes.md
+          else
+            echo "**Initial release**" >> /tmp/release_notes.md
+          fi
+
+          echo "" >> /tmp/release_notes.md
+          echo "### Install" >> /tmp/release_notes.md
+          echo '```bash' >> /tmp/release_notes.md
+          echo "pip install mcp-server-aliyun-observability==${VERSION}" >> /tmp/release_notes.md
+          echo '```' >> /tmp/release_notes.md
+
+          echo "notes<<EOF" >> $GITHUB_OUTPUT
+          cat /tmp/release_notes.md >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+
+          cat /tmp/release_notes.md
+
+      - name: Publish to PyPI
+        if: github.ref_type == 'tag'
+        working-directory: v1
+        env:
+          TWINE_USERNAME: __token__
+          TWINE_PASSWORD: ${{ secrets.PYPI_API_TOKEN }}
+        run: twine upload dist/*
+
+      - name: Create GitHub Release
+        if: github.ref_type == 'tag'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          VERSION="${{ steps.version.outputs.version }}"
+          gh release create "python/v${VERSION}" \
+            --title "Python v${VERSION}" \
+            --notes "${{ steps.notes.outputs.notes }}" \
+            v1/dist/*
+
+      - name: Dry run summary
+        if: github.ref_type != 'tag'
+        run: |
+          echo "🏁 Dry run completed successfully"
+          echo "Package built and verified, but NOT published"
+          echo "To publish, create and push a tag:"
+          echo "  git tag python/v${{ steps.version.outputs.version }}"
+          echo "  git push origin python/v${{ steps.version.outputs.version }}"
