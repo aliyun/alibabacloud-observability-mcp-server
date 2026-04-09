@@ -1,25 +1,25 @@
 [project]
 name = "mcp-server-aliyun-observability"
-version = "1.0.8"
+version = "1.0.7"
 description = "aliyun observability mcp server"
 readme = "README.md"
 requires-python = ">=3.10"
 dependencies = [
-    "mcp>=1.12.0",
-    "pydantic>=2.10.0",
-    "alibabacloud_arms20190808>=8.0.0",
-    "alibabacloud_sls20201230==5.7.0",
-    "alibabacloud_credentials>=1.0.1",
-    "tenacity>=8.0.0",
-    "rich>=13.0.0",
+    "mcp>=1.26.0",
+    "pydantic>=2.12.0",
+    "alibabacloud_arms20190808>=10.0.0",
+    "alibabacloud_sls20201230>=5.7.0",
+    "alibabacloud_credentials>=1.0.7",
+    "tenacity>=9.0.0",
+    "rich>=14.0.0",
     "pandas>=2.3.0",
-    "numpy", 
+    "numpy>=2.0.0", 
     "jinja2>=3.1.0",
-    "pyyaml>=6.0",
-    "aiohttp>=3.8.0",
-    "requests>=2.28.0",
-    "alibabacloud-cms20240330==6.0.1",
-    "alibabacloud-sts20150401==1.1.6",
+    "pyyaml>=6.0.0",
+    "aiohttp>=3.13.0",
+    "requests>=2.32.0",
+    "alibabacloud-cms20240330>=6.0.1",
+    "alibabacloud-sts20150401>=1.1.6",
 ]
 
 [build-system]
@@ -27,7 +27,7 @@ requires = ["hatchling", "wheel", "setuptools"]
 build-backend = "hatchling.build"
 
 [tool.uv]
-dev-dependencies = ["pyright>=1.1.389"]
+dev-dependencies = ["pyright>=1.1.400"]
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/mcp_server_aliyun_observability"]
@@ -82,10 +82,10 @@ allow-direct-references = true
 
 [project.optional-dependencies]
 dev = [
-    "pytest>=7.0.0",
-    "pytest-asyncio>=0.21.0",
-    "pytest-cov>=4.0.0",
-    "pytest-mock>=3.10.0",
+    "pytest>=8.0.0",
+    "pytest-asyncio>=0.24.0",
+    "pytest-cov>=6.0.0",
+    "pytest-mock>=3.14.0",
 ]
 admin = [
     # Optional admin extensions for advanced features

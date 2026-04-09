@@ -24,6 +24,8 @@ from alibabacloud_tea_openapi import models as open_api_models
 from alibabacloud_tea_util import models as util_models
 from mcp.server.fastmcp import Context
 from Tea.exceptions import TeaException
+from six import assertRegex
+
 from mcp_server_aliyun_observability.api_error import TEQ_EXCEPTION_ERROR
 
 from mcp_server_aliyun_observability.settings import get_settings, normalize_host
@@ -34,21 +36,26 @@ logger = get_logger()
 
 def _create_unified_config(
     credential: Optional["CredentialWrapper"] = None,
+    use_signature_v3: bool = False,
 ) -> open_api_models.Config:
     """
     创建统一的阿里云客户端配置
 
     Args:
         credential: 可选的凭据包装器
+        use_signature_v3: 是否使用 v3 签名（CMS API 需要 v3，SLS API 不需要）
 
     Returns:
         open_api_models.Config: 配置对象
     """
     if credential:
-        return open_api_models.Config(
+        config = open_api_models.Config(
             access_key_id=credential.access_key_id,
             access_key_secret=credential.access_key_secret,
         )
+        if use_signature_v3:
+            config.signature_version = "v3"
+        return config
     elif auth_util.environment_role_arn:
         logger.info(f"使用Role-ARN: {auth_util.environment_role_arn} 获取客户端")
         credentialsClient = CredClient(
@@ -60,10 +67,16 @@ def _create_unified_config(
                 role_session_name=auth_util.environment_role_session_name,
             )
         )
-        return open_api_models.Config(credential=credentialsClient)
+        config = open_api_models.Config(credential=credentialsClient)
+        if use_signature_v3:
+            config.signature_version = "v3"
+        return config
     else:
         credentialsClient = CredClient()
-        return open_api_models.Config(credential=credentialsClient)
+        config = open_api_models.Config(credential=credentialsClient)
+        if use_signature_v3:
+            config.signature_version = "v3"
+        return config
 
 
 class KnowledgeEndpoint:
@@ -169,7 +182,7 @@ class CMSClientWrapper:
         self.credential = credential
 
     def with_region(self, region: str, endpoint: Optional[str] = None) -> CmsClient:
-        config = _create_unified_config(self.credential)
+        config = _create_unified_config(self.credential, use_signature_v3=True)
         cms_settings = get_settings().cms
         if endpoint:
             host = normalize_host(endpoint)
@@ -344,16 +357,31 @@ def handle_tea_exception(func: Callable[..., T]) -> Callable[..., T]:
     return wrapper
 
 
-def text_to_sql(
+def text_to_sql_old(
     ctx: Context, text: str, project: str, log_store: str, region_id: str
 ) -> dict[str, Any]:
+    """Convert natural language to SQL query using SLS AI tools (Legacy).
+    
+    This function uses the legacy CallAiTools API for text-to-SQL conversion.
+    For the new CMS Chat API implementation, use text_to_sql.
+    
+    Args:
+        ctx: MCP context
+        text: Natural language query text
+        project: SLS project name
+        log_store: SLS logstore name
+        region_id: Aliyun region ID
+        
+    Returns:
+        Dictionary containing generated SQL and metadata
+    """
     logger.info(
         f"开始文本转SQL查询，输入参数: text={text}, project={project}, log_store={log_store}, region_id={region_id}"
     )
 
     try:
         sls_client_wrapper = ctx.request_context.lifespan_context["sls_client"]
-        sls_client: Client = sls_client_wrapper.with_region(region_id)
+        sls_client: Client = sls_client_wrapper.with_region("cn-shanghai")
         knowledge_config = sls_client_wrapper.get_knowledge_config(project, log_store)
 
         logger.info(f"获取知识库配置: {knowledge_config is not None}")
@@ -502,8 +530,7 @@ def text_to_spl(
         response_stream = cms_client.create_chat_with_sse(request, {}, runtime)
         
         full_content = ""
-        events = []
-        request_id = ""
+        trace_id = ""
         
         for event in response_stream:
             # event structure is typically a dict or object with 'body'
@@ -511,9 +538,10 @@ def text_to_spl(
             body = event.body if hasattr(event, "body") else event.get("body", {})
             if hasattr(body, "to_map"):
                 body = body.to_map()
-            
-            if not request_id and "requestId" in body:
-                request_id = body["requestId"]
+
+            if hasattr(body, 'trace_id') and body.trace_id:
+                trace_id = body.trace_id
+
             
             if "messages" in body:
                 for msg in body["messages"]:
@@ -522,44 +550,32 @@ def text_to_spl(
                         for content in msg["contents"]:
                             if content.get("type") == "text" and "value" in content:
                                 full_content += content["value"]
-                    
-                    # Collect events (e.g. interactive payloads)
-                    if "events" in msg:
-                        events.extend(msg["events"])
 
         # 解析事件以提取生成的SPL和预览数据
         generated_spl = None
         preview_data = None
 
-        for event in events:
-            if event.get("type") == "interactive":
-                payload = event.get("payload", {})
-                if payload.get("type") == "sls_query":
-                    queries = payload.get("queries", [])
-                    if queries:
-                        generated_spl = queries[0].get("query")
-                elif payload.get("type") == "diff":
-                    data_items = payload.get("data", [])
-                    if data_items:
-                        try:
-                            preview_data = json.loads(data_items[0].get("preview_data", "[]"))
-                        except json.JSONDecodeError:
-                            logger.warning("Failed to parse preview_data JSON")
 
         result = {
             "content": full_content,
             "query": generated_spl,
             "data": preview_data,
-            "events": events,
-            "requestId": request_id,
+            "trace_id": trace_id,
         }
 
-        logger.info(f"Chat request successful, requestId: {request_id}")
+        logger.info(f"Chat request successful, trace_id: {trace_id}")
         return result
 
     except Exception as e:
+        result = {
+            "content": "",
+            "query": "",
+            "data": "",
+            "trace_id": "",
+            "error_msg":f"Call CMS AI Chat failed: {str(e)}"
+        }
         logger.error(f"Call CMS AI Chat failed: {str(e)}", exc_info=True)
-        raise
+        return result
 
 def sls_sop(
     ctx: Context, 
@@ -653,16 +669,15 @@ def sls_sop(
         
         full_content = ""
         events = []
-        request_id = ""
-        
+        trace_id = ""
+
         for event in response_stream:
             body = event.body if hasattr(event, "body") else event.get("body", {})
             if hasattr(body, "to_map"):
                 body = body.to_map()
             
-            if not request_id and "requestId" in body:
-                request_id = body["requestId"]
-            
+            if hasattr(body, 'trace_id') and body.trace_id:
+                trace_id = body.trace_id
             if "messages" in body:
                 for msg in body["messages"]:
                     if "contents" in msg:
@@ -676,21 +691,217 @@ def sls_sop(
         result = {
             "content": full_content,
             "events": events,
-            "requestId": request_id,
+            "trace_id": trace_id,
         }
 
-        logger.info(f"SOP Chat request successful, requestId: {request_id}")
+        logger.info(f"SOP Chat request successful, trace_id: {trace_id}")
         return result
 
     except Exception as e:
+        result = {
+            "content": "",
+            "events": [],
+            "trace_id": "",
+            "error_msg":f"Call CMS AI Chat (SOP) failed: {str(e)}"
+        }
         logger.error(f"Call CMS AI Chat (SOP) failed: {str(e)}", exc_info=True)
-        raise
+        return result
 
 def append_current_time(text: str) -> str:
     """
     添加当前时间
     """
     return f"当前时间: {get_current_time()},问题:{text}"
+
+
+def text_to_sql(
+    ctx: Context,
+    text: str,
+    project: str,
+    log_store: str,
+    region_id: str,
+) -> dict[str, Any]:
+    """Convert natural language to SQL query using CMS Chat API (SSE streaming).
+    
+    This function uses the CMS SDK CreateChat API with SSE streaming for text-to-SQL
+    conversion, matching the behavior of the SLS Console Chat API.
+    
+    Args:
+        ctx: MCP context
+        text: Natural language query text
+        project: SLS project name
+        log_store: SLS logstore name
+        region_id: Aliyun region ID
+
+    Returns:
+        Dictionary containing:
+        - data: Generated SQL query
+        - requestId: Request ID for debugging
+    """
+    import time
+    import os
+    from alibabacloud_tea_util import models as util_models
+    
+
+    digital_employee_name = "apsara-ops"
+    # Default time range: last 15 minutes
+    current_time = int(time.time())
+    actual_from_time = current_time - 900
+    actual_to_time = current_time
+    language = os.getenv("LANGUAGE", "zh")
+    time_zone = os.getenv("TIMEZONE", "Asia/Shanghai")
+
+    logger.info(
+        f"开始文本转SQL查询(CMS-Chat)，输入参数: text={text}, project={project}, "
+        f"log_store={log_store}, region_id={region_id}, "
+        f"from_time={actual_from_time}, to_time={actual_to_time}"
+    )
+
+    
+    try:
+        # Get CMS client from context
+        cms_client_wrapper = ctx.request_context.lifespan_context["cms_client"]
+        cms_client: CmsClient = cms_client_wrapper.with_region(region_id)
+        
+        # Step 1: Create a thread
+        thread_request = cms_model.CreateThreadRequest()
+        thread_request.title = f"text2sql-{int(time.time())}"
+        
+        thread_variables = cms_model.CreateThreadRequestVariables()
+        thread_variables.project = project
+        thread_request.variables = thread_variables
+        
+        logger.info(f"创建会话线程，digital_employee: {digital_employee_name}")
+        thread_response = cms_client.create_thread(digital_employee_name, thread_request)
+        
+        if not thread_response.body or not thread_response.body.thread_id:
+            raise Exception("Failed to create thread: missing thread_id")
+        
+        thread_id = thread_response.body.thread_id
+        logger.info(f"会话线程创建成功，thread_id: {thread_id}")
+        
+        # Step 2: Create chat request with SSE
+        chat_request = cms_model.CreateChatRequest()
+        chat_request.digital_employee_name = digital_employee_name
+        chat_request.action = "create"
+        chat_request.thread_id = thread_id
+        
+        # Build message content
+        message = cms_model.CreateChatRequestMessages()
+        message.role = "user"
+        
+        content = cms_model.CreateChatRequestMessagesContents()
+        content.type = "text"
+        content.value = text
+        message.contents = [content]
+        
+        chat_request.messages = [message]
+        
+        # Build variables matching input.txt format
+        user_context = json.dumps([{
+            "type": "metadata",
+            "data": {
+                "from_time": actual_from_time,
+                "to_time": actual_to_time,
+                "fromTime": actual_from_time,
+                "toTime": actual_to_time
+            }
+        }])
+        
+        chat_request.variables = {
+            "region": region_id,
+            "project": project,
+            "language": language,
+            "timeZone": time_zone,
+            "timeStamp": str(int(time.time())),
+            "logstore": log_store,
+            "startTime": actual_from_time,
+            "endTime": actual_to_time,
+            "skill_name": "sql_generation",
+            "userContext": user_context,
+            "config": json.dumps({"disableThreadData": False}),
+            "skill": "sql_generation"
+        }
+        
+        logger.info(f"发送Chat请求，thread_id: {thread_id}")
+        
+        # Step 3: Call SSE API and collect responses
+        runtime = util_models.RuntimeOptions()
+        runtime.read_timeout = 120000
+        runtime.connect_timeout = 30000
+        
+        collected_sql = None
+        collected_explanation = []
+        trace_id = None
+        
+        # Use SSE streaming to get responses
+        for response in cms_client.create_chat_with_sse(chat_request, {}, runtime):
+            # 获取 trace_id（整个流式请求的唯一标识）
+            if response.body and hasattr(response.body, 'trace_id') and response.body.trace_id:
+                trace_id = response.body.trace_id
+            
+            if response.body and response.body.messages:
+                for msg in response.body.messages:
+                    # Check for tool calls (QuerySLSLogs)
+                    if msg.tools:
+                        for tool in msg.tools:
+                            if isinstance(tool, dict):
+                                tool_name = tool.get("name") or tool.get("id")
+                                if tool_name == "QuerySLSLogs":
+                                    # Extract SQL from arguments
+                                    args = tool.get("arguments")
+                                    if isinstance(args, dict) and "query" in args and collected_sql is None:
+                                        collected_sql = args["query"]
+                                        logger.info(f"提取到SQL: {collected_sql}")
+                                        if "time_range" in args:
+                                            time_range = args["time_range"]
+                                            if "~" in time_range:
+                                                time_range_parts = time_range.split("~")
+                                                actual_from_time = int(time_range_parts[0])
+                                                actual_to_time = int(time_range_parts[1])
+                    
+                    # Check for text content (explanation)
+                    if msg.contents:
+                        for content_item in msg.contents:
+                            if isinstance(content_item, dict):
+                                if content_item.get("type") == "text":
+                                    text_value = content_item.get("value", "")
+                                    if text_value:
+                                        collected_explanation.append(text_value)
+                    
+
+        # Build response data in the same format as sls_text_to_sql
+        explanation = "".join(collected_explanation)
+        
+        if collected_sql:
+            logger.info(f"文本转SQL查询(CMS)成功，生成SQL: {collected_sql}")
+            # Format data as JSON string matching sls_text_to_sql structure
+            data_obj = {
+                "answer": collected_sql,
+                "message": explanation,
+                "to_time": str(actual_to_time),
+                "from_time": str(actual_from_time)
+            }
+            return {
+                "data": json.dumps(data_obj, ensure_ascii=False),
+                "trace_id": trace_id or "",
+            }
+        else:
+            logger.warning("文本转SQL查询(CMS)失败: 未生成SQL")
+            data_obj = {
+                "answer": "",
+                "message": explanation or "No SQL query generated",
+                "to_time": str(actual_to_time),
+                "from_time": str(actual_from_time)
+            }
+            return {
+                "data": json.dumps(data_obj, ensure_ascii=False),
+                "trace_id": trace_id or "",
+            }
+            
+    except Exception as e:
+        logger.error(f"调用CMS Chat API失败，异常详情: {str(e)}", exc_info=True)
+        raise
 
 
 def execute_cms_query(

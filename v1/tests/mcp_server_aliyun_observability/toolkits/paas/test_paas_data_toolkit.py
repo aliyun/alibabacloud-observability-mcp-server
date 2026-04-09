@@ -303,8 +303,29 @@ class TestPaaSDataToolkit:
                 "entity_set_name": "apm.service",
                 "workspace": os.getenv("TEST_CMS_WORKSPACE", "apm"),
                 "regionId": os.getenv("TEST_REGION", "cn-hangzhou"),
-                "from_time": "now-3h",
-                "to_time": "now",
+                "time_range": "last_3h",
+            },
+            context=mock_request_context,
+        )
+        result = check_credentials_and_result(result)
+
+    @pytest.mark.asyncio
+    async def test_paas_get_golden_metrics_with_query_type_and_aggregate(
+        self,
+        mcp_server: FastMCP,
+        mock_request_context: Context,
+    ):
+        """测试PaaS黄金指标查询 - 使用 query_type 和 aggregate 参数"""
+        tool = mcp_server._tool_manager.get_tool("umodel_get_golden_metrics")
+        result = await tool.run(
+            {
+                "domain": "apm",
+                "entity_set_name": "apm.service",
+                "workspace": os.getenv("TEST_CMS_WORKSPACE", "apm"),
+                "regionId": os.getenv("TEST_REGION", "cn-hangzhou"),
+                "query_type": "instant",
+                "aggregate": False,
+                "time_range": "last_15m",
             },
             context=mock_request_context,
         )

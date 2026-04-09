@@ -102,18 +102,76 @@ class TestPaaSEntityToolkit:
         mcp_server: FastMCP,
         mock_request_context: Context,
     ):
-        """测试PaaS实体查询"""
+        """测试PaaS实体查询 - 使用 entity_filter 参数"""
         tool = mcp_server._tool_manager.get_tool("umodel_get_entities")
         result = await tool.run(
             {
                 "domain": "apm",
                 "entity_set_name": "apm.service",
+                "entity_filter": "name=payment",  # 现在需要提供 entity_ids 或 entity_filter 之一
                 "workspace": os.getenv("TEST_CMS_WORKSPACE", "apm"),
                 "regionId": os.getenv("TEST_REGION", "cn-hangzhou"),
             },
             context=mock_request_context,
         )
         result = check_credentials_and_result(result)
+        # 验证标准响应格式
+        assert "error" in result
+        assert "data" in result
+        assert "message" in result
+        assert "query" in result
+        assert "time_range" in result
+
+    @pytest.mark.asyncio
+    async def test_paas_get_entities_with_entity_ids(
+        self,
+        mcp_server: FastMCP,
+        mock_request_context: Context,
+    ):
+        """测试PaaS实体查询 - 使用 entity_ids 参数"""
+        tool = mcp_server._tool_manager.get_tool("umodel_get_entities")
+        result = await tool.run(
+            {
+                "domain": "apm",
+                "entity_set_name": "apm.service",
+                "entity_ids": "service-1,service-2",  # 使用 entity_ids
+                "workspace": os.getenv("TEST_CMS_WORKSPACE", "apm"),
+                "regionId": os.getenv("TEST_REGION", "cn-hangzhou"),
+            },
+            context=mock_request_context,
+        )
+        result = check_credentials_and_result(result)
+        # 验证标准响应格式
+        assert "error" in result
+        assert "data" in result
+        assert "message" in result
+        assert "query" in result
+        assert "time_range" in result
+
+    @pytest.mark.asyncio
+    async def test_paas_get_entities_with_time_range(
+        self,
+        mcp_server: FastMCP,
+        mock_request_context: Context,
+    ):
+        """测试PaaS实体查询 - 使用 time_range 参数"""
+        tool = mcp_server._tool_manager.get_tool("umodel_get_entities")
+        result = await tool.run(
+            {
+                "domain": "apm",
+                "entity_set_name": "apm.service",
+                "entity_filter": "name=payment",
+                "time_range": "last_3h",  # 使用新的 time_range 参数
+                "workspace": os.getenv("TEST_CMS_WORKSPACE", "apm"),
+                "regionId": os.getenv("TEST_REGION", "cn-hangzhou"),
+            },
+            context=mock_request_context,
+        )
+        result = check_credentials_and_result(result)
+        # 验证标准响应格式
+        assert "error" in result
+        assert "time_range" in result
+        assert result["time_range"]["expression"] == "last_3h"
 
     @pytest.mark.asyncio
     async def test_paas_get_neighbor_entities_success(
@@ -141,19 +199,56 @@ class TestPaaSEntityToolkit:
         mcp_server: FastMCP,
         mock_request_context: Context,
     ):
-        """测试PaaS实体搜索"""
+        """测试PaaS实体搜索 - 使用新的 time_range 参数和返回 statistics/detail 格式"""
         tool = mcp_server._tool_manager.get_tool("umodel_search_entities")
         result = await tool.run(
             {
+                "workspace": os.getenv("TEST_CMS_WORKSPACE", "apm"),
+                "search_text": "payment",
                 "domain": "apm",
                 "entity_set_name": "apm.service",
-                "search_text": "payment",
-                "workspace": os.getenv("TEST_CMS_WORKSPACE", "apm"),
+                "time_range": "last_1h",
                 "regionId": os.getenv("TEST_REGION", "cn-hangzhou"),
             },
             context=mock_request_context,
         )
         result = check_credentials_and_result(result)
+        # 验证标准响应格式
+        assert "error" in result
+        assert "data" in result
+        assert "message" in result
+        assert "query" in result
+        assert "time_range" in result
+        # 验证 data 包含 statistics 和 detail 两部分
+        if result.get("data"):
+            assert "statistics" in result["data"]
+            assert "detail" in result["data"]
+
+    @pytest.mark.asyncio
+    async def test_paas_search_entities_with_wildcard(
+        self,
+        mcp_server: FastMCP,
+        mock_request_context: Context,
+    ):
+        """测试PaaS实体搜索 - 使用通配符搜索所有域和类型"""
+        tool = mcp_server._tool_manager.get_tool("umodel_search_entities")
+        result = await tool.run(
+            {
+                "workspace": os.getenv("TEST_CMS_WORKSPACE", "apm"),
+                "search_text": "test",
+                "domain": "*",
+                "entity_set_name": "*",
+                "time_range": "last_3h",
+                "regionId": os.getenv("TEST_REGION", "cn-hangzhou"),
+            },
+            context=mock_request_context,
+        )
+        result = check_credentials_and_result(result)
+        # 验证标准响应格式
+        assert "error" in result
+        assert "data" in result
+        assert "time_range" in result
+        assert result["time_range"]["expression"] == "last_3h"
 
 
 if __name__ == "__main__":

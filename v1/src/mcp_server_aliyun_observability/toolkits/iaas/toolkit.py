@@ -29,6 +29,7 @@ from mcp_server_aliyun_observability.utils import (
     execute_cms_query_with_context,
     handle_tea_exception,
 )
+from mcp_server_aliyun_observability.utils import text_to_sql_old as utils_text_to_sql_old
 from mcp_server_aliyun_observability.utils import text_to_sql as utils_text_to_sql
 from mcp_server_aliyun_observability.utils import text_to_spl as utils_text_to_spl
 from mcp_server_aliyun_observability.utils import sls_sop as utils_sls_sop
@@ -120,7 +121,7 @@ class IaaSToolkit:
             try:
                 sls_client: SLSClient = ctx.request_context.lifespan_context[
                     "sls_client"
-                ].with_region(regionId)
+                ].with_region("cn-shanghai")
                 request: CallAiToolsRequest = CallAiToolsRequest()
                 request.tool_name = "text_to_promql"
                 request.region_id = regionId
@@ -154,6 +155,63 @@ class IaaSToolkit:
             reraise=True,
         )
         @handle_tea_exception
+        def sls_text_to_sql_old(
+            ctx: Context,
+            text: str = Field(
+                ...,
+                description="the natural language text to generate sls logstore query",
+            ),
+            project: str = Field(..., description="sls project name"),
+            logStore: str = Field(..., description="sls log store name"),
+            regionId: str = Field(
+                default=...,
+                description="aliyun region id,region id format like 'xx-xxx',like 'cn-hangzhou'",
+            ),
+        ) -> Dict[str, Any]:
+            """[Deprecated] 将自然语言转换为SLS查询语句（旧版API）。
+
+            ⚠️ 该工具已废弃，请优先使用 sls_text_to_sql 工具。
+
+            ## 废弃说明
+
+            此工具使用旧版 SLS CallAiTools API，功能有限且不再维护。
+            新版 sls_text_to_sql 工具使用 CMS Chat API，提供更智能的 SQL 生成能力，
+            包括更好的上下文理解、更准确的查询生成和更详细的解释说明。
+
+            ## 功能概述
+
+            该工具使用旧版SLS CallAiTools API将自然语言描述转换为有效的SLS查询语句。
+
+            ## 使用场景
+
+            - 仅当新版 sls_text_to_sql 工具不可用时作为备选方案
+
+            ## 使用限制
+
+            - 仅支持生成SLS查询，不支持其他数据库的SQL如MySQL、PostgreSQL等
+            - 生成的是查询语句，而非查询结果，需要配合execute_sql工具使用
+            - 需要对应的 logstore 已经设定了索引信息
+
+            Args:
+                ctx: MCP上下文，用于访问SLS客户端
+                text: 用于生成查询的自然语言文本
+                project: SLS项目名称
+                logStore: SLS日志库名称
+                regionId: 阿里云区域ID
+
+            Returns:
+                生成的SLS查询语句和相关信息
+            """
+            return utils_text_to_sql_old(ctx, text, project, logStore, regionId)
+
+        @self.server.tool()
+        @retry(
+            stop=stop_after_attempt(Config.get_retry_attempts()),
+            wait=wait_fixed(Config.RETRY_WAIT_SECONDS),
+            retry=retry_if_exception_type(Exception),
+            reraise=True,
+        )
+        @handle_tea_exception
         def sls_text_to_sql(
             ctx: Context,
             text: str = Field(
@@ -171,43 +229,61 @@ class IaaSToolkit:
 
             ## 功能概述
 
-            该工具可以将自然语言描述转换为有效的SLS查询语句，便于用户使用自然语言表达查询需求。用户有任何 SLS 日志查询需求时，都需要优先使用该工具。
+            该工具使用CMS数字员工Chat API（SSE流式）进行text-to-SQL转换，
+            与SLS控制台的Chat API行为一致。提供更智能的上下文感知和错误处理。
+            用户有任何 SLS 日志查询需求时，都需要优先使用该工具。
+
+            ## API 特性
+
+            - 使用 CMS SDK 的 CreateThread + CreateChatWithSSE API
+            - 支持会话上下文，可进行多轮对话
+            - 自动处理字段未索引的情况（自动添加 scan mode）
+            - 更智能的错误处理和重试机制
 
             ## 使用场景
 
             - 当用户不熟悉SLS查询语法时
             - 当需要快速构建复杂查询时
             - 当需要从自然语言描述中提取查询意图时
+            - 当需要更智能的SQL生成时
+            - 当需要多轮对话优化查询时
 
             ## 使用限制
 
             - 仅支持生成SLS查询，不支持其他数据库的SQL如MySQL、PostgreSQL等
             - 生成的是查询语句，而非查询结果，需要配合execute_sql工具使用
-            - 需要对应的 log_store 已经设定了索引信息，如果生成的结果里面有字段没有索引或者开启统计，可能会导致查询失败，需要友好的提示用户增加相对应的索引信息
+            - 需要对应的 logstore 已经设定了索引信息
 
             ## 最佳实践
 
             - 提供清晰简洁的自然语言描述
             - 不要在描述中包含项目或日志库名称
-            - 如有需要，指定查询的时间范围
             - 首次生成的查询可能不完全符合要求，可能需要多次尝试
 
             ## 查询示例
 
             - "帮我生成下 XXX 的日志查询语句"
             - "查找最近一小时内的错误日志"
+            - "统计不同类型的 admin_emails 数量"
 
             Args:
-                ctx: MCP上下文，用于访问SLS客户端
+                ctx: MCP上下文，用于访问CMS客户端
                 text: 用于生成查询的自然语言文本
                 project: SLS项目名称
                 logStore: SLS日志库名称
                 regionId: 阿里云区域ID
 
             Returns:
-                生成的SLS查询语句
+                生成的SLS查询语句和相关信息，包含 data 和 requestId 字段
             """
-            return utils_text_to_sql(ctx, text, project, logStore, regionId)
+            from mcp_server_aliyun_observability.toolkits.paas.time_utils import (
+                TimeRangeParser,
+            )
+            
+
+            return utils_text_to_sql(
+                ctx, text, project, logStore, regionId,
+            )
 
         @self.server.tool()
         @retry(
@@ -865,7 +941,7 @@ class IaaSToolkit:
             ## 查询示例
 
             - "我想查询有没有 XXX 的日志库"
-            - "某个 project 有哪些 log store"
+            - "某个 project 有哪些 logstore"
 
             Args:
                 ctx: MCP上下文，用于访问SLS客户端

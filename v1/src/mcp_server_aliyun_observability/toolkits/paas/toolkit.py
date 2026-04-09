@@ -2,6 +2,8 @@ from typing import Any, Dict
 
 from mcp.server.fastmcp import FastMCP
 
+from mcp_server_aliyun_observability.toolkits.paas.data_agent_toolkit import \
+    DataAgentToolkit
 from mcp_server_aliyun_observability.toolkits.paas.data_toolkit import \
     PaasDataToolkit
 from mcp_server_aliyun_observability.toolkits.paas.dataset_toolkit import \
@@ -16,6 +18,8 @@ class PaaSToolkit:
     Provides structured query tools ported from umodel-mcp handlers.
     All tools use umodel_ prefix and execute SPL queries with precise parameter control.
     No natural language parameters - only structured data.
+    
+    Also provides natural language data query capability through data-agent-pro skill.
     """
 
     def __init__(self, server: FastMCP):
@@ -34,6 +38,7 @@ class PaaSToolkit:
         PaaSEntityToolkit(self.server)
         PaaSDatasetToolkit(self.server)  
         PaasDataToolkit(self.server)
+        DataAgentToolkit(self.server)
 
 
 def register_paas_tools(server: FastMCP):

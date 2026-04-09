@@ -18,8 +18,8 @@ Observable MCP Server 现已支持日志服务 SLS、应用实时监控服务 AR
 
 ## 阿里云可观测MCP服务
 <p align="center">
-  <a href="./README.md"><img alt="中文自述文件" src="https://img.shields.io/badge/简体中文-d9d9d9""></a>
-  <a href="./README_EN.md"><img alt="英文自述文件" src="https://img.shields.io/badge/English-d9d9d9")
+  <a href="./README.md"><img alt="中文自述文件" src="https://img.shields.io/badge/简体中文-d9d9d9"></a>
+  <a href="./README_EN.md"><img alt="英文自述文件" src="https://img.shields.io/badge/English-d9d9d9"></a>
 </p>
 
 ### 简介
@@ -33,11 +33,44 @@ Observable MCP Server 现已支持日志服务 SLS、应用实时监控服务 AR
   - `entity`: 实体发现和管理 (3个工具)
   - `dataset`: 数据集和元数据管理 (3个工具)
   - `data`: 各类数据查询，支持metrics、logs、events、traces、profiles (8个工具)
-- **IaaS工具集**（V1兼容）：传统SLS、CMS原生API工具，保持向后兼容 (7个工具)
+- **IaaS工具集**（V1兼容）：传统SLS、CMS原生API工具，保持向后兼容 (11个工具)
 - **Shared工具集**：跨服务共享工具，如workspace和domain管理 (3个工具)
 
+### 核心功能特性
 
-📚 **详细的工具组合推荐请参考**：[最佳工具组合推荐文档](./docs/best_practices_toolkit_combinations.md)
+#### 🕐 统一时间范围表达式
+所有数据查询工具支持灵活的时间范围格式：
+- **相对预设**: `last_5m`, `last_1h`, `last_3d`, `last_1w`, `last_1M`, `last_1y`
+- **Grafana风格**: `now-15m~now-5m`, `now-1h~now`
+- **关键字**: `today`, `yesterday`
+- **绝对时间戳**: `1706864400~1706868000`
+- **人类可读**: `2024-02-02 10:10:10~2024-02-02 10:20:10`
+
+#### 📊 时序对比分析（Metric Compare）
+`umodel_get_metrics` 和 `umodel_get_golden_metrics` 支持通过 `offset` 参数进行时序对比：
+```python
+# 对比当前1小时与1天前的数据
+umodel_get_metrics(
+    domain="apm", entity_set_name="apm.service",
+    metric_domain_name="apm.metric.apm.service", metric="request_count",
+    time_range="last_1h", offset="1d"  # 与1天前对比
+)
+```
+返回结果包含：
+- `current`: 当前时段统计（max, min, avg, count）
+- `compare`: 对比时段统计
+- `diff`: 变化分析（trend, avg_change, avg_change_percent）
+- `diff_score`: 差异评分（0-1，越大差异越显著）
+
+#### 🔬 高级分析模式
+`umodel_get_metrics` 支持四种分析模式：
+
+| 模式 | 说明 | 输出字段 |
+|------|------|---------|
+| `basic` | 原始时序数据（默认） | `__ts__`, `__value__`, `__labels__` |
+| `cluster` | K-Means时序聚类 | `__cluster_index__`, `__entities__`, `__sample_value__` |
+| `forecast` | 时序预测（需1-5天历史数据） | `__forecast_ts__`, `__forecast_value__`, `__forecast_lower/upper_value__` |
+| `anomaly_detection` | 异常检测（需1-3天数据） | `__anomaly_list_`, `__anomaly_msg__`, `__value_min/max/avg__` |
 
 ### 版本记录
 可以查看 [CHANGELOG.md](./CHANGELOG.md)
@@ -66,14 +99,15 @@ Observable MCP Server 现已支持日志服务 SLS、应用实时监控服务 AR
 ##### 数据查询工具 (data)
 | 工具名称 | 用途 | 关键参数 | 最佳实践 |
 |---------|------|---------|---------|  
-| `umodel_get_metrics` | 获取实体的时序指标数据，支持高级分析模式 | `workspace`：工作空间名称（必需）<br>`domain`：实体域（必需）<br>`entity_set_name`：实体类型（必需）<br>`metric_domain_name`：指标域名称（必需）<br>`metric`：指标名称（必需）<br>`analysis_mode`：分析模式（可选，默认basic）<br>`forecast_duration`：预测时长（可选）<br>`regionId`：阿里云区域ID（必需） | - 支持range/instant查询<br>- **basic**: 原始时序数据<br>- **cluster**: K-Means聚类分析<br>- **forecast**: 时序预测（1-5天学习）<br>- **anomaly_detection**: 异常检测（1-3天学习） |
-| `umodel_get_golden_metrics` | 获取黄金指标数据 | `workspace`：工作空间名称（必需）<br>`domain`：实体域（必需）<br>`entity_set_name`：实体类型（必需）<br>`regionId`：阿里云区域ID（必需） | - 快速获取关键性能指标<br>- 包含延迟、吞吐量、错误率等 |
+| `umodel_get_metrics` | 获取实体的时序指标数据，支持高级分析模式和时序对比 | `workspace`：工作空间名称（必需）<br>`domain`：实体域（必需）<br>`entity_set_name`：实体类型（必需）<br>`metric_domain_name`：指标域名称（必需）<br>`metric`：指标名称（必需）<br>`analysis_mode`：分析模式（可选，默认basic）<br>`forecast_duration`：预测时长（可选）<br>`offset`：对比偏移量（可选，如1h/1d/1w）<br>`time_range`：时间范围表达式（可选）<br>`regionId`：阿里云区域ID（必需） | - 支持range/instant查询<br>- **basic**: 原始时序数据<br>- **cluster**: K-Means聚类分析<br>- **forecast**: 时序预测（需1-5天数据）<br>- **anomaly_detection**: 异常检测（需1-3天数据）<br>- **时序对比**: 使用offset参数对比不同时段数据 |
+| `umodel_get_golden_metrics` | 获取黄金指标数据，支持时序对比 | `workspace`：工作空间名称（必需）<br>`domain`：实体域（必需）<br>`entity_set_name`：实体类型（必需）<br>`offset`：对比偏移量（可选，如1h/1d/1w）<br>`time_range`：时间范围表达式（可选）<br>`regionId`：阿里云区域ID（必需） | - 快速获取关键性能指标<br>- 包含延迟、吞吐量、错误率等<br>- 支持与历史时段对比分析 |
 | `umodel_get_relation_metrics` | 获取实体间关系级别的指标 | `workspace`：工作空间名称（必需）<br>`src_domain`：源实体域（必需）<br>`src_entity_set_name`：源实体类型（必需）<br>`src_entity_ids`：源实体ID列表（必需）<br>`relation_type`：关系类型（必需）<br>`direction`：关系方向（必需）<br>`regionId`：阿里云区域ID（必需） | - 分析微服务调用关系<br>- 支持服务依赖分析 |
 | `umodel_get_logs` | 获取实体相关的日志数据 | `workspace`：工作空间名称（必需）<br>`domain`：实体域（必需）<br>`entity_set_name`：实体类型（必需）<br>`log_set_name`：日志集名称（必需）<br>`log_set_domain`：日志集域（必需）<br>`regionId`：阿里云区域ID（必需） | - 用于故障诊断<br>- 支持性能分析 |
 | `umodel_get_events` | 获取实体的事件数据 | `workspace`：工作空间名称（必需）<br>`domain`：实体域（必需）<br>`entity_set_name`：实体类型（必需）<br>`event_set_domain`：事件集域（必需）<br>`event_set_name`：事件集名称（必需）<br>`regionId`：阿里云区域ID（必需） | - 用于异常事件分析<br>- 支持告警事件追踪 |
 | `umodel_get_traces` | 获取指定trace ID的详细数据，包含独占耗时 | `workspace`：工作空间名称（必需）<br>`domain`：实体域（必需）<br>`entity_set_name`：实体类型（必需）<br>`trace_set_domain`：链路集域（必需）<br>`trace_set_name`：链路集名称（必需）<br>`trace_ids`：链路ID列表（必需）<br>`regionId`：阿里云区域ID（必需） | - 深入分析调用链<br>- 包含 `exclusive_duration_ms` 独占耗时<br>- 按独占耗时排序定位瓶颈 |
 | `umodel_search_traces` | 基于条件搜索调用链 | `workspace`：工作空间名称（必需）<br>`domain`：实体域（必需）<br>`entity_set_name`：实体类型（必需）<br>`trace_set_domain`：链路集域（必需）<br>`trace_set_name`：链路集名称（必需）<br>`regionId`：阿里云区域ID（必需） | - 支持按持续时间、错误状态过滤<br>- 返回链路摘要信息 |
 | `umodel_get_profiles` | 获取性能剖析数据 | `workspace`：工作空间名称（必需）<br>`domain`：实体域（必需）<br>`entity_set_name`：实体类型（必需）<br>`profile_set_domain`：性能剖析集域（必需）<br>`profile_set_name`：性能剖析集名称（必需）<br>`entity_ids`：实体ID列表（必需）<br>`regionId`：阿里云区域ID（必需） | - 用于性能瓶颈分析<br>- 包含CPU、内存使用情况 |
+| `cms_natural_language_query` | 自然语言数据查询 | `query`：自然语言查询文本（必需） | - 使用自然语言查询可观测数据<br>- 支持指标、日志、链路等数据类型<br>- 自动理解查询意图并返回结果<br>- workspace和regionId从环境变量获取<br>- 默认查询最近15分钟数据 |
 
 #### Shared工具集（共享工具）
 
@@ -90,14 +124,18 @@ Observable MCP Server 现已支持日志服务 SLS、应用实时监控服务 AR
 | 工具名称 | 用途 | 关键参数 | 最佳实践 |  
 |---------|------|---------|---------|  
 | `cms_text_to_promql` | 将自然语言转换为PromQL查询 | `text`：自然语言问题（必需）<br>`project`：项目名称（必需）<br>`metricStore`：指标存储名称（必需）<br>`regionId`：阿里云区域ID（必需） | - 智能生成PromQL语句<br>- 简化查询操作 |
-| `sls_text_to_sql` | 将自然语言转换为SQL查询 | `text`：自然语言问题（必需）<br>`project`：SLS项目名称（必需）<br>`logStore`：日志存储名称（必需）<br>`regionId`：阿里云区域ID（必需） | - 智能生成SLS SQL查询<br>- 支持自然语言交互 |
+| `sls_text_to_sql` | 将自然语言转换为SQL查询 | `text`：自然语言问题（必需）<br>`project`：SLS项目名称（必需）<br>`logStore`：日志存储名称（必需）<br>`regionId`：阿里云区域ID（必需） | - 使用CMS Chat API智能生成SQL<br>- 支持自然语言交互<br>- 自动处理未索引字段 |
+| `sls_text_to_sql_old` | ⚠️ [已废弃] 将自然语言转换为SQL查询（旧版） | `text`：自然语言问题（必需）<br>`project`：SLS项目名称（必需）<br>`logStore`：日志存储名称（必需）<br>`regionId`：阿里云区域ID（必需） | - 已废弃，请使用 sls_text_to_sql<br>- 仅作为备选方案 |
 | `sls_execute_sql` | 执行SLS SQL查询 | `project`：SLS项目名称（必需）<br>`logStore`：日志存储名称（必需）<br>`query`：SQL查询语句（必需）<br>`from_time`：查询开始时间（必需）<br>`to_time`：查询结束时间（必需）<br>`limit`：返回最大日志条数，1-100，默认10（可选）<br>`offset`：查询开始行，用于分页，默认0（可选）<br>`reverse`：是否按时间戳降序返回，默认False（可选）<br>`regionId`：阿里云区域ID（必需） | - 直接执行SQL查询<br>- 使用适当时间范围优化性能<br>- 支持分页查询获取更多日志 |
-| `cms_execute_promql` | 执行PromQL查询 | `project`：项目名称（必需）<br>`metricStore`：指标存储名称（必需）<br>`query`：PromQL查询语句（必需）<br>`start_time`：查询开始时间（必需）<br>`end_time`：查询结束时间（必需）<br>`regionId`：阿里云区域ID（必需） | - 查询云监控指标数据<br>- 支持标准PromQL语法 |
+| `cms_execute_promql` | 执行PromQL查询 | `project`：项目名称（必需）<br>`metricStore`：指标存储名称（必需）<br>`query`：PromQL查询语句（必需）<br>`from_time`：查询开始时间（可选，默认now-5m）<br>`to_time`：查询结束时间（可选，默认now）<br>`regionId`：阿里云区域ID（必需） | - 查询云监控指标数据<br>- 支持标准PromQL语法 |
 | `sls_text_to_spl` | 将自然语言转换为SPL查询 | `text`：自然语言问题（必需）<br>`project`：SLS项目名称（必需）<br>`logStore`：日志存储名称（必需）<br>`data_sample`：样例数据（必需）<br>`regionId`：阿里云区域ID（必需） | - 智能生成SPL语句并基于样例数据执行<br>- 适用于数据加工、提取场景 |
 | `sls_sop` | SLS使用助手 | `text`：关于SLS使用的问题（必需）<br>`regionId`：阿里云区域ID（必需） | - 回答SLS功能使用、概念解释、操作步骤等问题<br>- 智能助手 |
 | `sls_list_projects` | 列出SLS项目 | `projectName`：项目名称（可选，模糊搜索）<br>`regionId`：阿里云区域ID（必需） | - 发现可用的SLS项目<br>- 支持模糊搜索 |
-| `sls_execute_spl` | 执行原生SPL查询 | `query`：SPL查询语句（必需）<br>`regionId`：阿里云区域ID（必需） | - 执行复杂的SLS查询<br>- 支持高级分析功能 |
+| `sls_execute_spl` | 执行原生SPL查询 | `query`：SPL查询语句（必需）<br>`workspace`：CMS工作空间名称（必需）<br>`from_time`：开始时间（可选）<br>`to_time`：结束时间（可选）<br>`regionId`：阿里云区域ID（必需） | - 执行复杂的SLS查询<br>- 支持高级分析功能 |
 | `sls_list_logstores` | 列出指定项目的日志存储 | `project`：SLS项目名称（必需）<br>`regionId`：阿里云区域ID（必需） | - 发现项目中的日志存储<br>- 了解数据分布 |
+| `sls_get_context_logs` | 获取日志上下文 | `project`：SLS项目名称（必需）<br>`logStore`：日志存储名称（必需）<br>`pack_id`：日志包ID（必需）<br>`pack_meta`：日志包元数据（必需）<br>`regionId`：阿里云区域ID（必需） | - 查看日志前后文<br>- 用于故障排查 |
+| `sls_log_explore` | 日志探索分析 | `project`：SLS项目名称（必需）<br>`logStore`：日志存储名称（必需）<br>`from_time`：开始时间（必需）<br>`to_time`：结束时间（必需）<br>`regionId`：阿里云区域ID（必需） | - 快速了解日志分布<br>- 发现日志模式 |
+| `sls_log_compare` | 日志对比分析 | `project`：SLS项目名称（必需）<br>`logStore`：日志存储名称（必需）<br>`test_from_time`：实验组开始时间（可选）<br>`test_to_time`：实验组结束时间（可选）<br>`control_from_time`：对照组开始时间（可选）<br>`control_to_time`：对照组结束时间（可选）<br>`regionId`：阿里云区域ID（必需） | - 对比不同时段日志<br>- 发现异常变化 |
 
 ### 权限要求
 
@@ -117,6 +155,7 @@ Observable MCP Server 现已支持日志服务 SLS、应用实时监控服务 AR
     *   根据您需要使用的工具，参考以下文档进行权限配置：
         *   **日志服务 (SLS)**：如果您需要使用 `sls_*` 相关工具，请参考 [日志服务权限说明](https://help.aliyun.com/zh/sls/overview-8)，并授予必要的读取、查询等权限。
         *   **应用实时监控服务 (ARMS)**：如果您需要使用 `arms_*` 相关工具，请参考 [ARMS 权限说明](https://help.aliyun.com/zh/arms/security-and-compliance/overview-8?scm=20140722.H_74783._.OR_help-T_cn~zh-V_1)，并授予必要的查询权限。
+        *   **数字员工 (sls_text_to_sql)**：如果您需要使用 `sls_text_to_sql` 工具，需授予数字员工对话权限。该工具使用默认数字员工 `apsara-ops`。最小权限策略：`cms:CreateChat`, `cms:CreateThread`, `cms:GetThread`, `cms:ListThreads`，资源范围 `acs:cms:*:*:digitalemployee/*`。详见 [数字员工权限配置](https://help.aliyun.com/zh/cms/cloudmonitor-2-0/digital-employee-permission-configuration)。
     * 特殊权限说明，如果使用了SQL生成之类的工具，需要单独授予`sls:CallAiTools`的权限
     *   请根据您的实际应用场景，精细化配置所需权限。
 
@@ -172,6 +211,15 @@ python -m mcp_server_aliyun_observability --transport sse --transport-port 8000 
 - `--scope` 指定工具范围，可选值为 `paas`、`iaas`、`all`，默认值为 `all`
 - `--log-level` 指定日志级别，可选值为 `DEBUG`、`INFO`、`WARNING`、`ERROR`，默认值为 `INFO`
 - `--transport-port` 指定传输端口，默认值为 `8080`，仅当 `--transport` 为 `sse` 或 `streamable-http` 时有效
+- `--host` 指定监听地址，默认值为 `127.0.0.1`
+- `--knowledge-config` 指定外部知识库配置文件路径（可选）
+
+**环境变量**:
+- `ALIBABA_CLOUD_ACCESS_KEY_ID` - 阿里云 AccessKey ID
+- `ALIBABA_CLOUD_ACCESS_KEY_SECRET` - 阿里云 AccessKey Secret
+- `ALIBABA_CLOUD_SECURITY_TOKEN` - STS Token（可选）
+- `LANGUAGE` - 数字员工对话语言（默认 `zh`）
+- `TIMEZONE` - 数字员工对话时区（默认 `Asia/Shanghai`）
 
 ### 使用 uvx 安装运行
 
@@ -196,6 +244,33 @@ pip install -e .
 # 运行
 python -m mcp_server_aliyun_observability
 ```
+
+### MCP 测试客户端
+
+项目提供了一个符合 MCP 协议规范的测试客户端，用于验证服务器功能：
+
+```bash
+# 进入测试客户端目录
+cd mcp_test_client
+
+# 运行所有测试
+python mcp_client.py
+
+# 运行特定类别测试
+python mcp_client.py --category shared  # 共享工具测试
+python mcp_client.py --category iaas    # IaaS工具测试
+python mcp_client.py --category paas    # PaaS工具测试
+
+# 指定服务器地址
+python mcp_client.py --host 127.0.0.1 --port 8080
+```
+
+测试客户端特性：
+- **MCP协议兼容**: 完整实现 MCP 初始化流程（initialize → notifications/initialized）
+- **自动重试**: 失败测试自动根据错误反馈修正参数重试
+- **智能截断**: 输出保留关键信息，列表数据展示首条完整记录
+- **分类测试**: 支持按 shared/iaas/paas 分类运行测试
+- **资源发现缓存**: 自动缓存发现的资源用于后续测试
 
 
 ### Transport 选择指南
@@ -293,25 +368,29 @@ python -m mcp_server_aliyun_observability
 1.x 基于可观测 2.0 做了大规模升级：日志/指标/事件/链路等能力以 UModel 结构化接口为主（`umodel_*`），并补充了少量 IaaS 直连工具。下表汇总了新增、替换/重命名和移除的能力，便于从 0.3.x 迁移。
 
 ### 替换 / 重命名
-| 0.3.x 工具 | 1.x.x 对应 | 变化类型 | 说明 |
-| --- | --- | --- | --- |
-| `sls_translate_text_to_sql_query` | `sls_text_to_sql` | 重命名 | 依然用于将自然语言生成 SLS 查询语句。 |
-| `sls_execute_sql_query` | `sls_execute_sql` | 重命名 | 执行 SLS 查询，参数名与时间解析方式调整。 |
-| `cms_translate_text_to_promql` | `cms_text_to_promql` | 重命名 | 生成 PromQL 查询文本。 |
-| `cms_execute_promql_query` | `cms_execute_promql` | 重命名 | 执行 PromQL，底层改为通过 SLS metricstore 包装执行。 |
-| `sls_list_projects` | `sls_list_projects` | 保留/增强 | 保留，增加参数校验与提示。 |
-| `sls_list_logstores` | `sls_list_logstores` | 保留/增强 | 保留，支持指标库筛选等参数。 |
+| 0.3.x 工具 | 1.x.x 对应             | 变化类型             | 说明 |
+| --- |----------------------|------------------| --- |
+| `sls_translate_text_to_sql_query` | `sls_text_to_sql`    | 重命名              | 依然用于将自然语言生成 SLS 查询语句。 |
+| `sls_execute_sql_query` | `sls_execute_sql`    | 重命名              | 执行 SLS 查询，参数名与时间解析方式调整。 |
+| `sls_text_to_spl` |                      | 自然语言转 SPL 查询并执行。 |
+| `sls_sop` |                      | SLS 智能问答助手。      |
+| `cms_translate_text_to_promql` | `cms_text_to_promql` | 重命名              | 生成 PromQL 查询文本。 |
+| `cms_execute_promql_query` | `cms_execute_promql` | 重命名              | 执行 PromQL，底层改为通过 SLS metricstore 包装执行。 |
+| `sls_list_projects` | `sls_list_projects`  | 保留/增强            | 保留，增加参数校验与提示。 |
+| `sls_list_logstores` | `sls_list_logstores` | 保留/增强            | 保留，支持指标库筛选等参数。 |
 
 ### 新增（1.x.x 独有）
 | 新工具 | 能力说明 |
 | --- | --- |
 | `sls_execute_spl` | 直接执行 SPL 查询（高级用法）。 |
-| `sls_text_to_spl` | 自然语言转 SPL 查询并执行。 |
-| `sls_sop` | SLS 智能问答助手。 |
+| `sls_text_to_sql_old` | ⚠️ [已废弃] 旧版text-to-SQL工具，使用SLS CallAiTools API。请优先使用 sls_text_to_sql。 |
+| `sls_get_context_logs` | 获取日志上下文，用于查看日志前后文。 |
+| `sls_log_explore` | 日志探索分析，快速了解日志分布和模式。 |
+| `sls_log_compare` | 日志对比分析，对比不同时段日志发现异常。 |
 | `list_workspace` / `list_domains` / `introduction` | 工作空间/域发现与服务自述。 |
 | `umodel_get_entities` / `umodel_get_neighbor_entities` / `umodel_search_entities` | 实体发现与邻居查询。 |
 | `umodel_list_data_set` / `umodel_search_entity_set` / `umodel_list_related_entity_set` | 数据集枚举、实体集搜索及关联关系发现。 |
-| `umodel_get_metrics` / `umodel_get_golden_metrics` / `umodel_get_relation_metrics` | 指标与关系级指标查询。`umodel_get_metrics` 支持高级分析模式：cluster(聚类)、forecast(预测)、anomaly_detection(异常检测)。 |
+| `umodel_get_metrics` / `umodel_get_golden_metrics` / `umodel_get_relation_metrics` | 指标与关系级指标查询。支持高级分析模式：cluster(聚类)、forecast(预测)、anomaly_detection(异常检测)。支持时序对比（offset参数）。 |
 | `umodel_get_logs` / `umodel_get_events` | 日志、事件查询。 |
 | `umodel_get_traces` / `umodel_search_traces` | 链路明细与搜索。 |
 | `umodel_get_profiles` | 性能剖析数据查询。 |
