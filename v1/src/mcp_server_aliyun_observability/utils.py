@@ -436,10 +436,12 @@ def text_to_spl(
     region_id: str,
     project: str,
     logstore: str,
-    data_sample: List[Dict[str, Any]]
+    data_sample: str = ""
 ) -> dict[str, Any]:
     """
-    Generate SPL from natural language and sample data.
+    Generate SPL from natural language using CMS Chat API (SSE streaming).
+    Uses the same CMS CreateThread + CreateChatWithSSE approach as text_to_sql,
+    but with "spl_intent_recognition" skill.
     
     Args:
         ctx: MCP context
@@ -450,132 +452,163 @@ def text_to_spl(
         data_sample: Sample log data (list of dicts)
     """
     import time
-    import uuid
+    import os
+    import re
     
     current_ts = int(time.time())
-    
-    # Construct userContext
-    user_context = [
-        {
-            "type": "metadata",
-            "data": {
-                "from_time": current_ts - 900,
-                "to_time": current_ts,
-                "fromTime": current_ts - 900,
-                "toTime": current_ts
-            }
-        },
-        {
-            "type": "spl_generation",
-            "data": {
-                "data": json.dumps(data_sample)
-            }
-        }
-    ]
-
-    variables = {
-        "workspace": "",
-        "region": region_id,
-        "project": project,
-        "language": "zh",
-        "logstore": logstore,
-        "skill": "spl_intent_recognition",
-        "skill_name": "spl_intent_recognition",
-        "timeZone": "Asia/Shanghai",
-        "timeStamp": str(current_ts),
-        "startTime": current_ts - 900,
-        "endTime": current_ts,
-        "config": "{\"disableThreadData\":false}",
-        "userContext": json.dumps(user_context)
-    }
-
-    thread_id = f"thread-{uuid.uuid4().hex}"
+    from_time = current_ts - 900
+    to_time = current_ts
+    language = os.getenv("LANGUAGE", "zh")
+    time_zone = os.getenv("TIMEZONE", "Asia/Shanghai")
     digital_employee_name = "apsara-ops"
 
     logger.info(
-        f"Start text_to_spl, text={text}, region_id={region_id}, digital_employee={digital_employee_name}"
+        f"Start text_to_spl, text={text}, region_id={region_id}, "
+        f"digital_employee={digital_employee_name}"
     )
 
     try:
         cms_client_wrapper = ctx.request_context.lifespan_context["cms_client"]
         cms_client: CmsClient = cms_client_wrapper.with_region(region_id)
 
-        messages = [
-            cms_model.CreateChatRequestMessages(
-                role="user",
-                contents=[
-                    cms_model.CreateChatRequestMessagesContents(
-                        type="text", value=text
-                    )
-                ],
-            )
-        ]
+        # Step 1: Create a thread
+        thread_request = cms_model.CreateThreadRequest()
+        thread_request.title = f"spl_intent_recognition-{int(time.time())}"
+        thread_variables = cms_model.CreateThreadRequestVariables()
+        thread_variables.project = project
+        thread_request.variables = thread_variables
 
-        request = cms_model.CreateChatRequest(
-            action="create",
-            digital_employee_name=digital_employee_name,
-            messages=messages,
-            variables=variables,
-            thread_id=thread_id
-        )
+        thread_response = cms_client.create_thread(digital_employee_name, thread_request)
+        if not thread_response.body or not thread_response.body.thread_id:
+            raise Exception("Failed to create thread: missing thread_id")
+        thread_id = thread_response.body.thread_id
+        logger.info(f"Thread created, thread_id: {thread_id}")
 
-        logger.info("Building CMS AI Chat request")
+        # Step 2: Create chat request with SSE
+        chat_request = cms_model.CreateChatRequest()
+        chat_request.digital_employee_name = digital_employee_name
+        chat_request.action = "create"
+        chat_request.thread_id = thread_id
 
-        runtime = util_models.RuntimeOptions(
-            read_timeout=60000,
-            connect_timeout=60000
-        )
+        message = cms_model.CreateChatRequestMessages()
+        message.role = "user"
+        content = cms_model.CreateChatRequestMessagesContents()
+        content.type = "text"
+        content.value = text
+        message.contents = [content]
+        chat_request.messages = [message]
 
-        # Use SSE to handle stream response
-        response_stream = cms_client.create_chat_with_sse(request, {}, runtime)
-        
-        full_content = ""
-        trace_id = ""
-        
-        for event in response_stream:
-            # event structure is typically a dict or object with 'body'
-            # We access it as a dict based on test results
-            body = event.body if hasattr(event, "body") else event.get("body", {})
-            if hasattr(body, "to_map"):
-                body = body.to_map()
+        # Build userContext with spl_generation data
+        user_context = json.dumps([
+            {
+                "type": "metadata",
+                "data": {
+                    "from_time": from_time,
+                    "to_time": to_time,
+                    "fromTime": from_time,
+                    "toTime": to_time,
+                }
+            },
+            {
+                "type": "spl_generation",
+                "data": {
+                    "data": data_sample if data_sample else "[]"
+                }
+            }
+        ])
 
-            if hasattr(body, 'trace_id') and body.trace_id:
-                trace_id = body.trace_id
-
-            
-            if "messages" in body:
-                for msg in body["messages"]:
-                    # Accumulate text content
-                    if "contents" in msg:
-                        for content in msg["contents"]:
-                            if content.get("type") == "text" and "value" in content:
-                                full_content += content["value"]
-
-        # 解析事件以提取生成的SPL和预览数据
-        generated_spl = None
-        preview_data = None
-
-
-        result = {
-            "content": full_content,
-            "query": generated_spl,
-            "data": preview_data,
-            "trace_id": trace_id,
+        chat_request.variables = {
+            "region": region_id,
+            "project": project,
+            "language": language,
+            "timeZone": time_zone,
+            "timeStamp": str(int(time.time())),
+            "logstore": logstore,
+            "startTime": from_time,
+            "endTime": to_time,
+            "skill_name": "spl_intent_recognition",
+            "userContext": user_context,
+            "config": json.dumps({"disableThreadData": False}),
+            "skill": "spl_intent_recognition",
         }
 
-        logger.info(f"Chat request successful, trace_id: {trace_id}")
-        return result
+        # Step 3: Call SSE API and collect responses
+        runtime = util_models.RuntimeOptions()
+        runtime.read_timeout = 120000
+        runtime.connect_timeout = 30000
+
+        collected_query = None
+        collected_explanation = []
+        trace_id = None
+
+        for response in cms_client.create_chat_with_sse(chat_request, {}, runtime):
+            if response.body and hasattr(response.body, 'trace_id') and response.body.trace_id:
+                trace_id = response.body.trace_id
+
+            if response.body and response.body.messages:
+                for msg in response.body.messages:
+                    # Extract query from events[type=interactive].payload.queries
+                    if msg.events:
+                        for event in msg.events:
+                            if not isinstance(event, dict):
+                                continue
+                            if event.get("type") != "interactive":
+                                continue
+                            payload = event.get("payload", {})
+                            queries = payload.get("queries", [])
+                            for q in queries:
+                                if isinstance(q, dict) and "query" in q:
+                                    collected_query = q["query"]
+                                    logger.info(f"Extracted SPL: {collected_query}")
+
+                    # Extract explanation from artifacts[name=Result].parts[].text
+                    if msg.artifacts:
+                        for artifact in msg.artifacts:
+                            if isinstance(artifact, dict) and artifact.get("name") == "Result":
+                                parts = artifact.get("parts", [])
+                                if isinstance(parts, list):
+                                    for part in parts:
+                                        if isinstance(part, dict) and "text" in part:
+                                            collected_explanation.append(part["text"])
+
+        explanation = "".join(collected_explanation)
+
+        # Extract timestamps from explanation using regex
+        ts_matches = re.findall(r'(?:起始|结束)时间.*?时间戳：(\d+)', explanation)
+        if len(ts_matches) >= 2:
+            from_time = int(ts_matches[0])
+            to_time = int(ts_matches[1])
+
+        if collected_query:
+            logger.info(f"text_to_spl success, trace_id: {trace_id}")
+            data_obj = {
+                "answer": collected_query,
+                "message": explanation,
+                "from_time": from_time,
+                "to_time": to_time,
+            }
+            return {
+                "data": {"query": json.dumps(data_obj, ensure_ascii=False)},
+                "error": False,
+                "message": "success",
+            }
+        else:
+            logger.warning("text_to_spl: no SPL generated")
+            data_obj = {
+                "answer": "",
+                "message": explanation or "No SPL query generated",
+                "from_time": from_time,
+                "to_time": to_time,
+            }
+            return {
+                "data": {"query": json.dumps(data_obj, ensure_ascii=False)},
+                "error": False,
+                "message": "success",
+            }
 
     except Exception as e:
-        result = {
-            "content": "",
-            "query": "",
-            "data": "",
-            "trace_id": "",
-            "error_msg":f"Call CMS AI Chat failed: {str(e)}"
-        }
         logger.error(f"Call CMS AI Chat failed: {str(e)}", exc_info=True)
-        return result
+        raise
 
 def sls_sop(
     ctx: Context, 
@@ -842,61 +875,67 @@ def text_to_sql(
             
             if response.body and response.body.messages:
                 for msg in response.body.messages:
-                    # Check for tool calls (QuerySLSLogs)
-                    if msg.tools:
-                        for tool in msg.tools:
-                            if isinstance(tool, dict):
-                                tool_name = tool.get("name") or tool.get("id")
-                                if tool_name == "QuerySLSLogs":
-                                    # Extract SQL from arguments
-                                    args = tool.get("arguments")
-                                    if isinstance(args, dict) and "query" in args and collected_sql is None:
-                                        collected_sql = args["query"]
-                                        logger.info(f"提取到SQL: {collected_sql}")
-                                        if "time_range" in args:
-                                            time_range = args["time_range"]
-                                            if "~" in time_range:
-                                                time_range_parts = time_range.split("~")
-                                                actual_from_time = int(time_range_parts[0])
-                                                actual_to_time = int(time_range_parts[1])
-                    
-                    # Check for text content (explanation)
-                    if msg.contents:
-                        for content_item in msg.contents:
-                            if isinstance(content_item, dict):
-                                if content_item.get("type") == "text":
-                                    text_value = content_item.get("value", "")
-                                    if text_value:
-                                        collected_explanation.append(text_value)
+                    # Extract query from events[type=interactive].payload.queries
+                    if msg.events:
+                        for event in msg.events:
+                            if not isinstance(event, dict):
+                                continue
+                            if event.get("type") != "interactive":
+                                continue
+                            payload = event.get("payload", {})
+                            queries = payload.get("queries", [])
+                            for q in queries:
+                                if isinstance(q, dict) and "query" in q:
+                                    collected_sql = q["query"]
+                                    logger.info(f"提取到SQL(event): {collected_sql}")
+
+                    # Extract explanation from artifacts[name=Result].parts[].text
+                    if msg.artifacts:
+                        for artifact in msg.artifacts:
+                            if isinstance(artifact, dict) and artifact.get("name") == "Result":
+                                parts = artifact.get("parts", [])
+                                if isinstance(parts, list):
+                                    for part in parts:
+                                        if isinstance(part, dict) and "text" in part:
+                                            collected_explanation.append(part["text"])
                     
 
-        # Build response data in the same format as sls_text_to_sql
+        # Build response data in the same format as Go version
         explanation = "".join(collected_explanation)
+
+        # Extract timestamps from explanation using regex (matching Go logic)
+        import re
+        ts_matches = re.findall(r'(?:起始|结束)时间.*?时间戳：(\d+)', explanation)
+        if len(ts_matches) >= 2:
+            actual_from_time = int(ts_matches[0])
+            actual_to_time = int(ts_matches[1])
         
         if collected_sql:
             logger.info(f"文本转SQL查询(CMS)成功，生成SQL: {collected_sql}")
-            # Format data as JSON string matching sls_text_to_sql structure
+            # Format data as JSON string matching Go buildResponse structure
             data_obj = {
                 "answer": collected_sql,
                 "message": explanation,
-                "to_time": str(actual_to_time),
-                "from_time": str(actual_from_time)
+                "to_time": actual_to_time,
+                "from_time": actual_from_time
             }
             return {
-                "data": json.dumps(data_obj, ensure_ascii=False),
-                "trace_id": trace_id or "",
+                "data": {"query": json.dumps(data_obj, ensure_ascii=False)},
+                "error": False,
+                "message": "success",
             }
         else:
             logger.warning("文本转SQL查询(CMS)失败: 未生成SQL")
             data_obj = {
                 "answer": "",
                 "message": explanation or "No SQL query generated",
-                "to_time": str(actual_to_time),
-                "from_time": str(actual_from_time)
+                "to_time": actual_to_time,
+                "from_time": actual_from_time
             }
             return {
-                "data": json.dumps(data_obj, ensure_ascii=False),
-                "trace_id": trace_id or "",
+                "data": {"query": json.dumps(data_obj, ensure_ascii=False)},
+                "error": False,
+                "message": "success",
             }
             
     except Exception as e:

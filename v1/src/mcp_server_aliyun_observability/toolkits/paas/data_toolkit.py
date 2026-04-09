@@ -23,6 +23,51 @@ TIME_RANGE_DESCRIPTION = """时间范围表达式，支持多种格式：
 默认值: last_1h"""
 
 
+from mcp_server_aliyun_observability.logger import get_logger
+
+_logger = get_logger()
+
+
+def _parse_multiple_storage_id(err_msg: str) -> Optional[Dict[str, str]]:
+    """Parse the first storage ID from a MultipleStorageFound error message.
+    
+    Storage ID format: "domain@kind@name" (e.g. "k8s@sls_logstore@k8s-log-xxx/k8s-event")
+    """
+    if "MultipleStorageFound" not in err_msg:
+        return None
+    marker = "available storage IDs: ["
+    idx = err_msg.find(marker)
+    if idx < 0:
+        return None
+    rest = err_msg[idx + len(marker):]
+    end = rest.find("]")
+    if end < 0:
+        return None
+    first_id = rest[:end].split(",")[0].strip()
+    parts = first_id.split("@", 2)
+    if len(parts) != 3:
+        return None
+    return {"domain": parts[0], "kind": parts[1], "name": parts[2]}
+
+
+def _build_event_query_with_storage(
+    event_set_domain: str, event_set_name: str,
+    storage: Dict[str, str], entity_ids: Optional[str], limit: int
+) -> str:
+    """Build an event query with explicit storage parameters (table mode)."""
+    query_param = ""
+    if entity_ids:
+        parts = [p.strip() for p in entity_ids.split(",") if p.strip()]
+        if parts:
+            quoted = ",".join(f"'{p}'" for p in parts)
+            query_param = f', query=`"resource.entity.entity_id" in ({quoted})`'
+    return (
+        f".event_set with(domain='{event_set_domain}', name='{event_set_name}', "
+        f"storage_domain='{storage['domain']}', storage_kind='{storage['kind']}', "
+        f"storage_name='{storage['name']}'{query_param}) | limit 0, {limit}"
+    )
+
+
 class PaasDataToolkit:
     """PaaS Data Toolkit - 可观测数据查询工具包
 
@@ -492,8 +537,8 @@ class PaasDataToolkit:
                 ...,
                 description="源实体类型名称(Source Entity Set Name)，如'apm.service'。不能为'*'，可通过 umodel_search_entity_set 获取"
             ),
-            src_entity_ids: str = Field(
-                ...,
+            src_entity_ids: Optional[str] = Field(
+                None,
                 description="源实体ID列表(Source Entity IDs)，逗号分隔，如'id1,id2,id3'。可通过 umodel_get_entities 获取"
             ),
             relation_type: str = Field(
@@ -508,9 +553,9 @@ class PaasDataToolkit:
                 ...,
                 description="指标集域名(Metric Set Domain)，如'apm'。可通过 umodel_list_data_set(data_set_types='metric_set') 获取"
             ),
-            metric_set_name: str = Field(
-                ...,
-                description="指标集名称(Metric Set Name)，如'apm.metric.apm.operation'。可通过 umodel_list_data_set 获取"
+            metric_set_name: Optional[str] = Field(
+                None,
+                description="指标集名称(Metric Set Name)，如'apm.metric.apm.operation'。可通过 umodel_list_data_set 获取。未提供时根据 relation_type 和 src_entity_set_name 自动生成"
             ),
             metric: str = Field(
                 ...,
@@ -612,27 +657,43 @@ class PaasDataToolkit:
                 {
                     "src_domain": src_domain,
                     "src_entity_set_name": src_entity_set_name,
-                    "src_entity_ids": src_entity_ids,
                     "relation_type": relation_type,
                     "direction": direction,
                     "metric_set_domain": metric_set_domain,
-                    "metric_set_name": metric_set_name,
                     "metric": metric,
                     "workspace": workspace,
                 },
-                ["src_domain", "src_entity_set_name", "src_entity_ids", "relation_type",
-                 "direction", "metric_set_domain", "metric_set_name", "metric", "workspace"]
+                ["src_domain", "src_entity_set_name", "relation_type",
+                 "direction", "metric_set_domain", "metric", "workspace"]
             )
 
             # 使用 _parse_time_range 解析时间范围
             from_ts, to_ts = self._parse_time_range(time_range)
 
+            # Auto-generate metric_set_name if not provided (matching Go logic)
+            if not metric_set_name:
+                if not dest_entity_set_name:
+                    return self._build_standard_response(
+                        data=[], query="", time_range=(from_ts, to_ts), error=True,
+                        message="metric_set_name is required when dest_entity_set_name is not provided",
+                        time_range_expression=time_range or "last_1h"
+                    )
+                metric_set_name = f"{metric_set_domain}.metric.{src_entity_set_name}_{relation_type}_{dest_entity_set_name}"
+
             # 构建源实体 IDs 参数
-            src_parts = [id.strip() for id in src_entity_ids.split(",") if id.strip()]
-            src_quoted = [f"'{id}'" for id in src_parts]
-            src_entity_ids_param = f"[{','.join(src_quoted)}]"
+            if src_entity_ids and src_entity_ids.strip():
+                src_parts = [id.strip() for id in src_entity_ids.split(",") if id.strip()]
+                src_quoted = [f"'{id}'" for id in src_parts]
+                src_entity_ids_param = f"[{','.join(src_quoted)}]"
+            else:
+                src_entity_ids_param = "[]"
 
             # 构建目标实体参数
+            # Auto-infer dest_domain from dest_entity_set_name prefix if not provided (matching Go)
+            if not dest_domain and dest_entity_set_name:
+                dot_idx = dest_entity_set_name.find(".")
+                if dot_idx > 0:
+                    dest_domain = dest_entity_set_name[:dot_idx]
             dest_domain_param = f"'{dest_domain}'" if dest_domain else "''"
             dest_name_param = (
                 f"'{dest_entity_set_name}'" if dest_entity_set_name else "''"
@@ -647,27 +708,16 @@ class PaasDataToolkit:
             else:
                 dest_entity_ids_param = "[]"
 
-            # 先校验用户传入的原始 metric_set_name 是否存在（在拼接之前）
-            self._validate_data_set_exists(
-                ctx,
-                workspace,
-                regionId,
-                src_domain,
-                src_entity_set_name,
-                "metric_set",
-                metric_set_domain,
-                metric_set_name,
-                metric,
-            )
+            # Build entity_set with clause (omit ids when empty, matching Go buildEntityIDsParam)
+            entity_set_clause = f".entity_set with(domain='{src_domain}', name='{src_entity_set_name}'"
+            if src_entity_ids_param != "[]":
+                entity_set_clause += f", ids={src_entity_ids_param}"
+            entity_set_clause += ")"
 
-            # 自动拼接 metric_set_name：如果未包含 relation_type，则拼接为 {name}_{relation}_{src_entity}
-            relation_suffix = f"_{relation_type}_{src_entity_set_name}"
-            if relation_suffix not in metric_set_name:
-                metric_set_name = f"{metric_set_name}{relation_suffix}"
-
-            # 根据Go实现构建正确的查询
-            # get_relation_metric 前两个参数是 src_domain 和 src_entity_set_name
-            query = f".entity_set with(domain='{src_domain}', name='{src_entity_set_name}', ids={src_entity_ids_param}) | entity-call get_relation_metric('{src_domain}', '{src_entity_set_name}', {dest_entity_ids_param}, {dest_domain_param}, '{relation_type}', '{direction}', '{metric_set_domain}', '{metric_set_name}', '{metric}', '{query_type}', {dest_name_param}, [])"
+            # Build query matching Go version parameter order:
+            # get_relation_metric(dest_domain, dest_entity_set_name, dest_entity_ids, filter,
+            #   relation_type, direction, metric_set_domain, metric_set_name, metric, query_type, step, aggregate_labels)
+            query = f"{entity_set_clause} | entity-call get_relation_metric({dest_domain_param}, {dest_name_param}, {dest_entity_ids_param}, '', '{relation_type}', '{direction}', '{metric_set_domain}', '{metric_set_name}', '{metric}', '{query_type}', '', [])"
 
             # 执行查询
             result = execute_cms_query_with_context(
@@ -1035,6 +1085,22 @@ class PaasDataToolkit:
             data = result.get("data") if isinstance(result, dict) else result
             error = result.get("error", False) if isinstance(result, dict) else False
             message = result.get("message", "") if isinstance(result, dict) else ""
+
+            # Auto-retry on MultipleStorageFound (matching Go implementation)
+            if error and isinstance(message, str) and "MultipleStorageFound" in message:
+                storage = _parse_multiple_storage_id(message)
+                if storage:
+                    _logger.info(f"umodel_get_events retrying with storage: {storage}")
+                    retry_query = _build_event_query_with_storage(
+                        event_set_domain, event_set_name, storage, entity_ids, actual_limit
+                    )
+                    result = execute_cms_query_with_context(
+                        ctx, retry_query, workspace, regionId, from_ts, to_ts, actual_limit
+                    )
+                    data = result.get("data") if isinstance(result, dict) else result
+                    error = result.get("error", False) if isinstance(result, dict) else False
+                    message = result.get("message", "") if isinstance(result, dict) else ""
+                    query = retry_query
 
             # 使用 _build_standard_response 构建标准化响应
             return self._build_standard_response(

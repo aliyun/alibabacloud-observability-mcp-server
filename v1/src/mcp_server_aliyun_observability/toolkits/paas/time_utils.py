@@ -464,22 +464,17 @@ class TimeRangeParser:
     """
 
     @staticmethod
-    def parse_time_expression(time_expr: Union[str, int]) -> int:
+    def parse_time_expression(time_expr: Union[str, int], now: Optional[int] = None) -> int:
         """解析时间表达式为Unix时间戳（秒）
         
         Args:
             time_expr: 时间表达式，支持：
                 - Unix时间戳（整数，秒/毫秒/微秒/纳秒）
                 - 相对时间表达式：now-1h, now-30m, now-1d, now-7d
+            now: 可选的当前时间戳（秒），用于避免多次调用之间的时间漂移
                 
         Returns:
             Unix时间戳（秒）
-            
-        Examples:
-            parse_time_expression(1640995200) -> 1640995200 (秒时间戳)
-            parse_time_expression(1640995200000) -> 1640995200 (毫秒转秒)
-            parse_time_expression("now-1h") -> 当前时间-1小时的时间戳
-            parse_time_expression("now-30m") -> 当前时间-30分钟的时间戳
         """
         # 如果是整数，需要判断是秒还是毫秒时间戳
         if isinstance(time_expr, int):
@@ -488,9 +483,12 @@ class TimeRangeParser:
         if isinstance(time_expr, str) and time_expr.isdigit():
             return TimeRangeParser._normalize_timestamp(int(time_expr))
         
-        # 使用新的解析器
-        now = datetime.now()
-        return _parse_time_point(str(time_expr), now)
+        # 使用新的解析器，支持传入固定的 now 时刻
+        if now is not None:
+            now_dt = datetime.fromtimestamp(now)
+        else:
+            now_dt = datetime.now()
+        return _parse_time_point(str(time_expr), now_dt)
 
     @staticmethod
     def _normalize_timestamp(timestamp: int) -> int:

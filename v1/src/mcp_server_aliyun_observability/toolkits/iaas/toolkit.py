@@ -301,8 +301,8 @@ class IaaSToolkit:
             ),
             project: str = Field(..., description="sls project name"),
             logStore: str = Field(..., description="sls log store name"),
-            data_sample: List[Dict[str, Any]] = Field(
-                ..., description="sample log data for SPL generation"
+            data_sample: str = Field(
+                default="", description="sample log data for SPL generation (optional)"
             ),
             regionId: str = Field(
                 default=...,
@@ -1328,18 +1328,20 @@ class IaaSToolkit:
                 "sls_client"
             ].with_region(regionId)
 
-            # Parse time parameters
+            # Parse time parameters using a single 'now' to avoid drift between calls
             from mcp_server_aliyun_observability.toolkits.paas.time_utils import (
                 TimeRangeParser,
             )
+            import time as _time
+            now = int(_time.time())
 
-            test_from_timestamp = TimeRangeParser.parse_time_expression(test_from_time)
-            test_to_timestamp = TimeRangeParser.parse_time_expression(test_to_time)
+            test_from_timestamp = TimeRangeParser.parse_time_expression(test_from_time, now=now)
+            test_to_timestamp = TimeRangeParser.parse_time_expression(test_to_time, now=now)
 
-            control_from_timestamp = TimeRangeParser.parse_time_expression(control_from_time)
-            control_to_timestamp = TimeRangeParser.parse_time_expression(control_to_time)
+            control_from_timestamp = TimeRangeParser.parse_time_expression(control_from_time, now=now)
+            control_to_timestamp = TimeRangeParser.parse_time_expression(control_to_time, now=now)
 
-            if not (test_to_timestamp < control_from_timestamp or control_to_timestamp < test_from_timestamp):
+            if not (test_to_timestamp <= control_from_timestamp or control_to_timestamp <= test_from_timestamp):
                 return {
                     "patterns": [],
                     "message": f"Failed to do log compare because test group ({test_from_time} ~ {test_to_time}) and control group ({control_from_time} ~ {control_to_time}) data time range overlap"
