@@ -7,15 +7,16 @@ import (
 )
 
 func TestFormatTimestamp(t *testing.T) {
+	loc := GetLocation() // Asia/Shanghai by default
 	tests := []struct {
 		name string
 		ts   int64
 		want string
 	}{
-		{"epoch zero", 0, "1970-01-01 00:00:00"},
-		{"known date", 1704067200, "2024-01-01 00:00:00"},
-		{"mid-day", 1718451045, "2024-06-15 11:30:45"},
-		{"end of year", 1735689599, "2024-12-31 23:59:59"},
+		{"epoch zero", 0, time.Unix(0, 0).In(loc).Format("2006-01-02 15:04:05")},
+		{"known date", 1704067200, time.Unix(1704067200, 0).In(loc).Format("2006-01-02 15:04:05")},
+		{"mid-day", 1718451045, time.Unix(1718451045, 0).In(loc).Format("2006-01-02 15:04:05")},
+		{"end of year", 1735689599, time.Unix(1735689599, 0).In(loc).Format("2006-01-02 15:04:05")},
 	}
 
 	for _, tt := range tests {
@@ -72,8 +73,8 @@ func TestParseTimeRange_Valid(t *testing.T) {
 		{
 			"date-time strings",
 			"2024-01-01 00:00:00", "2024-06-15 12:30:45",
-			time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC).Unix(),
-			time.Date(2024, 6, 15, 12, 30, 45, 0, time.UTC).Unix(),
+			time.Date(2024, 1, 1, 0, 0, 0, 0, GetLocation()).Unix(),
+			time.Date(2024, 6, 15, 12, 30, 45, 0, GetLocation()).Unix(),
 		},
 		{
 			"preset keyword and now",

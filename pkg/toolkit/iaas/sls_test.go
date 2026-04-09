@@ -69,6 +69,10 @@ func (m *mockSLSClient) TextToSQL(_ context.Context, _, _, _, _ string) (string,
 	return m.textToSQLResult, m.textToSQLErr
 }
 
+func (m *mockSLSClient) TextToPromQL(_ context.Context, _, _, _, _ string) (string, error) {
+	return m.textToSQLResult, m.textToSQLErr
+}
+
 // ---------------------------------------------------------------------------
 // Tests
 // ---------------------------------------------------------------------------

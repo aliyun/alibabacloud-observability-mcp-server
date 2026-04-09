@@ -529,8 +529,8 @@ func (h *slsHandler) handleTextToPromQL(ctx context.Context, params map[string]i
 	slog.InfoContext(ctx, "sls_text_to_promql",
 		"project", project, "metricStore", metricStore, "region", regionID)
 
-	// Uses the same TextToSQL underlying mechanism for PromQL generation
-	promql, err := h.slsClient.TextToSQL(ctx, regionID, project, metricStore, text)
+	// Uses SLS CallAiTools API with text_to_promql tool
+	promql, err := h.slsClient.TextToPromQL(ctx, regionID, project, metricStore, text)
 	if err != nil {
 		slog.ErrorContext(ctx, "sls_text_to_promql failed", "error", err)
 		return buildResponse(nil, true, fmt.Sprintf("Text to PromQL failed: %s", err)), nil

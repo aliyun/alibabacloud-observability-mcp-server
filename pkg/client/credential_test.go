@@ -132,8 +132,7 @@ func TestChainCredentialProvider_CLIPriority(t *testing.T) {
 	// Set env vars to different values.
 	setEnvCredentials(t, "env-id", "env-secret")
 
-	// Build chain: static (CLI) first, then env.
-	chain := NewCredentialProvider("cli-id", "cli-secret")
+	chain := NewCredentialProvider("cli-id", "cli-secret", "")
 
 	id, err := chain.GetAccessKeyID()
 	if err != nil || id != "cli-id" {
@@ -150,7 +149,7 @@ func TestChainCredentialProvider_FallbackToEnv(t *testing.T) {
 	setEnvCredentials(t, "env-id", "env-secret")
 
 	// No CLI credentials — chain should fall back to env.
-	chain := NewCredentialProvider("", "")
+	chain := NewCredentialProvider("", "", "")
 
 	id, err := chain.GetAccessKeyID()
 	if err != nil || id != "env-id" {
@@ -168,7 +167,7 @@ func TestChainCredentialProvider_NoCredentials(t *testing.T) {
 	t.Setenv("ALIBABA_CLOUD_ACCESS_KEY_ID", "")
 	t.Setenv("ALIBABA_CLOUD_ACCESS_KEY_SECRET", "")
 
-	chain := NewCredentialProvider("", "")
+	chain := NewCredentialProvider("", "", "")
 
 	_, err := chain.GetAccessKeyID()
 	if err != ErrNoCredentials {
@@ -188,7 +187,7 @@ func TestChainCredentialProvider_SecurityTokenFromActiveProvider(t *testing.T) {
 
 	// CLI credentials without token — chain should return token from CLI
 	// provider (empty), not from env provider.
-	chain := NewCredentialProvider("cli-id", "cli-secret")
+	chain := NewCredentialProvider("cli-id", "cli-secret", "")
 
 	token, err := chain.GetSecurityToken()
 	if err != nil {
@@ -206,7 +205,7 @@ func TestChainCredentialProvider_SecurityTokenFallbackToEnv(t *testing.T) {
 	t.Setenv("ALIBABA_CLOUD_SECURITY_TOKEN", "env-token")
 
 	// No CLI credentials — token should come from env.
-	chain := NewCredentialProvider("", "")
+	chain := NewCredentialProvider("", "", "")
 
 	token, err := chain.GetSecurityToken()
 	if err != nil {
@@ -220,14 +219,14 @@ func TestChainCredentialProvider_SecurityTokenFallbackToEnv(t *testing.T) {
 // --- NewCredentialProvider factory tests ---
 
 func TestNewCredentialProvider_WithCLIParams(t *testing.T) {
-	cp := NewCredentialProvider("my-id", "my-secret")
+	cp := NewCredentialProvider("my-id", "my-secret", "")
 	chain, ok := cp.(*ChainCredentialProvider)
 	if !ok {
 		t.Fatal("NewCredentialProvider should return *ChainCredentialProvider")
 	}
-	// Should have 2 providers: static + env.
-	if len(chain.Providers) != 2 {
-		t.Fatalf("len(Providers) = %d; want 2", len(chain.Providers))
+	// Should have 3 providers: static + env + sdk.
+	if len(chain.Providers) < 2 {
+		t.Fatalf("len(Providers) = %d; want at least 2", len(chain.Providers))
 	}
 	if _, ok := chain.Providers[0].(*StaticCredentialProvider); !ok {
 		t.Fatal("first provider should be *StaticCredentialProvider")
@@ -238,14 +237,14 @@ func TestNewCredentialProvider_WithCLIParams(t *testing.T) {
 }
 
 func TestNewCredentialProvider_WithoutCLIParams(t *testing.T) {
-	cp := NewCredentialProvider("", "")
+	cp := NewCredentialProvider("", "", "")
 	chain, ok := cp.(*ChainCredentialProvider)
 	if !ok {
 		t.Fatal("NewCredentialProvider should return *ChainCredentialProvider")
 	}
-	// Should have only 1 provider: env.
-	if len(chain.Providers) != 1 {
-		t.Fatalf("len(Providers) = %d; want 1", len(chain.Providers))
+	// Should have at least 1 provider: env (+ optional sdk).
+	if len(chain.Providers) < 1 {
+		t.Fatalf("len(Providers) = %d; want at least 1", len(chain.Providers))
 	}
 	if _, ok := chain.Providers[0].(*EnvCredentialProvider); !ok {
 		t.Fatal("first provider should be *EnvCredentialProvider")

@@ -68,6 +68,9 @@ func (s *stubSLS) ListMetricStores(_ context.Context, _, _ string) ([]string, er
 func (s *stubSLS) TextToSQL(_ context.Context, _, _, _, _ string) (string, error) {
 	return "", nil
 }
+func (s *stubSLS) TextToPromQL(_ context.Context, _, _, _, _ string) (string, error) {
+	return "", nil
+}
 
 var _ client.SLSClient = (*stubSLS)(nil)
 

@@ -13,7 +13,9 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"regexp"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 
@@ -22,9 +24,8 @@ import (
 	"github.com/alibabacloud-go/tea/dara"
 
 	"github.com/alibabacloud-observability-mcp-server-go/pkg/config"
-	"github.com/alibabacloud-observability-mcp-server-go/pkg/stability"
 	"github.com/alibabacloud-observability-mcp-server-go/pkg/endpoint"
-	"github.com/alibabacloud-observability-mcp-server-go/pkg/timeparse"
+	"github.com/alibabacloud-observability-mcp-server-go/pkg/stability"
 )
 
 // CMSClient is the interface for interacting with Alibaba Cloud Monitor Service.
@@ -616,6 +617,7 @@ func (c *CMSClientImpl) ChatWithSkill(ctx context.Context, region, project, logs
 
 	var collectedSQL string
 	var collectedExplanation strings.Builder
+	var msgContent strings.Builder
 	var traceID string
 
 	// Process SSE responses
@@ -633,49 +635,33 @@ func (c *CMSClientImpl) ChatWithSkill(ctx context.Context, region, project, logs
 				continue
 			}
 
-			// Check for tool calls (QuerySLSLogs)
-			for _, tool := range msg.Tools {
-				if tool == nil {
+			// event[type:interactive];获取sql/spl语句
+			for _, event := range msg.Events {
+				if event == nil {
 					continue
 				}
-				jsonTool, _ := json.Marshal(tool)
-				slog.DebugContext(ctx, "cms: extracted tools", "contents", string(jsonTool))
-				toolName, _ := tool["name"].(string)
-				if toolName == "" {
-					toolName, _ = tool["id"].(string)
+				e, _ := json.Marshal(event)
+				slog.InfoContext(ctx, "[event]", "event", string(e))
+				eventType, ok := event["type"].(string)
+				if !ok || eventType != "interactive" {
+					continue
 				}
-				if toolName == "QuerySLSLogs" && tool["arguments"] != nil {
-					if args, ok := tool["arguments"].(map[string]interface{}); ok && args["query"] != nil && tool["status"] != nil && tool["status"].(string) == "start" {
-						// TODO : 查询的sql语句，与返回日志中的不匹配
-						if query, ok := args["query"].(string); ok && args["time_range"] != nil {
-							collectedSQL = query
-							slog.DebugContext(ctx, "cms: extracted SQL", "sql", collectedSQL)
-							if time_range, ok := args["time_range"]; ok {
-								if strings.ContainsRune(time_range.(string), '~') {
-									times := strings.Split(time_range.(string), "~")
-									f, _ := time.Parse("2006-01-02 15:04:05", times[0])
-									fromTime = f.Unix()
-									t, _ := time.Parse("2006-01-02 15:04:05", times[1])
-									toTime = t.Unix()
-								} else if strings.Contains(time_range.(string), "last_") {
-									ts, err := timeparse.ParseTimeExpression(time_range.(string), time.Now())
-									if err != nil {
-										slog.ErrorContext(ctx, "cms: time parse error", "error", err)
-									}
-									fromTime = ts
-									toTime = time.Now().Unix()
-								}
-
-							}
-						}
-					}
+				payload, ok := event["payload"].(map[string]interface{})
+				if !ok || len(payload) == 0 {
+					continue
+				}
+				quries, ok := payload["queries"].([]interface{})
+				if !ok || len(quries) == 0 {
+					continue
+				}
+				for _, query := range quries {
+					query := query.(map[string]interface{})
+					collectedSQL = query["query"].(string)
+					slog.InfoContext(ctx, "[event:query]", "query", query["query"].(string))
 				}
 			}
-			if len(msg.Artifacts) > 0 {
-				artifacts, _ := json.Marshal(msg.Artifacts)
-				slog.DebugContext(ctx, "cms: extracted artifacts", "artifacts", string(artifacts))
 
-			}
+			// artifacts 获取from_time and to_time
 			for _, artifact := range msg.Artifacts {
 				if artifact != nil && artifact["name"] != nil && artifact["name"].(string) == "Result" && artifact["parts"] != nil {
 					switch artifact["parts"].(type) {
@@ -691,23 +677,18 @@ func (c *CMSClientImpl) ChatWithSkill(ctx context.Context, region, project, logs
 					}
 				}
 			}
-
-			if len(msg.Contents) > 0 {
-				contents, _ := json.Marshal(msg.Contents)
-				slog.DebugContext(ctx, "cms: extracted contents", "contents", string(contents))
+			// contents 兜底artifacts
+			for _, content := range msg.Contents {
+				if content == nil {
+					continue
+				}
+				contentType, ok := content["type"].(string)
+				if !ok || contentType != "text" {
+					continue
+				}
+				msgContent.WriteString(content["value"].(string))
 			}
 
-			// // Check for text content (explanation)
-			// for _, contentItem := range msg.Contents {
-			// 	if contentItem == nil {
-			// 		continue
-			// 	}
-			// 	if contentType, _ := contentItem["type"].(string); contentType == "text" {
-			// 		if textValue, _ := contentItem["value"].(string); textValue != "" {
-			// 			collectedExplanation.WriteString(textValue)
-			// 		}
-			// 	}
-			// }
 		}
 	}
 
@@ -723,6 +704,12 @@ func (c *CMSClientImpl) ChatWithSkill(ctx context.Context, region, project, logs
 	// Build response data in the same format as Python sls_text_to_sql
 	explanation := collectedExplanation.String()
 
+	re, _ := regexp.Compile(`(?:起始|结束)时间.*?时间戳：(\d+)`)
+	matches := re.FindAllStringSubmatch(collectedExplanation.String(), -1)
+	if len(matches) > 1 {
+		fromTime, _ = strconv.ParseInt(matches[0][1], 10, 64)
+		toTime, _ = strconv.ParseInt(matches[1][1], 10, 64)
+	}
 	if collectedSQL != "" {
 		slog.InfoContext(ctx, "cms: text to sql success",
 			"sql", collectedSQL,
@@ -866,10 +853,7 @@ func (c *CMSClientImpl) DataAgentQuery(ctx context.Context, region, workspace, q
 
 	go client.CreateChatWithSSE(chatRequest, map[string]*string{}, runtime, responseChan, errChan)
 
-	var collectedData []interface{}
 	var collectedText strings.Builder
-	var collectedToolResults []map[string]interface{}
-	var collectedSQL string
 	var traceID string
 
 	// Process SSE responses
@@ -887,250 +871,32 @@ func (c *CMSClientImpl) DataAgentQuery(ctx context.Context, region, workspace, q
 				continue
 			}
 
-			msgRole := ""
-			if msg.Role != nil {
-				msgRole = *msg.Role
-			}
-			msgType := ""
-			if msg.Type != nil {
-				msgType = *msg.Type
-			}
-
 			slog.DebugContext(ctx, "cms: data-agent SSE message",
-				"role", msgRole,
-				"type", msgType,
 				"tools_count", len(msg.Tools),
 				"contents_count", len(msg.Contents),
 				"artifacts_count", len(msg.Artifacts),
 				"events_count", len(msg.Events),
 			)
 
-			// Process tool calls
-			for i, tool := range msg.Tools {
-				if tool == nil {
-					continue
-				}
-
-				toolJSON, _ := json.Marshal(tool)
-				slog.DebugContext(ctx, "cms: data-agent raw tool",
-					"index", i,
-					"raw", string(toolJSON))
-
-				toolName, _ := tool["name"].(string)
-				if toolName == "" {
-					toolName, _ = tool["id"].(string)
-				}
-				toolStatus, _ := tool["status"].(string)
-
-				slog.DebugContext(ctx, "cms: data-agent tool call",
-					"name", toolName, "status", toolStatus)
-
-				// Extract SQL if QuerySLSLogs tool
-				if toolName == "QuerySLSLogs" {
-					if args, ok := tool["arguments"].(map[string]interface{}); ok {
-						if q, ok := args["query"].(string); ok {
-							collectedSQL = q
-							slog.DebugContext(ctx, "cms: data-agent extracted SQL", "sql", collectedSQL)
-						}
-					}
-				}
-
-				// Process tool contents (data-agent returned data)
-				// Check both "success" and "end" statuses, as some tools report data at "end"
-				if toolStatus == "success" || toolStatus == "end" {
-					if toolContents, ok := tool["contents"].([]interface{}); ok {
-						for j, tc := range toolContents {
-							tcMap, ok := tc.(map[string]interface{})
-							if !ok {
-								slog.DebugContext(ctx, "cms: data-agent tool content not map",
-									"index", j, "type", fmt.Sprintf("%T", tc))
-								continue
-							}
-							tcValue := tcMap["value"]
-							tcType, _ := tcMap["type"].(string)
-							if tcValue == nil {
-								continue
-							}
-
-							slog.DebugContext(ctx, "cms: data-agent tool content",
-								"tool", toolName,
-								"content_type", tcType,
-								"value_type", fmt.Sprintf("%T", tcValue),
-								"value_preview", truncateStr(fmt.Sprintf("%v", tcValue), 300))
-
-							// Try to parse as JSON if string
-							var parsed interface{}
-							if strVal, ok := tcValue.(string); ok {
-								if err := json.Unmarshal([]byte(strVal), &parsed); err != nil {
-									slog.DebugContext(ctx, "cms: data-agent JSON parse failed, trying as raw",
-										"error", err.Error(),
-										"value_preview", truncateStr(strVal, 200))
-									continue
-								}
-							} else {
-								parsed = tcValue
-							}
-
-							// Collect typed data (entity_list, metric_set_query, data_query, etc.)
-							switch p := parsed.(type) {
-							case map[string]interface{}:
-								if p["type"] != nil {
-									collectedData = append(collectedData, p)
-									slog.DebugContext(ctx, "cms: data-agent collected typed data",
-										"data_type", p["type"])
-								} else {
-									// Even without "type", collect if it has "data" field
-									if p["data"] != nil {
-										collectedData = append(collectedData, p)
-										slog.DebugContext(ctx, "cms: data-agent collected data (no type field)")
-									}
-								}
-							case []interface{}:
-								// Array of results - check each item
-								for _, item := range p {
-									if m, ok := item.(map[string]interface{}); ok && m["type"] != nil {
-										collectedData = append(collectedData, m)
-									}
-								}
-							}
-						}
-					} else {
-						// Log if contents exists but isn't []interface{}
-						if tool["contents"] != nil {
-							contentsJSON, _ := json.Marshal(tool["contents"])
-							slog.DebugContext(ctx, "cms: data-agent tool contents unexpected type",
-								"tool", toolName,
-								"contents_type", fmt.Sprintf("%T", tool["contents"]),
-								"contents_raw", truncateStr(string(contentsJSON), 300))
-						}
-					}
-				}
-
-				// Collect tool results
-				if toolResult := tool["result"]; toolResult != nil {
-					collectedToolResults = append(collectedToolResults, map[string]interface{}{
-						"tool":      toolName,
-						"result":    toolResult,
-						"arguments": tool["arguments"],
-						"status":    toolStatus,
-					})
-				}
-			}
-
-			// Process text contents
-			for i, contentItem := range msg.Contents {
-				if contentItem == nil {
-					continue
-				}
-				contentType, _ := contentItem["type"].(string)
-
-				slog.DebugContext(ctx, "cms: data-agent content item",
-					"index", i,
-					"type", contentType,
-					"keys", mapKeys(contentItem))
-
-				// Handle "value" as either string or other types
-				var contentStr string
-				var contentRaw interface{}
-				switch v := contentItem["value"].(type) {
-				case string:
-					contentStr = v
-				default:
-					contentRaw = v
-				}
-
-				if contentType == "text" && strings.TrimSpace(contentStr) != "" {
-					collectedText.WriteString(contentStr)
-				}
-				if contentType == "data" {
-					if contentStr != "" {
-						var dataValue interface{}
-						if err := json.Unmarshal([]byte(contentStr), &dataValue); err == nil {
-							collectedData = append(collectedData, dataValue)
-							slog.DebugContext(ctx, "cms: data-agent collected content data (string)")
-						}
-					} else if contentRaw != nil {
-						collectedData = append(collectedData, contentRaw)
-						slog.DebugContext(ctx, "cms: data-agent collected content data (raw)")
-					}
-				}
-			}
-
-			// Process events (may contain data in some responses)
-			for _, event := range msg.Events {
-				if event == nil {
-					continue
-				}
-				eventJSON, _ := json.Marshal(event)
-				slog.DebugContext(ctx, "cms: data-agent event", "raw", truncateStr(string(eventJSON), 300))
-
-				// Check if event contains data
-				if eventData, ok := event["data"]; ok && eventData != nil {
-					switch ed := eventData.(type) {
-					case map[string]interface{}:
-						if ed["type"] != nil {
-							collectedData = append(collectedData, ed)
-						}
-					case string:
-						var parsed interface{}
-						if err := json.Unmarshal([]byte(ed), &parsed); err == nil {
-							if m, ok := parsed.(map[string]interface{}); ok && m["type"] != nil {
-								collectedData = append(collectedData, m)
-							}
-						}
-					}
-				}
-			}
-
-			// Process artifacts
 			for _, artifact := range msg.Artifacts {
-				if artifact == nil {
+				a, _ := json.Marshal(artifact)
+				slog.InfoContext(ctx, "cms: data-agent artifact", "artifact", string(a))
+
+				parts, ok := artifact["parts"].([]interface{})
+				if !ok || len(parts) == 0 {
 					continue
 				}
 
-				artifactJSON, _ := json.Marshal(artifact)
-				slog.DebugContext(ctx, "cms: data-agent artifact", "raw", truncateStr(string(artifactJSON), 300))
-
-				artifactValue := artifact["value"]
-				if artifactValue == nil {
-					// Also check "parts" field (used in some responses)
-					if parts, ok := artifact["parts"].([]interface{}); ok {
-						for _, part := range parts {
-							if partMap, ok := part.(map[string]interface{}); ok {
-								if textVal, ok := partMap["text"].(string); ok {
-									var parsed interface{}
-									if err := json.Unmarshal([]byte(textVal), &parsed); err == nil {
-										if m, ok := parsed.(map[string]interface{}); ok && m["type"] != nil {
-											collectedData = append(collectedData, m)
-										}
-									}
-								}
-							}
-						}
-					}
-					continue
-				}
-				var artifactData interface{}
-				switch v := artifactValue.(type) {
-				case string:
-					if err := json.Unmarshal([]byte(v), &artifactData); err != nil {
+				for _, part := range parts { 
+					part, ok  := part.(map[string]interface{})
+					if !ok {
 						continue
 					}
-				default:
-					artifactData = v
-				}
-
-				switch ad := artifactData.(type) {
-				case []interface{}:
-					for _, item := range ad {
-						if m, ok := item.(map[string]interface{}); ok && m["type"] != nil {
-							collectedData = append(collectedData, m)
-						}
+					partKind, ok := part["kind"].(string)
+					if !ok || partKind != "text" {
+						continue
 					}
-				case map[string]interface{}:
-					if ad["type"] != nil {
-						collectedData = append(collectedData, ad)
-					}
+					collectedText.WriteString(part["text"].(string))
 				}
 			}
 		}
@@ -1147,18 +913,12 @@ func (c *CMSClientImpl) DataAgentQuery(ctx context.Context, region, workspace, q
 
 	slog.InfoContext(ctx, "cms: data-agent query complete",
 		"trace_id", traceID,
-		"data_count", len(collectedData),
 		"text_length", collectedText.Len(),
-		"tool_results_count", len(collectedToolResults),
-		"has_sql", collectedSQL != "",
 	)
 
 	return &DataAgentResult{
-		QueryResults: collectedData,
-		ToolResults:  collectedToolResults,
-		GeneratedSQL: collectedSQL,
-		Message:      collectedText.String(),
-		TraceID:      traceID,
+		Message: collectedText.String(),
+		TraceID: traceID,
 	}, nil
 }
 

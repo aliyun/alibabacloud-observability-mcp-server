@@ -1717,7 +1717,7 @@ func (h *dataHandler) handleSearchTraces(ctx context.Context, params map[string]
 		"trace_set_domain", traceSetDomain, "trace_set_name", traceSetName,
 		"limit", limit, "region", regionID)
 
-	result, err := h.cmsClient.ExecuteSPL(ctx, regionID, workspace, query, fromTS, toTS, 1000)
+	result, err := h.cmsClient.ExecuteSPL(ctx, regionID, workspace, query, fromTS, toTS, limit)
 	if err != nil {
 		slog.ErrorContext(ctx, "umodel_search_traces failed", "error", err)
 		return buildStandardResponse(nil, query, fromTS, toTS, true,

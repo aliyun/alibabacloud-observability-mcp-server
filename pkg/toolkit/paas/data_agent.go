@@ -136,48 +136,12 @@ func (h *dataAgentHandler) handleDataAgentQuery(ctx context.Context, params map[
 		return buildDataAgentErrorResponse(fmt.Sprintf("Query failed: %s", err), timeRange), nil
 	}
 
-	// Build response matching Python format
-	resultData := map[string]interface{}{
-		"query_results": result.QueryResults,
-		"tool_results":  result.ToolResults,
-	}
-	if result.GeneratedSQL != "" {
-		resultData["generated_sql"] = result.GeneratedSQL
-	}
-
-	// Try to extract main data from tool results (matching Python logic)
-	for _, toolResult := range result.ToolResults {
-		if toolResult["result"] == nil {
-			continue
-		}
-		switch r := toolResult["result"].(type) {
-		case map[string]interface{}:
-			if r["data"] != nil {
-				resultData["data"] = r["data"]
-			}
-		case []interface{}:
-			resultData["data"] = r
-		}
-	}
-
-	message := result.Message
-	if message == "" {
-		message = "Query completed"
-	}
 
 	now := time.Now()
 	return map[string]interface{}{
-		"data":     resultData,
-		"message":  message,
+		"message":  result.Message,
 		"trace_id": result.TraceID,
 		"error":    false,
-		"time_range": map[string]interface{}{
-			"from":          fromTS,
-			"to":            toTS,
-			"from_readable": timeparse.FormatTimestamp(fromTS),
-			"to_readable":   timeparse.FormatTimestamp(toTS),
-			"expression":    timeRange,
-		},
 		"timestamp": now.Unix(),
 	}, nil
 }

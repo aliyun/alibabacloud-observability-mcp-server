@@ -40,6 +40,9 @@ func (s *stubSLSClient) ListMetricStores(_ context.Context, _, _ string) ([]stri
 func (s *stubSLSClient) TextToSQL(_ context.Context, _, _, _, _ string) (string, error) {
 	return "", nil
 }
+func (s *stubSLSClient) TextToPromQL(_ context.Context, _, _, _, _ string) (string, error) {
+	return "", nil
+}
 
 // stubCMSClient implements client.CMSClient for testing.
 type stubCMSClient struct{}

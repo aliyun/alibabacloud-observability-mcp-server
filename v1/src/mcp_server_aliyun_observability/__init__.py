@@ -18,13 +18,15 @@ dotenv.load_dotenv()
 @click.option(
     "--access-key-id",
     type=str,
-    help="aliyun access key id",
+    default=lambda: os.environ.get("ALIBABA_CLOUD_ACCESS_KEY_ID"),
+    help="aliyun access key id (default: $ALIBABA_CLOUD_ACCESS_KEY_ID)",
     required=False,
 )
 @click.option(
     "--access-key-secret",
     type=str,
-    help="aliyun access key secret",
+    default=lambda: os.environ.get("ALIBABA_CLOUD_ACCESS_KEY_SECRET"),
+    help="aliyun access key secret (default: $ALIBABA_CLOUD_ACCESS_KEY_SECRET)",
     required=False,
 )
 @click.option(
@@ -72,6 +74,11 @@ def main(
     cms_endpoints,
     scope,
 ):
+    # 打印凭据信息（脱敏显示）
+    has_ak = access_key_id is not None
+    has_sk = access_key_secret is not None
+    print(f"[Startup] has_access_key_id: {has_ak}, has_access_key_secret: {has_sk}")
+    
     # Lazy import heavy modules to keep package import light for library/test usage
     from mcp_server_aliyun_observability.server import server
     from mcp_server_aliyun_observability.utils import CredentialWrapper
@@ -94,6 +101,7 @@ def main(
         )
     else:
         credential = None
+    
     # 设置环境变量，传递给服务器
     if scope and scope != "all":
         os.environ['MCP_TOOLKIT_SCOPE'] = scope

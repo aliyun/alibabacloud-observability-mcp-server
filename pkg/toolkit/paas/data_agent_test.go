@@ -159,15 +159,6 @@ func TestHandleDataAgentQuery_Success(t *testing.T) {
 	if resp["trace_id"] != "test-trace-123" {
 		t.Errorf("trace_id = %v, want %q", resp["trace_id"], "test-trace-123")
 	}
-
-	// Verify data structure contains query_results
-	data, ok := resp["data"].(map[string]interface{})
-	if !ok {
-		t.Fatal("data should be a map")
-	}
-	if data["query_results"] == nil {
-		t.Error("data should contain query_results")
-	}
 }
 
 func TestHandleDataAgentQuery_APIError(t *testing.T) {
@@ -254,9 +245,8 @@ func TestHandleDataAgentQuery_WithGeneratedSQL(t *testing.T) {
 	}
 
 	resp := result.(map[string]interface{})
-	data := resp["data"].(map[string]interface{})
-	if data["generated_sql"] != "SELECT * FROM logs WHERE level='ERROR'" {
-		t.Errorf("generated_sql = %v, want SQL string", data["generated_sql"])
+	if resp["message"] != "查询完成" {
+		t.Errorf("message = %v, want %q", resp["message"], "查询完成")
 	}
 }
 
@@ -289,23 +279,11 @@ func TestHandleDataAgentQuery_ResponseStructure(t *testing.T) {
 
 	resp := result.(map[string]interface{})
 
-	// Verify all expected keys exist (matching Python response format)
-	requiredKeys := []string{"error", "data", "message", "trace_id", "time_range", "timestamp"}
+	// Verify all expected keys exist
+	requiredKeys := []string{"error", "message", "trace_id", "timestamp"}
 	for _, key := range requiredKeys {
 		if _, ok := resp[key]; !ok {
 			t.Errorf("response missing key %q", key)
-		}
-	}
-
-	// Verify time_range structure
-	tr, ok := resp["time_range"].(map[string]interface{})
-	if !ok {
-		t.Fatal("time_range should be a map")
-	}
-	trKeys := []string{"from", "to", "from_readable", "to_readable", "expression"}
-	for _, key := range trKeys {
-		if _, ok := tr[key]; !ok {
-			t.Errorf("time_range missing key %q", key)
 		}
 	}
 }

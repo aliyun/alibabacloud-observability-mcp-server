@@ -9,6 +9,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/alibabacloud-observability-mcp-server-go/pkg/timeparse"
 )
 
 // ---------------------------------------------------------------------------
@@ -116,7 +118,7 @@ func FormatTimestampNs(timestampNs int64) string {
 		return ""
 	}
 	ts := timestampNs / 1_000_000_000
-	t := time.Unix(ts, 0).UTC()
+	t := time.Unix(ts, 0).In(timeparse.GetLocation())
 	return t.Format("2006-01-02 15:04:05")
 }
 
