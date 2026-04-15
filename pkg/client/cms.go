@@ -584,7 +584,7 @@ func (c *CMSClientImpl) ChatWithSkill(ctx context.Context, region, project, logs
 	})
 
 	configJSON, _ := json.Marshal(map[string]interface{}{
-		"disableThreadData": false,
+		"disableThreadData": true,
 	})
 
 	variables := map[string]interface{}{
@@ -823,7 +823,7 @@ func (c *CMSClientImpl) DataAgentQuery(ctx context.Context, region, workspace, q
 	})
 
 	configJSON, _ := json.Marshal(map[string]interface{}{
-		"disableThreadData": false,
+		"disableThreadData": true,
 	})
 
 	variables := map[string]interface{}{

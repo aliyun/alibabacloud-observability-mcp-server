@@ -528,7 +528,7 @@ def text_to_spl(
             "endTime": to_time,
             "skill_name": "spl_intent_recognition",
             "userContext": user_context,
-            "config": json.dumps({"disableThreadData": False}),
+            "config": json.dumps({"disableThreadData": True}),
             "skill": "spl_intent_recognition",
         }
 
@@ -656,7 +656,7 @@ def sls_sop(
         "timeStamp": str(current_ts),
         "startTime": current_ts - 900,
         "endTime": current_ts,
-        "config": "{\"disableThreadData\":false}",
+        "config": "{\"disableThreadData\":true}",
         "userContext": json.dumps(user_context)
     }
 
@@ -852,7 +852,7 @@ def text_to_sql(
             "endTime": actual_to_time,
             "skill_name": "sql_generation",
             "userContext": user_context,
-            "config": json.dumps({"disableThreadData": False}),
+            "config": json.dumps({"disableThreadData": True}),
             "skill": "sql_generation"
         }
         
