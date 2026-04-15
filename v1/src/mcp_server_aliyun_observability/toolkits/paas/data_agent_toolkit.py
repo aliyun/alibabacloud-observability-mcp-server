@@ -220,7 +220,7 @@ def _data_agent_query(
             "endTime": to_time,
             "skill_name": skill,
             "userContext": user_context,
-            "config": json.dumps({"disableThreadData": False}),
+            "config": json.dumps({"disableThreadData": True}),
             "skill": skill,
         }
 
