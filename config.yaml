@@ -65,7 +65,6 @@ toolkit:
   #   - sls_list_logstores        # 列出日志库
   #   - sls_text_to_sql           # 自然语言转 SQL
   #   - sls_text_to_sql_old       # 自然语言转 SQL（旧版，兼容 Python 版本）
-  #   - sls_text_to_promql        # 自然语言转 PromQL
   #   - sls_text_to_spl           # 自然语言转 SPL
   #   - sls_execute_sql           # 执行 SQL 查询
   #   - sls_execute_spl           # 执行 SPL 查询（通过 CMS workspace）

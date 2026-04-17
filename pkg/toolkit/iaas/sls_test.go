@@ -101,7 +101,6 @@ func TestSLSTools_ExpectedNames(t *testing.T) {
 		"sls_list_logstores":   false,
 		"sls_text_to_sql":      false,
 		"sls_text_to_sql_old":  false, // Deprecated alias for Python compatibility
-		"sls_text_to_promql":   false,
 		"sls_sop":              false,
 		"sls_execute_sql":      false,
 		"sls_execute_spl":      false,
@@ -360,35 +359,7 @@ func TestTextToSQLOld_DeprecatedDescription(t *testing.T) {
 	t.Error("sls_text_to_sql_old tool not found")
 }
 
-func TestTextToPromQL_Success(t *testing.T) {
-	mock := &mockSLSClient{
-		textToSQLResult: "sum(rate(http_requests_total[5m])) by (namespace)",
-	}
-	tools := SLSTools(mock, &mockCMSClient{})
-	ctx := context.Background()
 
-	var tool func(context.Context, map[string]interface{}) (interface{}, error)
-	for _, tt := range tools {
-		if tt.Name == "sls_text_to_promql" {
-			tool = tt.Handler
-			break
-		}
-	}
-
-	result, err := tool(ctx, map[string]interface{}{
-		"text":        "查询每个namespace下的请求数",
-		"project":     "my-project",
-		"metricStore": "my-metrics",
-		"regionId":    "cn-hongkong",
-	})
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	resp := result.(map[string]interface{})
-	if resp["error"].(bool) {
-		t.Errorf("expected error=false, got true")
-	}
-}
 
 func TestSOP_Success(t *testing.T) {
 	mock := &mockSLSClient{}

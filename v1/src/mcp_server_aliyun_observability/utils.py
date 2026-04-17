@@ -381,7 +381,7 @@ def text_to_sql_old(
 
     try:
         sls_client_wrapper = ctx.request_context.lifespan_context["sls_client"]
-        sls_client: Client = sls_client_wrapper.with_region("cn-shanghai")
+        sls_client: Client = sls_client_wrapper.with_region(region_id)
         knowledge_config = sls_client_wrapper.get_knowledge_config(project, log_store)
 
         logger.info(f"获取知识库配置: {knowledge_config is not None}")

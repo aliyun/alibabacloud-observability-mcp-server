@@ -306,7 +306,6 @@ toolkit:
 | `sls_list_logstores` | 列出日志库 | `project`、`regionId`（必需） |
 | `sls_text_to_sql` | 自然语言转 SQL | `text`、`project`、`logStore`、`regionId`（必需） |
 | `sls_text_to_sql_old` | 自然语言转 SQL（旧版，兼容 Python 版本） | `text`、`project`、`logStore`、`regionId`（必需） |
-| `sls_text_to_promql` | 自然语言转 PromQL | `text`、`project`、`metricStore`、`regionId`（必需） |
 | `sls_text_to_spl` | 自然语言转 SPL | `text`、`project`、`logStore`、`data_sample`、`regionId`（必需） |
 | `sls_execute_sql` | 执行 SQL 查询 | `project`、`logStore`、`query`、`regionId`（必需）；`from_time`、`to_time`（可选） |
 | `sls_execute_spl` | 执行原生 SPL 查询 | `query`、`workspace`、`regionId`（必需）；`from_time`、`to_time`（可选） |
