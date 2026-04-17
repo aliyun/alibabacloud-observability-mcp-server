@@ -26,7 +26,6 @@ func SLSTools(slsClient client.SLSClient, cmsClient client.CMSClient) []toolkit.
 		h.listLogstoresTool(),
 		h.textToSQLTool(),
 		h.textToSQLOldTool(), // Deprecated alias for Python compatibility
-		h.textToPromQLTool(),
 		h.sopTool(),
 		h.executeSQLTool(),
 		h.executeSPLTool(),
@@ -458,88 +457,6 @@ This tool uses the legacy SLS CallAiTools API to convert natural language descri
 	}
 }
 
-// ===========================================================================
-// Tool 7: sls_text_to_promql
-// ===========================================================================
-
-func (h *slsHandler) textToPromQLTool() toolkit.Tool {
-	return toolkit.Tool{
-		Name: "sls_text_to_promql",
-		Description: `Convert natural language to a PromQL query statement.
-
-## Overview
-
-Converts a natural language description into a valid PromQL query statement, allowing users to express query requirements in plain language.
-
-## Use Cases
-
-- When the user is unfamiliar with PromQL query syntax
-- When a complex query needs to be built quickly
-
-## Limitations
-
-- Only supports generating PromQL queries
-- Generates a query statement, not query results
-
-## Best Practices
-
-- Provide a clear and concise natural language description
-- Do not include project or metric store names in the description
-
-## Examples
-
-- "Generate a PromQL query for XXX"
-- "Query the number of Pods per namespace"`,
-		InputSchema: map[string]interface{}{
-			"type": "object",
-			"properties": map[string]interface{}{
-				"text": map[string]interface{}{
-					"type":        "string",
-					"description": "Natural language text for PromQL generation",
-				},
-				"project": map[string]interface{}{
-					"type":        "string",
-					"description": "SLS project name",
-				},
-				"metricStore": map[string]interface{}{
-					"type":        "string",
-					"description": "SLS metric store name",
-				},
-				"regionId": map[string]interface{}{
-					"type":        "string",
-					"description": "Alibaba Cloud region ID, e.g. 'cn-hongkong'",
-				},
-			},
-			"required": []string{"text", "project", "metricStore", "regionId"},
-		},
-		Handler: h.handleTextToPromQL,
-	}
-}
-
-func (h *slsHandler) handleTextToPromQL(ctx context.Context, params map[string]interface{}) (interface{}, error) {
-	text := paramString(params, "text", "")
-	project := paramString(params, "project", "")
-	metricStore := paramString(params, "metricStore", "")
-	regionID := paramString(params, "regionId", "")
-
-	if text == "" || project == "" || metricStore == "" || regionID == "" {
-		return buildResponse(nil, true, "text, project, metricStore and regionId are required"), nil
-	}
-
-	slog.InfoContext(ctx, "sls_text_to_promql",
-		"project", project, "metricStore", metricStore, "region", regionID)
-
-	// Uses SLS CallAiTools API with text_to_promql tool
-	promql, err := h.slsClient.TextToPromQL(ctx, regionID, project, metricStore, text)
-	if err != nil {
-		slog.ErrorContext(ctx, "sls_text_to_promql failed", "error", err)
-		return buildResponse(nil, true, fmt.Sprintf("Text to PromQL failed: %s", err)), nil
-	}
-
-	return buildResponse(map[string]interface{}{
-		"query": promql,
-	}, false, ""), nil
-}
 
 // ===========================================================================
 // Tool 8: sls_sop

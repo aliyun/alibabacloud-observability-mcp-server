@@ -229,13 +229,14 @@ func (h *cmsHandler) handleTextToPromQL(ctx context.Context, params map[string]a
 	slog.InfoContext(ctx, "cms_text_to_promql",
 		"project", project, "metricStore", metricStore, "region", regionID)
 
-	promql, err := h.slsClient.TextToSQL(ctx, regionID, project, metricStore, text)
+	// Uses SLS CallAiTools API with text_to_promql tool
+	promql, err := h.slsClient.TextToPromQL(ctx, regionID, project, metricStore, text)
 	if err != nil {
 		slog.ErrorContext(ctx, "cms_text_to_promql failed", "error", err)
 		return buildResponse(nil, true, fmt.Sprintf("Text to PromQL failed: %s", err)), nil
 	}
 
-	return buildResponse(map[string]any{
+	return buildResponse(map[string]interface{}{
 		"query": promql,
 	}, false, ""), nil
 }
