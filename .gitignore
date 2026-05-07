@@ -94,9 +94,17 @@ deploy/**
 agents.md
 .cursor/**
 
+## agent
+.kiro
+.qoder
+.claude
+
+## generated files
+scripts/
+output/
+
 # E2E test artifacts
 tooltest/output/
 tooltest/input.json
 cmd/tooltest/output/
-output/
 cmd/tooltest/
