@@ -8,8 +8,10 @@ from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional, TypeVar, Union, cast
 
 import pandas as pd
-from alibabacloud_cms20240330 import models as cms_model
-from alibabacloud_cms20240330.client import Client as CmsClient
+from alibabacloud_cms20240330 import models as cms_legacy_model
+from alibabacloud_cms20240330.client import Client as CmsLegacyClient
+from alibabacloud_starops20260428 import models as cms_model
+from alibabacloud_starops20260428.client import Client as CmsClient
 from alibabacloud_credentials.client import Client as CredClient
 from alibabacloud_credentials.models import Config as CredConfig
 from alibabacloud_credentials.utils import auth_util
@@ -175,13 +177,35 @@ class CredentialWrapper:
 
 class CMSClientWrapper:
     """
-    A wrapper for aliyun cms client
+    A wrapper that provides both StarOps client (chat/thread/digital-employee APIs)
+    and legacy CMS client (workspace/entity-store APIs).
+
+    - with_region(): returns StarOps CmsClient via starops.{region}.aliyuncs.com
+    - with_legacy_region(): returns legacy CmsLegacyClient via cms.{region}.aliyuncs.com
     """
 
     def __init__(self, credential: Optional[CredentialWrapper] = None):
         self.credential = credential
 
     def with_region(self, region: str, endpoint: Optional[str] = None) -> CmsClient:
+        config = _create_unified_config(self.credential, use_signature_v3=True)
+        starops_settings = get_settings().starops
+        if endpoint:
+            host = normalize_host(endpoint)
+            source = "explicit"
+        elif region in starops_settings.endpoints:
+            host = starops_settings.endpoints[region]
+            source = "mapping"
+        else:
+            host = starops_settings.resolve(region)
+            source = "template"
+        logger.info(
+            f"StarOps endpoint resolved: region={region}, endpoint={host}, source={source}"
+        )
+        config.endpoint = host
+        return CmsClient(config)
+
+    def with_legacy_region(self, region: str, endpoint: Optional[str] = None) -> CmsLegacyClient:
         config = _create_unified_config(self.credential, use_signature_v3=True)
         cms_settings = get_settings().cms
         if endpoint:
@@ -194,10 +218,10 @@ class CMSClientWrapper:
             host = cms_settings.resolve(region)
             source = "template"
         logger.info(
-            f"CMS endpoint resolved: region={region}, endpoint={host}, source={source}"
+            f"CMS legacy endpoint resolved: region={region}, endpoint={host}, source={source}"
         )
         config.endpoint = host
-        return CmsClient(config)
+        return CmsLegacyClient(config)
 
 
 class SLSClientWrapper:
@@ -944,7 +968,7 @@ def text_to_sql(
 
 
 def execute_cms_query(
-    cms_client: CmsClient,
+    cms_client: CmsLegacyClient,
     workspace_name: str,
     query: str,
     from_timestamp: Optional[int] = None,
@@ -964,12 +988,12 @@ def execute_cms_query(
             f"开始执行CMS查询，输入参数: workspace_name={workspace_name}, query={query}, from_timestamp={from_timestamp}, to_timestamp={to_timestamp}"
         )
 
-        request = cms_model.GetEntityStoreDataRequest(
+        request = cms_legacy_model.GetEntityStoreDataRequest(
             query=query, from_=from_timestamp, to=to_timestamp
         )
 
         logger.info(f"发送CMS请求到workspace: {workspace_name}")
-        response: cms_model.GetEntityStoreDataResponse = (
+        response: cms_legacy_model.GetEntityStoreDataResponse = (
             cms_client.get_entity_store_data(workspace_name, request).body
         )
         logger.info(f"CMS查询响应: {response}")
@@ -1023,9 +1047,9 @@ def execute_cms_query_with_context(
             from_time, to_time
         )
 
-        cms_client: CmsClient = ctx.request_context.lifespan_context[
+        cms_client: CmsLegacyClient = ctx.request_context.lifespan_context[
             "cms_client"
-        ].with_region(region_id)
+        ].with_legacy_region(region_id)
 
         # Execute CMS query using the standard execute_cms_query function
         data = execute_cms_query(

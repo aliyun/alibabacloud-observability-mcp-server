@@ -107,11 +107,32 @@ class CMSSettings:
 
 
 @dataclass(frozen=True)
+class StarOpsSettings:
+    """Settings for StarOps (chat/thread/digital-employee APIs) related configuration."""
+
+    endpoints: Dict[str, str] = field(default_factory=dict)
+    template: str = "starops.{region}.aliyuncs.com"
+
+    def __post_init__(self):
+        normalized = {k: normalize_host(v) for k, v in (self.endpoints or {}).items()}
+        object.__setattr__(self, "endpoints", normalized)
+
+    def resolve(self, region: str) -> str:
+        if not region:
+            raise ValueError("region is required")
+        host = self.endpoints.get(region)
+        if host:
+            return host
+        return self.template.format(region=region)
+
+
+@dataclass(frozen=True)
 class GlobalSettings:
     """Top-level settings container. Extend with more sections when needed."""
 
     sls: SLSSettings = field(default_factory=SLSSettings)
     cms: CMSSettings = field(default_factory=CMSSettings)
+    starops: StarOpsSettings = field(default_factory=StarOpsSettings)
 
 
 # ----------------------

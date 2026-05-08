@@ -85,7 +85,7 @@ class SharedToolkit:
                         "message": "CMS客户端未初始化",
                     }
                 
-                cms_client = cms_client.with_region(regionId)
+                cms_client = cms_client.with_legacy_region(regionId)
                 
                 # 构建请求 - 获取所有工作空间
                 request = ListWorkspacesRequest(

@@ -103,11 +103,5 @@ agents.md
 scripts/
 output/
 
-# E2E test artifacts
-tooltest/output/
-tooltest/input.json
-cmd/tooltest/output/
-cmd/tooltest/
-
-
 cmd/e2e/
+v1/tooltest/

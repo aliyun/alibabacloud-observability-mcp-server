@@ -12,8 +12,8 @@ import time
 from typing import Any, Dict
 
 import yaml
-from alibabacloud_cms20240330 import models as cms_model
-from alibabacloud_cms20240330.client import Client as CmsClient
+from alibabacloud_starops20260428 import models as cms_model
+from alibabacloud_starops20260428.client import Client as CmsClient
 from alibabacloud_tea_util import models as util_models
 from mcp.server.fastmcp import Context, FastMCP
 from pydantic import Field
