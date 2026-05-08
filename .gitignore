@@ -108,3 +108,6 @@ tooltest/output/
 tooltest/input.json
 cmd/tooltest/output/
 cmd/tooltest/
+
+
+cmd/e2e/
