@@ -19,8 +19,8 @@ import (
 	"strings"
 	"time"
 
-	cms "github.com/alibabacloud-go/starops-20260428/client"
 	openapi "github.com/alibabacloud-go/darabonba-openapi/v2/client"
+	cms "github.com/alibabacloud-go/starops-20260428/client"
 	"github.com/alibabacloud-go/tea/dara"
 
 	"github.com/alibabacloud-observability-mcp-server-go/pkg/config"
@@ -890,8 +890,8 @@ func (c *CMSClientImpl) DataAgentQuery(ctx context.Context, region, workspace, q
 					continue
 				}
 
-				for _, part := range parts { 
-					part, ok  := part.(map[string]interface{})
+				for _, part := range parts {
+					part, ok := part.(map[string]interface{})
 					if !ok {
 						continue
 					}
@@ -923,22 +923,4 @@ func (c *CMSClientImpl) DataAgentQuery(ctx context.Context, region, workspace, q
 		Message: collectedText.String(),
 		TraceID: traceID,
 	}, nil
-}
-
-// truncateStr truncates a string to maxLen characters, appending "..." if truncated.
-func truncateStr(s string, maxLen int) string {
-	if len(s) <= maxLen {
-		return s
-	}
-	return s[:maxLen] + "..."
-}
-
-// mapKeys returns the keys of a map[string]interface{} as a sorted slice.
-func mapKeys(m map[string]interface{}) []string {
-	keys := make([]string, 0, len(m))
-	for k := range m {
-		keys = append(keys, k)
-	}
-	sort.Strings(keys)
-	return keys
 }

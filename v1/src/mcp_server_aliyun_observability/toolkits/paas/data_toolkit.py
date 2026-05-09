@@ -7,7 +7,11 @@ from pydantic import Field
 from tenacity import retry, retry_if_exception_type, stop_after_attempt, wait_fixed
 
 from mcp_server_aliyun_observability.config import Config
-from mcp_server_aliyun_observability.toolkits.paas.time_utils import compute_time_range, format_timestamp
+from mcp_server_aliyun_observability.logger import get_logger
+from mcp_server_aliyun_observability.toolkits.paas.time_utils import (
+    compute_time_range,
+    format_timestamp,
+)
 from mcp_server_aliyun_observability.utils import (
     execute_cms_query_with_context,
     handle_tea_exception,
@@ -22,15 +26,12 @@ TIME_RANGE_DESCRIPTION = """时间范围表达式，支持多种格式：
 - 人类可读: 2024-02-02 10:10:10~2024-02-02 10:20:10
 默认值: last_1h"""
 
-
-from mcp_server_aliyun_observability.logger import get_logger
-
 _logger = get_logger()
 
 
 def _parse_multiple_storage_id(err_msg: str) -> Optional[Dict[str, str]]:
     """Parse the first storage ID from a MultipleStorageFound error message.
-    
+
     Storage ID format: "domain@kind@name" (e.g. "k8s@sls_logstore@k8s-log-xxx/k8s-event")
     """
     if "MultipleStorageFound" not in err_msg:
@@ -39,7 +40,7 @@ def _parse_multiple_storage_id(err_msg: str) -> Optional[Dict[str, str]]:
     idx = err_msg.find(marker)
     if idx < 0:
         return None
-    rest = err_msg[idx + len(marker):]
+    rest = err_msg[idx + len(marker) :]
     end = rest.find("]")
     if end < 0:
         return None
@@ -51,8 +52,11 @@ def _parse_multiple_storage_id(err_msg: str) -> Optional[Dict[str, str]]:
 
 
 def _build_event_query_with_storage(
-    event_set_domain: str, event_set_name: str,
-    storage: Dict[str, str], entity_ids: Optional[str], limit: int
+    event_set_domain: str,
+    event_set_name: str,
+    storage: Dict[str, str],
+    entity_ids: Optional[str],
+    limit: int,
 ) -> str:
     """Build an event query with explicit storage parameters (table mode)."""
     query_param = ""
@@ -102,35 +106,35 @@ class PaasDataToolkit:
             ctx: Context,
             domain: str = Field(
                 ...,
-                description="实体域名(Entity Domain)，如'apm'、'host'。不能为'*'，可通过 umodel_search_entity_set 获取"
+                description="实体域名(Entity Domain)，如'apm'、'host'。不能为'*'，可通过 umodel_search_entity_set 获取",
             ),
             entity_set_name: str = Field(
                 ...,
-                description="实体类型名称(Entity Set Name)，如'apm.service'。不能为'*'，可通过 umodel_search_entity_set 获取"
+                description="实体类型名称(Entity Set Name)，如'apm.service'。不能为'*'，可通过 umodel_search_entity_set 获取",
             ),
             metric_domain_name: str = Field(
                 ...,
-                description="指标域名称(Metric Domain)，如'apm.metric.jvm'。可通过 umodel_list_data_set(data_set_types='metric_set') 获取"
+                description="指标域名称(Metric Domain)，如'apm.metric.jvm'。可通过 umodel_list_data_set(data_set_types='metric_set') 获取",
             ),
             metric: str = Field(
                 ...,
-                description="指标名称(Metric Name)，如'cpu_usage'。可通过 umodel_list_data_set 返回的 fields 获取"
+                description="指标名称(Metric Name)，如'cpu_usage'。可通过 umodel_list_data_set 返回的 fields 获取",
             ),
             workspace: str = Field(
                 ...,
-                description="CMS工作空间名称(Workspace)，可通过 list_workspace 获取"
+                description="CMS工作空间名称(Workspace)，可通过 list_workspace 获取",
             ),
             entity_ids: Optional[str] = Field(
                 None,
-                description="实体ID列表(Entity IDs)，逗号分隔，如'id1,id2,id3'。可通过 umodel_get_entities 获取"
+                description="实体ID列表(Entity IDs)，逗号分隔，如'id1,id2,id3'。可通过 umodel_get_entities 获取",
             ),
             query_type: str = Field(
                 "range",
-                description="查询类型(Query Type): range(范围查询) 或 instant(即时查询)"
+                description="查询类型(Query Type): range(范围查询) 或 instant(即时查询)",
             ),
             aggregate: bool = Field(
                 True,
-                description="是否聚合结果(Aggregate)，cluster/forecast/anomaly_detection模式强制为false"
+                description="是否聚合结果(Aggregate)，cluster/forecast/anomaly_detection模式强制为false",
             ),
             analysis_mode: Literal[
                 "basic", "cluster", "forecast", "anomaly_detection"
@@ -147,12 +151,11 @@ class PaasDataToolkit:
                 description="预测时长(仅forecast模式有效)，如'30m','1h','2d'。默认30分钟",
             ),
             time_range: Optional[str] = Field(
-                "last_1h",
-                description=TIME_RANGE_DESCRIPTION
+                "last_1h", description=TIME_RANGE_DESCRIPTION
             ),
             offset: Optional[str] = Field(
                 None,
-                description="对比偏移量(Compare Offset)，如'1h','1d','1w'。启用后会执行两次查询（当前时段和对比时段），返回对比分析结果。仅在 basic 模式下有效"
+                description="对比偏移量(Compare Offset)，如'1h','1d','1w'。启用后会执行两次查询（当前时段和对比时段），返回对比分析结果。仅在 basic 模式下有效",
             ),
             regionId: str = Field(..., description="Region ID"),
         ) -> Dict[str, Any]:
@@ -246,7 +249,13 @@ class PaasDataToolkit:
                     "metric": metric,
                     "workspace": workspace,
                 },
-                ["domain", "entity_set_name", "metric_domain_name", "metric", "workspace"]
+                [
+                    "domain",
+                    "entity_set_name",
+                    "metric_domain_name",
+                    "metric",
+                    "workspace",
+                ],
             )
 
             # 使用 _parse_time_range 解析时间范围
@@ -327,7 +336,7 @@ class PaasDataToolkit:
                     current_to=actual_time_range[1],
                     current_data=data,
                     offset=offset,
-                    key_type="metrics"
+                    key_type="metrics",
                 )
                 if compare_result:
                     return self._build_standard_response(
@@ -336,7 +345,7 @@ class PaasDataToolkit:
                         time_range=actual_time_range,
                         error=False,
                         message="Query executed with comparison",
-                        time_range_expression=time_range if time_range else "last_1h"
+                        time_range_expression=time_range if time_range else "last_1h",
                     )
 
             return self._build_standard_response(
@@ -345,7 +354,7 @@ class PaasDataToolkit:
                 time_range=actual_time_range,
                 error=error,
                 message=message,
-                time_range_expression=time_range if time_range else "last_1h"
+                time_range_expression=time_range if time_range else "last_1h",
             )
 
         @self.server.tool()
@@ -360,35 +369,34 @@ class PaasDataToolkit:
             ctx: Context,
             domain: str = Field(
                 ...,
-                description="实体域名(Entity Domain)，如'apm'、'host'。不能为'*'，可通过 umodel_search_entity_set 获取"
+                description="实体域名(Entity Domain)，如'apm'、'host'。不能为'*'，可通过 umodel_search_entity_set 获取",
             ),
             entity_set_name: str = Field(
                 ...,
-                description="实体类型名称(Entity Set Name)，如'apm.service'。不能为'*'，可通过 umodel_search_entity_set 获取"
+                description="实体类型名称(Entity Set Name)，如'apm.service'。不能为'*'，可通过 umodel_search_entity_set 获取",
             ),
             workspace: str = Field(
                 ...,
-                description="CMS工作空间名称(Workspace)，可通过 list_workspace 获取"
+                description="CMS工作空间名称(Workspace)，可通过 list_workspace 获取",
             ),
             entity_ids: Optional[str] = Field(
                 None,
-                description="实体ID列表(Entity IDs)，逗号分隔，如'id1,id2,id3'。可通过 umodel_get_entities 获取"
+                description="实体ID列表(Entity IDs)，逗号分隔，如'id1,id2,id3'。可通过 umodel_get_entities 获取",
             ),
             query_type: str = Field(
                 "range",
-                description="查询类型(Query Type): range(范围查询，返回时序数据) 或 instant(即时查询，返回最新值)"
+                description="查询类型(Query Type): range(范围查询，返回时序数据) 或 instant(即时查询，返回最新值)",
             ),
             aggregate: bool = Field(
                 True,
-                description="是否聚合结果(Aggregate)，true 表示聚合所有实体的结果，false 表示返回每个实体的独立结果"
+                description="是否聚合结果(Aggregate)，true 表示聚合所有实体的结果，false 表示返回每个实体的独立结果",
             ),
             time_range: Optional[str] = Field(
-                "last_1h",
-                description=TIME_RANGE_DESCRIPTION
+                "last_1h", description=TIME_RANGE_DESCRIPTION
             ),
             offset: Optional[str] = Field(
                 None,
-                description="对比偏移量(Compare Offset)，如'1h','1d','1w'。启用后会执行两次查询（当前时段和对比时段），返回对比分析结果"
+                description="对比偏移量(Compare Offset)，如'1h','1d','1w'。启用后会执行两次查询（当前时段和对比时段），返回对比分析结果",
             ),
             regionId: str = Field(..., description="Region ID"),
         ) -> Dict[str, Any]:
@@ -459,7 +467,7 @@ class PaasDataToolkit:
                     "entity_set_name": entity_set_name,
                     "workspace": workspace,
                 },
-                ["domain", "entity_set_name", "workspace"]
+                ["domain", "entity_set_name", "workspace"],
             )
 
             # 使用 _parse_time_range 解析时间范围
@@ -497,7 +505,7 @@ class PaasDataToolkit:
                     current_to=to_ts,
                     current_data=data,
                     offset=offset,
-                    key_type="golden_metrics"
+                    key_type="golden_metrics",
                 )
                 if compare_result:
                     return self._build_standard_response(
@@ -506,7 +514,7 @@ class PaasDataToolkit:
                         time_range=(from_ts, to_ts),
                         error=False,
                         message="Query executed with comparison",
-                        time_range_expression=time_range if time_range else "last_1h"
+                        time_range_expression=time_range if time_range else "last_1h",
                     )
 
             # 使用 _build_standard_response 构建标准化响应
@@ -516,7 +524,7 @@ class PaasDataToolkit:
                 time_range=(from_ts, to_ts),
                 error=error,
                 message=message,
-                time_range_expression=time_range if time_range else "last_1h"
+                time_range_expression=time_range if time_range else "last_1h",
             )
 
         @self.server.tool()
@@ -531,59 +539,56 @@ class PaasDataToolkit:
             ctx: Context,
             src_domain: str = Field(
                 ...,
-                description="源实体域名(Source Entity Domain)，如'apm'、'host'。不能为'*'，可通过 umodel_search_entity_set 获取"
+                description="源实体域名(Source Entity Domain)，如'apm'、'host'。不能为'*'，可通过 umodel_search_entity_set 获取",
             ),
             src_entity_set_name: str = Field(
                 ...,
-                description="源实体类型名称(Source Entity Set Name)，如'apm.service'。不能为'*'，可通过 umodel_search_entity_set 获取"
+                description="源实体类型名称(Source Entity Set Name)，如'apm.service'。不能为'*'，可通过 umodel_search_entity_set 获取",
             ),
             src_entity_ids: Optional[str] = Field(
                 None,
-                description="源实体ID列表(Source Entity IDs)，逗号分隔，如'id1,id2,id3'。可通过 umodel_get_entities 获取"
+                description="源实体ID列表(Source Entity IDs)，逗号分隔，如'id1,id2,id3'。可通过 umodel_get_entities 获取",
             ),
             relation_type: str = Field(
                 ...,
-                description="关系类型(Relation Type)，如'calls'。可通过 umodel_list_related_entity_set 获取"
+                description="关系类型(Relation Type)，如'calls'。可通过 umodel_list_related_entity_set 获取",
             ),
             direction: str = Field(
                 ...,
-                description="关系方向(Direction): 'in'(入向调用) 或 'out'(出向调用)"
+                description="关系方向(Direction): 'in'(入向调用) 或 'out'(出向调用)",
             ),
             metric_set_domain: str = Field(
                 ...,
-                description="指标集域名(Metric Set Domain)，如'apm'。可通过 umodel_list_data_set(data_set_types='metric_set') 获取"
+                description="指标集域名(Metric Set Domain)，如'apm'。可通过 umodel_list_data_set(data_set_types='metric_set') 获取",
             ),
             metric_set_name: Optional[str] = Field(
                 None,
-                description="指标集名称(Metric Set Name)，如'apm.metric.apm.operation'。可通过 umodel_list_data_set 获取。未提供时根据 relation_type 和 src_entity_set_name 自动生成"
+                description="指标集名称(Metric Set Name)，如'apm.metric.apm.operation'。可通过 umodel_list_data_set 获取。未提供时根据 relation_type 和 src_entity_set_name 自动生成",
             ),
             metric: str = Field(
                 ...,
-                description="指标名称(Metric Name)，如'request_count'。可通过 umodel_list_data_set 返回的 fields 获取"
+                description="指标名称(Metric Name)，如'request_count'。可通过 umodel_list_data_set 返回的 fields 获取",
             ),
             workspace: str = Field(
                 ...,
-                description="CMS工作空间名称(Workspace)，可通过 list_workspace 获取"
+                description="CMS工作空间名称(Workspace)，可通过 list_workspace 获取",
             ),
             dest_domain: Optional[str] = Field(
-                None,
-                description="目标实体域名(Destination Entity Domain)，可选"
+                None, description="目标实体域名(Destination Entity Domain)，可选"
             ),
             dest_entity_set_name: Optional[str] = Field(
-                None,
-                description="目标实体类型名称(Destination Entity Set Name)，可选"
+                None, description="目标实体类型名称(Destination Entity Set Name)，可选"
             ),
             dest_entity_ids: Optional[str] = Field(
                 None,
-                description="目标实体ID列表(Destination Entity IDs)，逗号分隔，可选"
+                description="目标实体ID列表(Destination Entity IDs)，逗号分隔，可选",
             ),
             query_type: str = Field(
                 "range",
-                description="查询类型(Query Type): range(范围查询，返回时序数据) 或 instant(即时查询，返回最新值)"
+                description="查询类型(Query Type): range(范围查询，返回时序数据) 或 instant(即时查询，返回最新值)",
             ),
             time_range: Optional[str] = Field(
-                "last_1h",
-                description=TIME_RANGE_DESCRIPTION
+                "last_1h", description=TIME_RANGE_DESCRIPTION
             ),
             regionId: str = Field(..., description="Region ID"),
         ) -> Dict[str, Any]:
@@ -663,8 +668,15 @@ class PaasDataToolkit:
                     "metric": metric,
                     "workspace": workspace,
                 },
-                ["src_domain", "src_entity_set_name", "relation_type",
-                 "direction", "metric_set_domain", "metric", "workspace"]
+                [
+                    "src_domain",
+                    "src_entity_set_name",
+                    "relation_type",
+                    "direction",
+                    "metric_set_domain",
+                    "metric",
+                    "workspace",
+                ],
             )
 
             # 使用 _parse_time_range 解析时间范围
@@ -674,15 +686,20 @@ class PaasDataToolkit:
             if not metric_set_name:
                 if not dest_entity_set_name:
                     return self._build_standard_response(
-                        data=[], query="", time_range=(from_ts, to_ts), error=True,
+                        data=[],
+                        query="",
+                        time_range=(from_ts, to_ts),
+                        error=True,
                         message="metric_set_name is required when dest_entity_set_name is not provided",
-                        time_range_expression=time_range or "last_1h"
+                        time_range_expression=time_range or "last_1h",
                     )
                 metric_set_name = f"{metric_set_domain}.metric.{src_entity_set_name}_{relation_type}_{dest_entity_set_name}"
 
             # 构建源实体 IDs 参数
             if src_entity_ids and src_entity_ids.strip():
-                src_parts = [id.strip() for id in src_entity_ids.split(",") if id.strip()]
+                src_parts = [
+                    id.strip() for id in src_entity_ids.split(",") if id.strip()
+                ]
                 src_quoted = [f"'{id}'" for id in src_parts]
                 src_entity_ids_param = f"[{','.join(src_quoted)}]"
             else:
@@ -709,7 +726,9 @@ class PaasDataToolkit:
                 dest_entity_ids_param = "[]"
 
             # Build entity_set with clause (omit ids when empty, matching Go buildEntityIDsParam)
-            entity_set_clause = f".entity_set with(domain='{src_domain}', name='{src_entity_set_name}'"
+            entity_set_clause = (
+                f".entity_set with(domain='{src_domain}', name='{src_entity_set_name}'"
+            )
             if src_entity_ids_param != "[]":
                 entity_set_clause += f", ids={src_entity_ids_param}"
             entity_set_clause += ")"
@@ -736,7 +755,7 @@ class PaasDataToolkit:
                 time_range=(from_ts, to_ts),
                 error=error,
                 message=message,
-                time_range_expression=time_range if time_range else "last_1h"
+                time_range_expression=time_range if time_range else "last_1h",
             )
 
         @self.server.tool()
@@ -751,43 +770,41 @@ class PaasDataToolkit:
             ctx: Context,
             domain: str = Field(
                 ...,
-                description="实体域名(Entity Domain)，如'apm'、'host'。不能为'*'，可通过 umodel_search_entity_set 获取"
+                description="实体域名(Entity Domain)，如'apm'、'host'。不能为'*'，可通过 umodel_search_entity_set 获取",
             ),
             entity_set_name: str = Field(
                 ...,
-                description="实体类型名称(Entity Set Name)，如'apm.service'。不能为'*'，可通过 umodel_search_entity_set 获取"
+                description="实体类型名称(Entity Set Name)，如'apm.service'。不能为'*'，可通过 umodel_search_entity_set 获取",
             ),
             log_set_domain: str = Field(
                 ...,
-                description="日志集域名(LogSet Domain)，如'apm'。可通过 umodel_list_data_set(data_set_types='log_set') 获取"
+                description="日志集域名(LogSet Domain)，如'apm'。可通过 umodel_list_data_set(data_set_types='log_set') 获取",
             ),
             log_set_name: str = Field(
                 ...,
-                description="日志集名称(LogSet Name)，如'apm.log.apm.service'。可通过 umodel_list_data_set 获取"
+                description="日志集名称(LogSet Name)，如'apm.log.apm.service'。可通过 umodel_list_data_set 获取",
             ),
             workspace: str = Field(
                 ...,
-                description="CMS工作空间名称(Workspace)，可通过 list_workspace 获取"
+                description="CMS工作空间名称(Workspace)，可通过 list_workspace 获取",
             ),
             entity_ids: Optional[str] = Field(
                 None,
-                description="实体ID列表(Entity IDs)，逗号分隔，如'id1,id2,id3'。可通过 umodel_get_entities 获取（强烈推荐提供）"
+                description="实体ID列表(Entity IDs)，逗号分隔，如'id1,id2,id3'。可通过 umodel_get_entities 获取（强烈推荐提供）",
             ),
             to_cluster_content_field: Optional[str] = Field(
                 None,
-                description="日志聚类字段(Cluster Content Field)，如'content'、'message'。提供此参数时启用日志聚类分析，返回日志模式而非原始日志"
+                description="日志聚类字段(Cluster Content Field)，如'content'、'message'。提供此参数时启用日志聚类分析，返回日志模式而非原始日志",
             ),
             to_cluster_aggregate_field: Optional[str] = Field(
                 None,
-                description="聚类聚合字段(Cluster Aggregate Field)，如'severity'、'level'。用于在聚类结果中按此字段进一步分组统计"
+                description="聚类聚合字段(Cluster Aggregate Field)，如'severity'、'level'。用于在聚类结果中按此字段进一步分组统计",
             ),
             limit: Optional[int] = Field(
-                100,
-                description="返回的最大日志记录数量(Max Records)，默认100"
+                100, description="返回的最大日志记录数量(Max Records)，默认100"
             ),
             time_range: Optional[str] = Field(
-                "last_1h",
-                description=TIME_RANGE_DESCRIPTION
+                "last_1h", description=TIME_RANGE_DESCRIPTION
             ),
             regionId: str = Field(..., description="Region ID"),
         ) -> Dict[str, Any]:
@@ -881,7 +898,13 @@ class PaasDataToolkit:
                     "log_set_name": log_set_name,
                     "workspace": workspace,
                 },
-                ["domain", "entity_set_name", "log_set_domain", "log_set_name", "workspace"]
+                [
+                    "domain",
+                    "entity_set_name",
+                    "log_set_domain",
+                    "log_set_name",
+                    "workspace",
+                ],
             )
 
             # 使用 _parse_time_range 解析时间范围
@@ -926,7 +949,9 @@ class PaasDataToolkit:
 
             # 如果启用了聚类模式，添加提示信息
             if to_cluster_content_field and not message:
-                message = f"Log clustering enabled on field '{to_cluster_content_field}'"
+                message = (
+                    f"Log clustering enabled on field '{to_cluster_content_field}'"
+                )
                 if to_cluster_aggregate_field:
                     message += f" with aggregation on '{to_cluster_aggregate_field}'"
 
@@ -937,7 +962,7 @@ class PaasDataToolkit:
                 time_range=(from_ts, to_ts),
                 error=error,
                 message=message,
-                time_range_expression=time_range if time_range else "last_1h"
+                time_range_expression=time_range if time_range else "last_1h",
             )
 
         @self.server.tool()
@@ -952,35 +977,33 @@ class PaasDataToolkit:
             ctx: Context,
             domain: str = Field(
                 ...,
-                description="实体域名(Entity Domain)，如'apm'、'host'。不能为'*'，可通过 umodel_search_entity_set 获取"
+                description="实体域名(Entity Domain)，如'apm'、'host'。不能为'*'，可通过 umodel_search_entity_set 获取",
             ),
             entity_set_name: str = Field(
                 ...,
-                description="实体类型名称(Entity Set Name)，如'apm.service'。不能为'*'，可通过 umodel_search_entity_set 获取"
+                description="实体类型名称(Entity Set Name)，如'apm.service'。不能为'*'，可通过 umodel_search_entity_set 获取",
             ),
             event_set_domain: str = Field(
                 ...,
-                description="事件集域名(EventSet Domain)，如'default'。可通过 umodel_list_data_set(data_set_types='event_set') 获取"
+                description="事件集域名(EventSet Domain)，如'default'。可通过 umodel_list_data_set(data_set_types='event_set') 获取",
             ),
             event_set_name: str = Field(
                 ...,
-                description="事件集名称(EventSet Name)，如'default.event.common'。可通过 umodel_list_data_set 获取"
+                description="事件集名称(EventSet Name)，如'default.event.common'。可通过 umodel_list_data_set 获取",
             ),
             workspace: str = Field(
                 ...,
-                description="CMS工作空间名称(Workspace)，可通过 list_workspace 获取"
+                description="CMS工作空间名称(Workspace)，可通过 list_workspace 获取",
             ),
             entity_ids: Optional[str] = Field(
                 None,
-                description="实体ID列表(Entity IDs)，逗号分隔，如'id1,id2,id3'。可通过 umodel_get_entities 获取"
+                description="实体ID列表(Entity IDs)，逗号分隔，如'id1,id2,id3'。可通过 umodel_get_entities 获取",
             ),
             limit: Optional[int] = Field(
-                100,
-                description="返回的最大事件记录数量(Max Records)，默认100"
+                100, description="返回的最大事件记录数量(Max Records)，默认100"
             ),
             time_range: Optional[str] = Field(
-                "last_1h",
-                description=TIME_RANGE_DESCRIPTION
+                "last_1h", description=TIME_RANGE_DESCRIPTION
             ),
             regionId: str = Field(..., description="Region ID"),
         ) -> Dict[str, Any]:
@@ -1046,7 +1069,13 @@ class PaasDataToolkit:
                     "event_set_name": event_set_name,
                     "workspace": workspace,
                 },
-                ["domain", "entity_set_name", "event_set_domain", "event_set_name", "workspace"]
+                [
+                    "domain",
+                    "entity_set_name",
+                    "event_set_domain",
+                    "event_set_name",
+                    "workspace",
+                ],
             )
 
             # 使用 _parse_time_range 解析时间范围
@@ -1092,14 +1121,30 @@ class PaasDataToolkit:
                 if storage:
                     _logger.info(f"umodel_get_events retrying with storage: {storage}")
                     retry_query = _build_event_query_with_storage(
-                        event_set_domain, event_set_name, storage, entity_ids, actual_limit
+                        event_set_domain,
+                        event_set_name,
+                        storage,
+                        entity_ids,
+                        actual_limit,
                     )
                     result = execute_cms_query_with_context(
-                        ctx, retry_query, workspace, regionId, from_ts, to_ts, actual_limit
+                        ctx,
+                        retry_query,
+                        workspace,
+                        regionId,
+                        from_ts,
+                        to_ts,
+                        actual_limit,
                     )
                     data = result.get("data") if isinstance(result, dict) else result
-                    error = result.get("error", False) if isinstance(result, dict) else False
-                    message = result.get("message", "") if isinstance(result, dict) else ""
+                    error = (
+                        result.get("error", False)
+                        if isinstance(result, dict)
+                        else False
+                    )
+                    message = (
+                        result.get("message", "") if isinstance(result, dict) else ""
+                    )
                     query = retry_query
 
             # 使用 _build_standard_response 构建标准化响应
@@ -1109,7 +1154,7 @@ class PaasDataToolkit:
                 time_range=(from_ts, to_ts),
                 error=error,
                 message=message,
-                time_range_expression=time_range if time_range else "last_1h"
+                time_range_expression=time_range if time_range else "last_1h",
             )
 
         @self.server.tool()
@@ -1124,31 +1169,30 @@ class PaasDataToolkit:
             ctx: Context,
             domain: str = Field(
                 ...,
-                description="实体域名(Entity Domain)，如'apm'、'host'。不能为'*'，可通过 umodel_search_entity_set 获取"
+                description="实体域名(Entity Domain)，如'apm'、'host'。不能为'*'，可通过 umodel_search_entity_set 获取",
             ),
             entity_set_name: str = Field(
                 ...,
-                description="实体类型名称(Entity Set Name)，如'apm.service'。不能为'*'，可通过 umodel_search_entity_set 获取"
+                description="实体类型名称(Entity Set Name)，如'apm.service'。不能为'*'，可通过 umodel_search_entity_set 获取",
             ),
             trace_set_domain: str = Field(
                 ...,
-                description="TraceSet域名(TraceSet Domain)，如'apm'。可通过 umodel_list_data_set(data_set_types='trace_set') 获取"
+                description="TraceSet域名(TraceSet Domain)，如'apm'。可通过 umodel_list_data_set(data_set_types='trace_set') 获取",
             ),
             trace_set_name: str = Field(
                 ...,
-                description="TraceSet名称(TraceSet Name)，如'apm.trace.common'。可通过 umodel_list_data_set 获取"
+                description="TraceSet名称(TraceSet Name)，如'apm.trace.common'。可通过 umodel_list_data_set 获取",
             ),
             trace_ids: str = Field(
                 ...,
-                description="逗号分隔的trace ID列表(Trace IDs)，如'trace1,trace2,trace3'。通常从 umodel_search_traces 获取"
+                description="逗号分隔的trace ID列表(Trace IDs)，如'trace1,trace2,trace3'。通常从 umodel_search_traces 获取",
             ),
             workspace: str = Field(
                 ...,
-                description="CMS工作空间名称(Workspace)，可通过 list_workspace 获取"
+                description="CMS工作空间名称(Workspace)，可通过 list_workspace 获取",
             ),
             time_range: Optional[str] = Field(
-                "last_1h",
-                description=TIME_RANGE_DESCRIPTION
+                "last_1h", description=TIME_RANGE_DESCRIPTION
             ),
             regionId: str = Field(..., description="Region ID"),
         ) -> Dict[str, Any]:
@@ -1205,7 +1249,14 @@ class PaasDataToolkit:
                     "trace_ids": trace_ids,
                     "workspace": workspace,
                 },
-                ["domain", "entity_set_name", "trace_set_domain", "trace_set_name", "trace_ids", "workspace"]
+                [
+                    "domain",
+                    "entity_set_name",
+                    "trace_set_domain",
+                    "trace_set_name",
+                    "trace_ids",
+                    "workspace",
+                ],
             )
 
             # 使用 _parse_time_range 解析时间范围
@@ -1263,7 +1314,7 @@ $trace_data | join $trace_data_with_time on $trace_data_with_time.__trace_id__ =
                 time_range=(from_ts, to_ts),
                 error=error,
                 message=message,
-                time_range_expression=time_range if time_range else "last_1h"
+                time_range_expression=time_range if time_range else "last_1h",
             )
 
         @self.server.tool()
@@ -1278,47 +1329,43 @@ $trace_data | join $trace_data_with_time on $trace_data_with_time.__trace_id__ =
             ctx: Context,
             domain: str = Field(
                 ...,
-                description="实体域名(Entity Domain)，如'apm'、'host'。不能为'*'，可通过 umodel_search_entity_set 获取"
+                description="实体域名(Entity Domain)，如'apm'、'host'。不能为'*'，可通过 umodel_search_entity_set 获取",
             ),
             entity_set_name: str = Field(
                 ...,
-                description="实体类型名称(Entity Set Name)，如'apm.service'。不能为'*'，可通过 umodel_search_entity_set 获取"
+                description="实体类型名称(Entity Set Name)，如'apm.service'。不能为'*'，可通过 umodel_search_entity_set 获取",
             ),
             trace_set_domain: str = Field(
                 ...,
-                description="TraceSet域名(TraceSet Domain)，如'apm'。可通过 umodel_list_data_set(data_set_types='trace_set') 获取"
+                description="TraceSet域名(TraceSet Domain)，如'apm'。可通过 umodel_list_data_set(data_set_types='trace_set') 获取",
             ),
             trace_set_name: str = Field(
                 ...,
-                description="TraceSet名称(TraceSet Name)，如'apm.trace.common'。可通过 umodel_list_data_set 获取"
+                description="TraceSet名称(TraceSet Name)，如'apm.trace.common'。可通过 umodel_list_data_set 获取",
             ),
             workspace: str = Field(
                 ...,
-                description="CMS工作空间名称(Workspace)，可通过 list_workspace 获取"
+                description="CMS工作空间名称(Workspace)，可通过 list_workspace 获取",
             ),
             entity_ids: Optional[str] = Field(
                 None,
-                description="实体ID列表(Entity IDs)，逗号分隔，如'id1,id2,id3'。可通过 umodel_get_entities 获取"
+                description="实体ID列表(Entity IDs)，逗号分隔，如'id1,id2,id3'。可通过 umodel_get_entities 获取",
             ),
             min_duration_ms: Optional[float] = Field(
-                None,
-                description="最小trace持续时间（毫秒），用于过滤慢trace"
+                None, description="最小trace持续时间（毫秒），用于过滤慢trace"
             ),
             max_duration_ms: Optional[float] = Field(
-                None,
-                description="最大trace持续时间（毫秒），用于过滤快trace"
+                None, description="最大trace持续时间（毫秒），用于过滤快trace"
             ),
             has_error: Optional[bool] = Field(
                 None,
-                description="按错误状态过滤（true表示错误trace，false表示成功trace）"
+                description="按错误状态过滤（true表示错误trace，false表示成功trace）",
             ),
             limit: Optional[float] = Field(
-                100,
-                description="返回的最大trace摘要数量，默认100"
+                100, description="返回的最大trace摘要数量，默认100"
             ),
             time_range: Optional[str] = Field(
-                "last_1h",
-                description=TIME_RANGE_DESCRIPTION
+                "last_1h", description=TIME_RANGE_DESCRIPTION
             ),
             regionId: str = Field(..., description="Region ID"),
         ) -> Dict[str, Any]:
@@ -1393,7 +1440,13 @@ $trace_data | join $trace_data_with_time on $trace_data_with_time.__trace_id__ =
                     "trace_set_name": trace_set_name,
                     "workspace": workspace,
                 },
-                ["domain", "entity_set_name", "trace_set_domain", "trace_set_name", "workspace"]
+                [
+                    "domain",
+                    "entity_set_name",
+                    "trace_set_domain",
+                    "trace_set_name",
+                    "workspace",
+                ],
             )
 
             # 使用 _parse_time_range 解析时间范围
@@ -1460,7 +1513,7 @@ $trace_data | join $trace_data_with_time on $trace_data_with_time.__trace_id__ =
                 time_range=(from_ts, to_ts),
                 error=error,
                 message=message,
-                time_range_expression=time_range if time_range else "last_1h"
+                time_range_expression=time_range if time_range else "last_1h",
             )
 
         @self.server.tool()
@@ -1475,35 +1528,33 @@ $trace_data | join $trace_data_with_time on $trace_data_with_time.__trace_id__ =
             ctx: Context,
             domain: str = Field(
                 ...,
-                description="实体域名(Entity Domain)，如'apm'、'host'。不能为'*'，可通过 umodel_search_entity_set 获取"
+                description="实体域名(Entity Domain)，如'apm'、'host'。不能为'*'，可通过 umodel_search_entity_set 获取",
             ),
             entity_set_name: str = Field(
                 ...,
-                description="实体类型名称(Entity Set Name)，如'apm.service'。不能为'*'，可通过 umodel_search_entity_set 获取"
+                description="实体类型名称(Entity Set Name)，如'apm.service'。不能为'*'，可通过 umodel_search_entity_set 获取",
             ),
             profile_set_domain: str = Field(
                 ...,
-                description="ProfileSet域名(ProfileSet Domain)，如'default'。可通过 umodel_list_data_set(data_set_types='profile_set') 获取"
+                description="ProfileSet域名(ProfileSet Domain)，如'default'。可通过 umodel_list_data_set(data_set_types='profile_set') 获取",
             ),
             profile_set_name: str = Field(
                 ...,
-                description="ProfileSet名称(ProfileSet Name)，如'default.profile.common'。可通过 umodel_list_data_set 获取"
+                description="ProfileSet名称(ProfileSet Name)，如'default.profile.common'。可通过 umodel_list_data_set 获取",
             ),
             workspace: str = Field(
                 ...,
-                description="CMS工作空间名称(Workspace)，可通过 list_workspace 获取"
+                description="CMS工作空间名称(Workspace)，可通过 list_workspace 获取",
             ),
             entity_ids: str = Field(
                 ...,
-                description="实体ID列表(Entity IDs)，逗号分隔，如'id1,id2,id3'。可通过 umodel_get_entities 获取（必填，数据量大需指定精确实体）"
+                description="实体ID列表(Entity IDs)，逗号分隔，如'id1,id2,id3'。可通过 umodel_get_entities 获取（必填，数据量大需指定精确实体）",
             ),
             limit: Optional[int] = Field(
-                100,
-                description="返回的最大性能剖析记录数量(Max Records)，默认100"
+                100, description="返回的最大性能剖析记录数量(Max Records)，默认100"
             ),
             time_range: Optional[str] = Field(
-                "last_5m",
-                description=TIME_RANGE_DESCRIPTION
+                "last_5m", description=TIME_RANGE_DESCRIPTION
             ),
             regionId: str = Field(..., description="Region ID"),
         ) -> Dict[str, Any]:
@@ -1571,7 +1622,14 @@ $trace_data | join $trace_data_with_time on $trace_data_with_time.__trace_id__ =
                     "workspace": workspace,
                     "entity_ids": entity_ids,
                 },
-                ["domain", "entity_set_name", "profile_set_domain", "profile_set_name", "workspace", "entity_ids"]
+                [
+                    "domain",
+                    "entity_set_name",
+                    "profile_set_domain",
+                    "profile_set_name",
+                    "workspace",
+                    "entity_ids",
+                ],
             )
 
             # 使用 _parse_time_range 解析时间范围
@@ -1616,7 +1674,7 @@ $trace_data | join $trace_data_with_time on $trace_data_with_time.__trace_id__ =
                 time_range=(from_ts, to_ts),
                 error=error,
                 message=message,
-                time_range_expression=time_range if time_range else "last_5m"
+                time_range_expression=time_range if time_range else "last_5m",
             )
 
     def _validate_data_set_exists(
@@ -1677,7 +1735,9 @@ $trace_data | join $trace_data_with_time on $trace_data_with_time.__trace_id__ =
                 available_sets = [
                     f"{ds.get('domain')}.{ds.get('name')}"
                     for ds in datasets
-                    if ds.get("type") == set_type and ds.get("domain") and ds.get("name")
+                    if ds.get("type") == set_type
+                    and ds.get("domain")
+                    and ds.get("name")
                 ]
 
                 for dataset in datasets:
@@ -1724,9 +1784,16 @@ $trace_data | join $trace_data_with_time on $trace_data_with_time.__trace_id__ =
 
                                 # 格式化可用指标列表（最多显示10个）
                                 if len(available_metrics) > 10:
-                                    metrics_display = ", ".join(available_metrics[:10]) + f" ... (共{len(available_metrics)}个)"
+                                    metrics_display = (
+                                        ", ".join(available_metrics[:10])
+                                        + f" ... (共{len(available_metrics)}个)"
+                                    )
                                 else:
-                                    metrics_display = ", ".join(available_metrics) if available_metrics else "无"
+                                    metrics_display = (
+                                        ", ".join(available_metrics)
+                                        if available_metrics
+                                        else "无"
+                                    )
 
                                 # 抛出包含建议修复方法的错误消息
                                 raise ValueError(
@@ -1737,7 +1804,10 @@ $trace_data | join $trace_data_with_time on $trace_data_with_time.__trace_id__ =
 
                 # 未找到匹配的数据集，格式化可用数据集列表
                 if len(available_sets) > 10:
-                    sets_display = ", ".join(available_sets[:10]) + f" ... (共{len(available_sets)}个)"
+                    sets_display = (
+                        ", ".join(available_sets[:10])
+                        + f" ... (共{len(available_sets)}个)"
+                    )
                 else:
                     sets_display = ", ".join(available_sets) if available_sets else "无"
 
@@ -1761,9 +1831,7 @@ $trace_data | join $trace_data_with_time on $trace_data_with_time.__trace_id__ =
             # 校验过程中的其他异常，记录但不阻止执行
             import logging
 
-            logging.warning(
-                f"{set_type_display} 验证失败: {e}，继续执行"
-            )
+            logging.warning(f"{set_type_display} 验证失败: {e}，继续执行")
 
     def _validate_profile_set_exists(
         self,
@@ -1806,13 +1874,13 @@ $trace_data | join $trace_data_with_time on $trace_data_with_time.__trace_id__ =
         current_to: int,
         current_data: Any,
         offset: str,
-        key_type: str = "metrics"
+        key_type: str = "metrics",
     ) -> Optional[Dict[str, Any]]:
         """执行对比查询并返回对比结果
-        
+
         当 offset 参数有效时，执行第二次查询获取对比时段数据，
         然后使用 timeseries_compare 模块进行对比分析。
-        
+
         Args:
             ctx: MCP 上下文
             query: SPL 查询语句
@@ -1823,50 +1891,54 @@ $trace_data | join $trace_data_with_time on $trace_data_with_time.__trace_id__ =
             current_data: 当前时段查询结果数据
             offset: 偏移量字符串，如 "1h", "1d", "1w"
             key_type: 键类型，"metrics" 或 "golden_metrics"
-        
+
         Returns:
             对比结果字典，如果对比失败则返回 None
         """
         from mcp_server_aliyun_observability.toolkits.paas.timeseries_compare import (
-            parse_duration_to_seconds,
-            parse_time_series_data,
+            KeyType,
             build_compare_output,
             compare_output_to_dict,
-            KeyType
+            parse_duration_to_seconds,
+            parse_time_series_data,
         )
-        
+
         # 解析偏移量
         offset_seconds = parse_duration_to_seconds(offset)
         if offset_seconds <= 0:
             return None
-        
+
         # 计算对比时段
         compare_from = current_from - offset_seconds
         compare_to = current_to - offset_seconds
-        
+
         # 执行对比时段查询
         try:
             compare_result = execute_cms_query_with_context(
                 ctx, query, workspace, regionId, compare_from, compare_to, 1000
             )
-            compare_data = compare_result.get("data") if isinstance(compare_result, dict) else compare_result
+            compare_data = (
+                compare_result.get("data")
+                if isinstance(compare_result, dict)
+                else compare_result
+            )
         except Exception:
             # 对比查询失败，返回 None 让调用方使用原始数据
             return None
-        
+
         # 确定键类型
-        ts_key_type = KeyType.GOLDEN_METRICS if key_type == "golden_metrics" else KeyType.METRICS
-        
+        ts_key_type = (
+            KeyType.GOLDEN_METRICS if key_type == "golden_metrics" else KeyType.METRICS
+        )
+
         # 解析时序数据
         current_ts_data = parse_time_series_data(
-            current_data if isinstance(current_data, list) else [],
-            ts_key_type
+            current_data if isinstance(current_data, list) else [], ts_key_type
         )
         compare_ts_data = parse_time_series_data(
-            compare_data if isinstance(compare_data, list) else [],
-            ts_key_type
+            compare_data if isinstance(compare_data, list) else [], ts_key_type
         )
-        
+
         # 构建对比输出
         compare_output = build_compare_output(
             current_data=current_ts_data,
@@ -1875,16 +1947,13 @@ $trace_data | join $trace_data_with_time on $trace_data_with_time.__trace_id__ =
             current_to=current_to,
             compare_from=compare_from,
             compare_to=compare_to,
-            offset_seconds=offset_seconds
+            offset_seconds=offset_seconds,
         )
-        
+
         # 转换为字典格式
         return compare_output_to_dict(compare_output)
 
-    def _parse_time_range(
-        self,
-        time_range: Optional[str] = None
-    ) -> Tuple[int, int]:
+    def _parse_time_range(self, time_range: Optional[str] = None) -> Tuple[int, int]:
         """使用 compute_time_range 解析时间范围参数。
 
         Args:
@@ -1925,7 +1994,7 @@ $trace_data | join $trace_data_with_time on $trace_data_with_time.__trace_id__ =
         time_range: Tuple[int, int],
         error: bool = False,
         message: str = "",
-        time_range_expression: Optional[str] = None
+        time_range_expression: Optional[str] = None,
     ) -> Dict[str, Any]:
         """构建标准化响应格式。
 
@@ -1975,7 +2044,7 @@ $trace_data | join $trace_data_with_time on $trace_data_with_time.__trace_id__ =
             "to": to_ts,
             "from_readable": from_readable,
             "to_readable": to_readable,
-            "expression": time_range_expression if time_range_expression else ""
+            "expression": time_range_expression if time_range_expression else "",
         }
 
         # 如果没有提供 message，根据 error 和 data 生成默认消息
@@ -1992,13 +2061,11 @@ $trace_data | join $trace_data_with_time on $trace_data_with_time.__trace_id__ =
             "data": data,
             "message": message,
             "query": query,
-            "time_range": time_range_info
+            "time_range": time_range_info,
         }
 
     def _validate_required_params(
-        self,
-        params: Dict[str, Any],
-        required: List[str]
+        self, params: Dict[str, Any], required: List[str]
     ) -> None:
         """验证必填参数，不允许为 '*' 或空值。
 
@@ -2049,13 +2116,21 @@ $trace_data | join $trace_data_with_time on $trace_data_with_time.__trace_id__ =
                 continue
 
             # 检查 domain 或 src_domain 参数是否为通配符 '*'
-            if param_name in ("domain", "src_domain") and isinstance(value, str) and value.strip() == "*":
+            if (
+                param_name in ("domain", "src_domain")
+                and isinstance(value, str)
+                and value.strip() == "*"
+            ):
                 raise ValueError(
                     "domain 不能为 '*'，请使用 umodel_search_entity_set 获取有效的 domain 值"
                 )
 
             # 检查 entity_set_name 或 src_entity_set_name 参数是否为通配符 '*'
-            if param_name in ("entity_set_name", "src_entity_set_name") and isinstance(value, str) and value.strip() == "*":
+            if (
+                param_name in ("entity_set_name", "src_entity_set_name")
+                and isinstance(value, str)
+                and value.strip() == "*"
+            ):
                 raise ValueError(
                     "entity_set_name 不能为 '*'，请使用 umodel_search_entity_set 获取有效值"
                 )
@@ -2063,9 +2138,7 @@ $trace_data | join $trace_data_with_time on $trace_data_with_time.__trace_id__ =
         # 如果有缺失的参数，抛出异常
         if missing_params:
             param_names = ", ".join(missing_params)
-            raise ValueError(
-                f"缺少必填参数: {param_names}，请提供有效值"
-            )
+            raise ValueError(f"缺少必填参数: {param_names}，请提供有效值")
 
     def _parse_string_to_spl_param(self, value: Optional[str]) -> str:
         """将可选字符串转换为 SPL 参数
@@ -2118,9 +2191,7 @@ $trace_data | join $trace_data_with_time on $trace_data_with_time.__trace_id__ =
             return "'both'"
         return f"'{direction.strip()}'"
 
-    def _parse_data_set_types_to_spl_param(
-        self, data_set_types: Optional[str]
-    ) -> str:
+    def _parse_data_set_types_to_spl_param(self, data_set_types: Optional[str]) -> str:
         """将逗号分隔的数据集类型字符串转换为 SPL 数组参数
 
         将数据集类型列表（如 "metric_set,log_set"）转换为 SPL 查询中使用的数组格式。
@@ -2284,7 +2355,7 @@ $trace_data | join $trace_data_with_time on $trace_data_with_time.__trace_id__ =
             )
 
         # 返回 SPL/SQL 格式: "field"='value' 或 "field"!='value'
-        return f'"{field}"{operator}\'{value}\''
+        return f"\"{field}\"{operator}'{value}'"
 
     def _trim_quotes(self, s: str) -> str:
         """去除字符串两端的引号（单引号或双引号）。
@@ -2304,8 +2375,9 @@ $trace_data | join $trace_data_with_time on $trace_data_with_time.__trace_id__ =
             'no_quotes'
         """
         if len(s) >= 2:
-            if (s.startswith('"') and s.endswith('"')) or \
-               (s.startswith("'") and s.endswith("'")):
+            if (s.startswith('"') and s.endswith('"')) or (
+                s.startswith("'") and s.endswith("'")
+            ):
                 return s[1:-1]
         return s
 
@@ -2427,9 +2499,6 @@ $trace_data | join $trace_data_with_time on $trace_data_with_time.__trace_id__ =
                     return now - value * multipliers.get(unit, 1)
             return now
 
-        from_ts = parse_time(from_time)
-        to_ts = parse_time(to_time)
-
         # basic 模式：返回原始查询
         if analysis_mode == "basic":
             query = f".entity_set with(domain='{domain}', name='{entity_set_name}'{entity_ids_param}) | entity-call get_metric('{domain}', '{metric_domain_name}', '{metric}', '{query_type}', {step_param}, aggregate=false)"
@@ -2438,7 +2507,9 @@ $trace_data | join $trace_data_with_time on $trace_data_with_time.__trace_id__ =
         # cluster 模式：时序聚类
         if analysis_mode == "cluster":
             # 计算聚类数：nClusters = ceil(entityCount / 2)，最少 2，最多 7
-            n_clusters = max(2, min(7, math.ceil(entity_count / 2))) if entity_count > 0 else 2
+            n_clusters = (
+                max(2, min(7, math.ceil(entity_count / 2))) if entity_count > 0 else 2
+            )
 
             base_query = f".entity_set with(domain='{domain}', name='{entity_set_name}'{entity_ids_param}) | entity-call get_metric('{domain}', '{metric_domain_name}', '{metric}', '{query_type}', {step_param}, aggregate=false)"
             query = f"""{base_query}

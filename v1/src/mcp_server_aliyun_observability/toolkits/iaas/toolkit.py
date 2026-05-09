@@ -1,7 +1,5 @@
-
 import json
-
-from typing import Any, Dict, List, Optional, Union, Tuple
+from typing import Any, Dict, List, Optional, Tuple, Union
 
 from alibabacloud_sls20201230.client import Client as SLSClient
 from alibabacloud_sls20201230.models import (
@@ -29,10 +27,12 @@ from mcp_server_aliyun_observability.utils import (
     execute_cms_query_with_context,
     handle_tea_exception,
 )
-from mcp_server_aliyun_observability.utils import text_to_sql_old as utils_text_to_sql_old
-from mcp_server_aliyun_observability.utils import text_to_sql as utils_text_to_sql
-from mcp_server_aliyun_observability.utils import text_to_spl as utils_text_to_spl
 from mcp_server_aliyun_observability.utils import sls_sop as utils_sls_sop
+from mcp_server_aliyun_observability.utils import text_to_spl as utils_text_to_spl
+from mcp_server_aliyun_observability.utils import text_to_sql as utils_text_to_sql
+from mcp_server_aliyun_observability.utils import (
+    text_to_sql_old as utils_text_to_sql_old,
+)
 
 
 class IaaSToolkit:
@@ -276,13 +276,13 @@ class IaaSToolkit:
             Returns:
                 生成的SLS查询语句和相关信息，包含 data 和 requestId 字段
             """
-            from mcp_server_aliyun_observability.toolkits.paas.time_utils import (
-                TimeRangeParser,
-            )
-            
 
             return utils_text_to_sql(
-                ctx, text, project, logStore, regionId,
+                ctx,
+                text,
+                project,
+                logStore,
+                regionId,
             )
 
         @self.server.tool()
@@ -310,22 +310,22 @@ class IaaSToolkit:
             ),
         ) -> Dict[str, Any]:
             """将自然语言转换为SLS SPL查询语句。
-            
+
             ## 功能概述
-            
+
             该工具可以将自然语言描述转换为有效的SLS SPL查询语句。
             注意：SPL (Search Processing Language) 是SLS的一种管道式查询语句，主要用于数据加工、过滤、提取等场景，与标准SQL不同。
-            
+
             ## 使用场景
-            
+
             - 当用户需要对日志数据进行结构化提取时
             - 当需要从非结构化文本中解析字段时
-            
+
             ## 注意事项
-            
+
             - 本工具会基于提供的 data_sample 直接执行生成的 SPL 并返回结果（preview_data），通常无需额外再次调用执行工具。
             - 返回结果中包含生成的 query 和基于样例数据的执行结果 data。
-            
+
             ## 示例用法
 
             ### 1. 基础字段提取
@@ -347,7 +347,7 @@ class IaaSToolkit:
               {"raw": "[2023-10-01 10:00:05] [ERROR] [Thread-main] Connection failed"}
             ]
             ```
-            
+
             ### 3. JSON字段处理
             **Query**: "提取 details 字段中的 error_code"
             **Data Sample**:
@@ -365,11 +365,13 @@ class IaaSToolkit:
                 logStore: SLS日志库名称
                 data_sample: 样例日志数据
                 regionId: 阿里云区域ID
-                
+
             Returns:
                 包含生成的SPL查询语句(query)、样例数据执行结果(data)及完整响应信息
             """
-            return utils_text_to_spl(ctx, text, regionId, project, logStore, data_sample)
+            return utils_text_to_spl(
+                ctx, text, regionId, project, logStore, data_sample
+            )
 
         @self.server.tool()
         @retry(
@@ -381,36 +383,38 @@ class IaaSToolkit:
         @handle_tea_exception
         def sls_sop(
             ctx: Context,
-            text: str = Field(..., description="The user's question about SLS usage or SOP"),
+            text: str = Field(
+                ..., description="The user's question about SLS usage or SOP"
+            ),
             regionId: str = Field(..., description="Aliyun region ID"),
             project: Optional[str] = Field(None, description="SLS project name"),
             logStore: Optional[str] = Field(None, description="SLS log store name"),
         ) -> Dict[str, Any]:
             """SLS SOP (Standard Operating Procedure) assistant.
-            
+
             ## 功能概述
-            
+
             该工具是一个智能助手，用于回答关于 SLS (Simple Log Service) 使用方法、功能介绍、操作步骤 (SOP) 等方面的问题。
-            
+
             ## 使用场景
-            
+
             - 当用户不知道如何使用某个功能时（如：如何创建数据加工任务）
             - 当用户需要了解 SLS 的概念或术语时
             - 当用户遇到操作问题需要指引时
-            
+
             ## 示例用法
-            
+
             - "如何创建新的数据加工"
             - "什么是 Project"
             - "怎么配置告警"
-            
+
             Args:
                 ctx: MCP上下文
                 text: 用户的问题
                 regionId: 阿里云区域ID
                 project: SLS项目名称（可选）
                 logStore: SLS日志库名称（可选）
-                
+
             Returns:
                 助手的回答内容
             """
@@ -1004,7 +1008,7 @@ class IaaSToolkit:
             ),
             logStore: str = Field(
                 ...,
-                description="sls log store name, must exact match, should not contain chinese characters"
+                description="sls log store name, must exact match, should not contain chinese characters",
             ),
             from_time: Union[str, int] = Field(
                 "now-1h", description="开始时间: Unix时间戳(秒/毫秒)或相对时间(now-5m)"
@@ -1012,22 +1016,18 @@ class IaaSToolkit:
             to_time: Union[str, int] = Field(
                 "now", description="结束时间: Unix时间戳(秒/毫秒)或相对时间(now)"
             ),
-            regionId: str = Field(
-                ...,
-                description="Region ID"
-            ),
+            regionId: str = Field(..., description="Region ID"),
             logField: str = Field(
-                ...,
-                description="name of field containing log message"
+                ..., description="name of field containing log message"
             ),
             filter_query: Optional[str] = Field(
                 None,
-                description="filter query must be a valid sls query statement, which is used to filter log data"
+                description="filter query must be a valid sls query statement, which is used to filter log data",
             ),
             groupField: Optional[str] = Field(
                 None,
-                description="name of field containing group identity of log messages"
-            )
+                description="name of field containing group identity of log messages",
+            ),
         ) -> Dict[str, Any]:
             """查看阿里云日志服务中某个日志库的日志数据聚合分析结果，提供日志数据概览信息。
 
@@ -1075,19 +1075,17 @@ class IaaSToolkit:
             request: GetHistogramsRequest = GetHistogramsRequest(
                 from_=from_timestamp,
                 to=to_timestamp,
-                query=None if not filter_query else filter_query
+                query=None if not filter_query else filter_query,
             )
             response: GetHistogramsResponse = sls_client.get_histograms(
-                project=project,
-                logstore=logStore,
-                request=request
+                project=project, logstore=logStore, request=request
             )
             histograms = response.body
             total_count = sum([histogram.count for histogram in histograms])
             if total_count == 0:
                 return {
                     "patterns": [],
-                    "message": f"Failed to do log explore because no log data found in the specified time range ({from_time} ~ {to_time})"
+                    "message": f"Failed to do log explore because no log data found in the specified time range ({from_time} ~ {to_time})",
                 }
             sampling_rate = int(50000 / total_count * 100)
             sampling_rate = min(max(sampling_rate, 1), 100)
@@ -1122,28 +1120,26 @@ class IaaSToolkit:
             runtime.connect_timeout = 60000
 
             request: GetLogsRequest = GetLogsRequest(
-                query=spl_query,
-                from_=from_timestamp,
-                to=to_timestamp
+                query=spl_query, from_=from_timestamp, to=to_timestamp
             )
             response: GetLogsResponse = sls_client.get_logs_with_options(
                 project=project,
                 logstore=logStore,
                 request=request,
                 headers={},
-                runtime=runtime
+                runtime=runtime,
             )
             if not response.body:
                 return {
                     "patterns": [],
-                    "message": "Failed to do log explore because pattern model creation failed"
+                    "message": "Failed to do log explore because pattern model creation failed",
                 }
             model_id = response.body[0].get("model_id")
             error_msg = response.body[0].get("error_msg")
             if not model_id:
                 return {
                     "patterns": [],
-                    "message": f"Failed to do log explore because pattern model creation failed: {error_msg}"
+                    "message": f"Failed to do log explore because pattern model creation failed: {error_msg}",
                 }
 
             # 3) use model to match log data
@@ -1180,21 +1176,19 @@ class IaaSToolkit:
 | limit 200000
 """
             request: GetLogsRequest = GetLogsRequest(
-                query=spl_query,
-                from_=from_timestamp,
-                to=to_timestamp
+                query=spl_query, from_=from_timestamp, to=to_timestamp
             )
             response: GetLogsResponse = sls_client.get_logs_with_options(
                 project=project,
                 logstore=logStore,
                 request=request,
                 headers={},
-                runtime=runtime
+                runtime=runtime,
             )
             if not response.body:
                 return {
                     "patterns": [],
-                    "message": "Failed to do log explore because match log data failed"
+                    "message": "Failed to do log explore because match log data failed",
                 }
 
             # 4) format result
@@ -1204,7 +1198,7 @@ class IaaSToolkit:
                     "pattern": item.get("pattern"),
                     "pattern_regexp": item.get("pattern_regexp"),
                     "event_num": item.get("event_num"),
-                    "group": item.get("label_concat")
+                    "group": item.get("label_concat"),
                 }
                 if not formatted_item["pattern"]:
                     formatted_item["pattern"] = "<unknown-pattern>"
@@ -1213,11 +1207,13 @@ class IaaSToolkit:
                 hist = json.loads(item.get("hist"))
                 pattern_hist: List[Dict] = []
                 for ts, count in hist.items():
-                    pattern_hist.append({
-                        "from_timestamp": int(ts),
-                        "to_timestamp": int(ts) + time_bucket_size,
-                        "count": count
-                    })
+                    pattern_hist.append(
+                        {
+                            "from_timestamp": int(ts),
+                            "to_timestamp": int(ts) + time_bucket_size,
+                            "count": count,
+                        }
+                    )
                 pattern_hist.sort(key=lambda x: x["from_timestamp"])
                 formatted_item["histogram"] = pattern_hist
                 # variables info
@@ -1227,24 +1223,25 @@ class IaaSToolkit:
                 var_candidates_type = var_summary[2]
                 var_candidates_format = var_summary[3]
                 variables: List[Dict] = []
-                for i, (var_type, var_format) in enumerate(zip(var_candidates_type, var_candidates_format)):
+                for i, (var_type, var_format) in enumerate(
+                    zip(var_candidates_type, var_candidates_format)
+                ):
                     var_info = {
                         "index": i,
                         "type": var_type,
                         "format": var_format,
-                        "candidates": {}
+                        "candidates": {},
                     }
-                    for candidate, count in zip(var_candidates[i], var_candidates_count[i]):
+                    for candidate, count in zip(
+                        var_candidates[i], var_candidates_count[i]
+                    ):
                         var_info["candidates"][candidate] = count
                     variables.append(var_info)
                 formatted_item["variables"] = variables
                 return formatted_item
 
             results = [format_result(item) for item in response.body]
-            return {
-                "patterns": results,
-                "message": "success"
-            }
+            return {"patterns": results, "message": "success"}
 
         @self.server.tool()
         @retry(
@@ -1262,36 +1259,36 @@ class IaaSToolkit:
             ),
             logStore: str = Field(
                 ...,
-                description="sls log store name, must exact match, should not contain chinese characters"
+                description="sls log store name, must exact match, should not contain chinese characters",
             ),
             test_from_time: Union[str, int] = Field(
-                "now-1h", description="实验组数据的开始时间: Unix时间戳(秒/毫秒)或相对时间(now-5m)"
+                "now-1h",
+                description="实验组数据的开始时间: Unix时间戳(秒/毫秒)或相对时间(now-5m)",
             ),
             test_to_time: Union[str, int] = Field(
-                "now", description="实验组数据的结束时间: Unix时间戳(秒/毫秒)或相对时间(now)"
+                "now",
+                description="实验组数据的结束时间: Unix时间戳(秒/毫秒)或相对时间(now)",
             ),
             control_from_time: Union[str, int] = Field(
-                "now-1h", description="对照组数据的开始时间: Unix时间戳(秒/毫秒)或相对时间(now-5m)"
+                "now-1h",
+                description="对照组数据的开始时间: Unix时间戳(秒/毫秒)或相对时间(now-5m)",
             ),
             control_to_time: Union[str, int] = Field(
-                "now", description="对照组数据的结束时间: Unix时间戳(秒/毫秒)或相对时间(now)"
+                "now",
+                description="对照组数据的结束时间: Unix时间戳(秒/毫秒)或相对时间(now)",
             ),
-            regionId: str = Field(
-                ...,
-                description="Region ID"
-            ),
+            regionId: str = Field(..., description="Region ID"),
             logField: str = Field(
-                ...,
-                description="name of field containing log message"
+                ..., description="name of field containing log message"
             ),
             filter_query: Optional[str] = Field(
                 None,
-                description="filter query must be a valid sls query statement, which is used to filter log data"
+                description="filter query must be a valid sls query statement, which is used to filter log data",
             ),
             groupField: Optional[str] = Field(
                 None,
-                description="name of field containing group identity of log messages"
-            )
+                description="name of field containing group identity of log messages",
+            ),
         ) -> Dict[str, Any]:
             """查看阿里云日志服务中某个日志库的日志数据在两个时间范围内的对比结果。
 
@@ -1329,41 +1326,52 @@ class IaaSToolkit:
             ].with_region(regionId)
 
             # Parse time parameters using a single 'now' to avoid drift between calls
+            import time as _time
+
             from mcp_server_aliyun_observability.toolkits.paas.time_utils import (
                 TimeRangeParser,
             )
-            import time as _time
+
             now = int(_time.time())
 
-            test_from_timestamp = TimeRangeParser.parse_time_expression(test_from_time, now=now)
-            test_to_timestamp = TimeRangeParser.parse_time_expression(test_to_time, now=now)
+            test_from_timestamp = TimeRangeParser.parse_time_expression(
+                test_from_time, now=now
+            )
+            test_to_timestamp = TimeRangeParser.parse_time_expression(
+                test_to_time, now=now
+            )
 
-            control_from_timestamp = TimeRangeParser.parse_time_expression(control_from_time, now=now)
-            control_to_timestamp = TimeRangeParser.parse_time_expression(control_to_time, now=now)
+            control_from_timestamp = TimeRangeParser.parse_time_expression(
+                control_from_time, now=now
+            )
+            control_to_timestamp = TimeRangeParser.parse_time_expression(
+                control_to_time, now=now
+            )
 
-            if not (test_to_timestamp <= control_from_timestamp or control_to_timestamp <= test_from_timestamp):
+            if not (
+                test_to_timestamp <= control_from_timestamp
+                or control_to_timestamp <= test_from_timestamp
+            ):
                 return {
                     "patterns": [],
-                    "message": f"Failed to do log compare because test group ({test_from_time} ~ {test_to_time}) and control group ({control_from_time} ~ {control_to_time}) data time range overlap"
+                    "message": f"Failed to do log compare because test group ({test_from_time} ~ {test_to_time}) and control group ({control_from_time} ~ {control_to_time}) data time range overlap",
                 }
 
             # 1) get total number of log records in the specified time range
             request: GetHistogramsRequest = GetHistogramsRequest(
                 from_=test_from_timestamp,
                 to=test_to_timestamp,
-                query=None if not filter_query else filter_query
+                query=None if not filter_query else filter_query,
             )
             response: GetHistogramsResponse = sls_client.get_histograms(
-                project=project,
-                logstore=logStore,
-                request=request
+                project=project, logstore=logStore, request=request
             )
             histograms = response.body
             total_count = sum([histogram.count for histogram in histograms])
             if total_count == 0:
                 return {
                     "patterns": [],
-                    "message": f"Failed to do log compare because no log data found in the specified time range ({test_from_time} ~ {test_to_time})"
+                    "message": f"Failed to do log compare because no log data found in the specified time range ({test_from_time} ~ {test_to_time})",
                 }
             sampling_rate = int(50000 / total_count * 100)
             sampling_rate = min(max(sampling_rate, 1), 100)
@@ -1398,53 +1406,49 @@ class IaaSToolkit:
             runtime.connect_timeout = 60000
 
             request: GetLogsRequest = GetLogsRequest(
-                query=spl_query,
-                from_=test_from_timestamp,
-                to=test_to_timestamp
+                query=spl_query, from_=test_from_timestamp, to=test_to_timestamp
             )
             response: GetLogsResponse = sls_client.get_logs_with_options(
                 project=project,
                 logstore=logStore,
                 request=request,
                 headers={},
-                runtime=runtime
+                runtime=runtime,
             )
             if not response.body:
                 return {
                     "patterns": [],
-                    "message": "Failed to do log compare because test group pattern model creation failed"
+                    "message": "Failed to do log compare because test group pattern model creation failed",
                 }
             test_model_id = response.body[0].get("model_id")
             error_msg = response.body[0].get("error_msg")
             if not test_model_id:
                 return {
                     "patterns": [],
-                    "message": f"Failed to do log compare because test group pattern model creation failed: {error_msg}"
+                    "message": f"Failed to do log compare because test group pattern model creation failed: {error_msg}",
                 }
 
             request: GetLogsRequest = GetLogsRequest(
-                query=spl_query,
-                from_=control_from_timestamp,
-                to=control_to_timestamp
+                query=spl_query, from_=control_from_timestamp, to=control_to_timestamp
             )
             response: GetLogsResponse = sls_client.get_logs_with_options(
                 project=project,
                 logstore=logStore,
                 request=request,
                 headers={},
-                runtime=runtime
+                runtime=runtime,
             )
             if not response.body:
                 return {
                     "patterns": [],
-                    "message": "Failed to do log compare because control group pattern model creation failed"
+                    "message": "Failed to do log compare because control group pattern model creation failed",
                 }
             control_model_id = response.body[0].get("model_id")
             error_msg = response.body[0].get("error_msg")
             if not control_model_id:
                 return {
                     "patterns": [],
-                    "message": f"Failed to do log compare because control group pattern model creation failed: {error_msg}"
+                    "message": f"Failed to do log compare because control group pattern model creation failed: {error_msg}",
                 }
 
             # 3) merge test and control group model
@@ -1457,28 +1461,26 @@ class IaaSToolkit:
 | project model_id, error_msg
 """
             request: GetLogsRequest = GetLogsRequest(
-                query=spl_query,
-                from_=test_from_timestamp,
-                to=test_to_timestamp
+                query=spl_query, from_=test_from_timestamp, to=test_to_timestamp
             )
             response: GetLogsResponse = sls_client.get_logs_with_options(
                 project=project,
                 logstore=logStore,
                 request=request,
                 headers={},
-                runtime=runtime
+                runtime=runtime,
             )
             if not response.body:
                 return {
                     "patterns": [],
-                    "message": "Failed to do log compare because merge test and control group model failed"
+                    "message": "Failed to do log compare because merge test and control group model failed",
                 }
             model_id = response.body[0].get("model_id")
             error_msg = response.body[0].get("error_msg")
             if not model_id:
                 return {
                     "patterns": [],
-                    "message": f"Failed to do log compare because merge test and control group model failed: {error_msg}"
+                    "message": f"Failed to do log compare because merge test and control group model failed: {error_msg}",
                 }
 
             # 4) use model to match log data
@@ -1519,21 +1521,19 @@ class IaaSToolkit:
 | limit 200000
 """
             request: GetLogsRequest = GetLogsRequest(
-                query=spl_query,
-                from_=from_timestamp,
-                to=to_timestamp
+                query=spl_query, from_=from_timestamp, to=to_timestamp
             )
             response: GetLogsResponse = sls_client.get_logs_with_options(
                 project=project,
                 logstore=logStore,
                 request=request,
                 headers={},
-                runtime=runtime
+                runtime=runtime,
             )
             if not response.body:
                 return {
                     "patterns": [],
-                    "message": "Failed to do log compare because match log data failed"
+                    "message": "Failed to do log compare because match log data failed",
                 }
 
             # 5) format result
@@ -1544,7 +1544,7 @@ class IaaSToolkit:
                     "pattern_regexp": item.get("pattern_regexp"),
                     "event_num": item.get("event_num"),
                     "group": item.get("label_concat"),
-                    "test_or_control": item.get("group_id")
+                    "test_or_control": item.get("group_id"),
                 }
                 # variables info
                 var_summary = json.loads(item.get("var_summary"))
@@ -1553,14 +1553,18 @@ class IaaSToolkit:
                 var_candidates_type = var_summary[2]
                 var_candidates_format = var_summary[3]
                 variables: List[Dict] = []
-                for i, (var_type, var_format) in enumerate(zip(var_candidates_type, var_candidates_format)):
+                for i, (var_type, var_format) in enumerate(
+                    zip(var_candidates_type, var_candidates_format)
+                ):
                     var_info = {
                         "index": i,
                         "type": var_type,
                         "format": var_format,
-                        "candidates": {}
+                        "candidates": {},
                     }
-                    for candidate, count in zip(var_candidates[i], var_candidates_count[i]):
+                    for candidate, count in zip(
+                        var_candidates[i], var_candidates_count[i]
+                    ):
                         var_info["candidates"][candidate] = count
                     variables.append(var_info)
                 formatted_item["variables"] = variables
@@ -1574,18 +1578,24 @@ class IaaSToolkit:
                     pairs[key] = {}
                 pairs[key][formatted_item["test_or_control"]] = formatted_item
 
-            def merge_items(test: Optional[Dict] = None, control: Optional[Dict] = None) -> Optional[Dict]:
+            def merge_items(
+                test: Optional[Dict] = None, control: Optional[Dict] = None
+            ) -> Optional[Dict]:
                 if not test and not control:
                     return None
 
                 return {
                     "pattern": test["pattern"] if not control else control["pattern"],
-                    "pattern_regexp": test["pattern_regexp"] if not control else control["pattern_regexp"],
+                    "pattern_regexp": (
+                        test["pattern_regexp"]
+                        if not control
+                        else control["pattern_regexp"]
+                    ),
                     "test_event_num": 0 if not test else test["event_num"],
                     "control_event_num": 0 if not control else control["event_num"],
                     "group": test["group"] if not control else control["group"],
                     "test_variables": [] if not test else test["variables"],
-                    "control_variables": [] if not control else control["variables"]
+                    "control_variables": [] if not control else control["variables"],
                 }
 
             results: List[Dict] = []
@@ -1593,10 +1603,8 @@ class IaaSToolkit:
                 merged_item = merge_items(pair.get("test"), pair.get("control"))
                 if merged_item:
                     results.append(merged_item)
-            return {
-                "patterns": results,
-                "message": "success"
-            }
+            return {"patterns": results, "message": "success"}
+
 
 def register_iaas_tools(server: FastMCP):
     """Register IaaS toolkit tools with the FastMCP server

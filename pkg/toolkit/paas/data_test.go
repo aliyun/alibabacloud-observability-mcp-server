@@ -440,14 +440,14 @@ func TestHandleGetRelationMetrics_Success(t *testing.T) {
 	handler := tools[2].Handler
 
 	result, err := handler(context.Background(), map[string]interface{}{
-		"src_domain":          "apm",
-		"src_entity_set_name": "apm.service",
-		"relation_type":       "calls",
-		"metric_set_domain":   "apm",
-		"metric":              "latency",
+		"src_domain":           "apm",
+		"src_entity_set_name":  "apm.service",
+		"relation_type":        "calls",
+		"metric_set_domain":    "apm",
+		"metric":               "latency",
 		"dest_entity_set_name": "apm.external.nosql",
-		"workspace":           "test-ws",
-		"regionId":            "cn-hongkong",
+		"workspace":            "test-ws",
+		"regionId":             "cn-hongkong",
 	})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -1292,4 +1292,3 @@ func TestDataTools_ResponseContainsTimeRange(t *testing.T) {
 		t.Error("time_range should contain 'expression'")
 	}
 }
-

@@ -80,13 +80,13 @@ toolkit:
 network:
   # 最大重试次数
   max_retry: 1
-  
+
   # 重试等待时间（秒）
   retry_wait_seconds: 1
-  
+
   # 读取超时（毫秒）
   read_timeout_ms: 610000
-  
+
   # 连接超时（毫秒）
   connect_timeout_ms: 30000
 
@@ -94,7 +94,7 @@ network:
 locale:
   # 时区（用于时间解析）
   timezone: Asia/Shanghai
-  
+
   # 语言（用于错误消息等）
   language: zh-CN
 
@@ -104,7 +104,7 @@ locale:
 runtime:
   # 默认区域
   region: cn-hangzhou
-  
+
   # 默认工作空间（PaaS 工具需要）
   # workspace: ""
 

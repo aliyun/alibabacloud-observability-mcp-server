@@ -43,7 +43,8 @@ class PaaSDatasetToolkit:
                 None, description="Comma-separated data set types"
             ),
             entity_ids: Optional[str] = Field(
-                None, description="逗号分隔的实体ID列表，如'id1,id2,id3'。指定后只返回这些实体关联的数据集"
+                None,
+                description="逗号分隔的实体ID列表，如'id1,id2,id3'。指定后只返回这些实体关联的数据集",
             ),
             from_time: Union[str, int] = Field(
                 "now-5m", description="开始时间: Unix时间戳(秒/毫秒)或相对时间(now-5m)"

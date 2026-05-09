@@ -1,11 +1,14 @@
-from typing import Any, Dict, List, Optional, Tuple, Union
+from typing import Any, Dict, List, Optional, Tuple
 
 from mcp.server.fastmcp import Context, FastMCP
 from pydantic import Field
 from tenacity import retry, retry_if_exception_type, stop_after_attempt, wait_fixed
 
 from mcp_server_aliyun_observability.config import Config
-from mcp_server_aliyun_observability.toolkits.paas.time_utils import compute_time_range, format_timestamp
+from mcp_server_aliyun_observability.toolkits.paas.time_utils import (
+    compute_time_range,
+    format_timestamp,
+)
 from mcp_server_aliyun_observability.utils import (
     execute_cms_query_with_context,
     handle_tea_exception,
@@ -50,14 +53,15 @@ class PaaSEntityToolkit:
                 ..., description="CMS工作空间名称，可通过list_workspace获取"
             ),
             entity_ids: Optional[str] = Field(
-                None, description="可选的逗号分隔实体ID列表，用于精确查询指定实体。entity_ids 和 entity_filter 至少需要提供一个"
+                None,
+                description="可选的逗号分隔实体ID列表，用于精确查询指定实体。entity_ids 和 entity_filter 至少需要提供一个",
             ),
             entity_filter: Optional[str] = Field(
-                None, description="实体过滤表达式，如 'name=payment' 或 'status!=inactive'，支持 'and' 连接多个条件。entity_ids 和 entity_filter 至少需要提供一个"
+                None,
+                description="实体过滤表达式，如 'name=payment' 或 'status!=inactive'，支持 'and' 连接多个条件。entity_ids 和 entity_filter 至少需要提供一个",
             ),
             time_range: Optional[str] = Field(
-                "last_1h",
-                description=TIME_RANGE_DESCRIPTION
+                "last_1h", description=TIME_RANGE_DESCRIPTION
             ),
             limit: int = Field(
                 20, description="返回多少个实体，默认20个", ge=1, le=1000
@@ -159,13 +163,15 @@ class PaaSEntityToolkit:
             # 验证 domain 和 entity_set_name 不能为通配符
             self._validate_required_params(
                 {"domain": domain, "entity_set_name": entity_set_name},
-                ["domain", "entity_set_name"]
+                ["domain", "entity_set_name"],
             )
 
             # 验证至少提供 entity_ids 或 entity_filter 之一
             has_entity_ids = entity_ids is not None and entity_ids.strip() != ""
-            has_entity_filter = entity_filter is not None and entity_filter.strip() != ""
-            
+            has_entity_filter = (
+                entity_filter is not None and entity_filter.strip() != ""
+            )
+
             if not has_entity_ids and not has_entity_filter:
                 raise ValueError(
                     "必须至少提供 entity_ids 或 entity_filter 之一。"
@@ -193,14 +199,14 @@ class PaaSEntityToolkit:
             # 构建标准响应
             # 从结果中提取数据
             data = result.get("data") if isinstance(result, dict) else result
-            
+
             return self._build_standard_response(
                 data=data,
                 query=query,
                 time_range=(from_ts, to_ts),
                 error=False,
                 message="",
-                time_range_expression=time_range if time_range else "last_1h"
+                time_range_expression=time_range if time_range else "last_1h",
             )
 
         @self.server.tool()
@@ -213,12 +219,12 @@ class PaaSEntityToolkit:
         @handle_tea_exception
         def umodel_get_neighbor_entities(
             ctx: Context,
-            workspace: str = Field(
-                ..., description="CMS workspace identifier"
-            ),
+            workspace: str = Field(..., description="CMS workspace identifier"),
             src_entity_domain: str = Field(..., description="Source Domain"),
             src_name: str = Field(..., description="Source EntitySet name"),
-            src_entity_ids: str = Field(..., description="Comma-separated source entity IDs"),
+            src_entity_ids: str = Field(
+                ..., description="Comma-separated source entity IDs"
+            ),
             dest_entity_domain: Optional[str] = Field(
                 None, description="Optional target Domain filter"
             ),
@@ -229,11 +235,11 @@ class PaaSEntityToolkit:
                 None, description="Optional relation type filter"
             ),
             direction: str = Field(
-                "both", description='Direction: "out" (downstream), "in" (upstream), "both". Default: "both"'
+                "both",
+                description='Direction: "out" (downstream), "in" (upstream), "both". Default: "both"',
             ),
             time_range: Optional[str] = Field(
-                "last_1h",
-                description=TIME_RANGE_DESCRIPTION
+                "last_1h", description=TIME_RANGE_DESCRIPTION
             ),
             limit: int = Field(
                 10, description="Max results. Default: 10", ge=1, le=1000
@@ -300,9 +306,9 @@ class PaaSEntityToolkit:
                 {
                     "src_entity_domain": src_entity_domain,
                     "src_name": src_name,
-                    "src_entity_ids": src_entity_ids
+                    "src_entity_ids": src_entity_ids,
                 },
-                ["src_entity_domain", "src_name", "src_entity_ids"]
+                ["src_entity_domain", "src_name", "src_entity_ids"],
             )
 
             # Validate direction
@@ -345,7 +351,7 @@ class PaaSEntityToolkit:
                 time_range=(from_ts, to_ts),
                 error=False,
                 message="",
-                time_range_expression=time_range if time_range else "last_1h"
+                time_range_expression=time_range if time_range else "last_1h",
             )
 
         @self.server.tool()
@@ -365,14 +371,15 @@ class PaaSEntityToolkit:
                 None, description="搜索关键词（全文搜索），支持关键词、IP、服务名等"
             ),
             domain: str = Field(
-                "*", description="实体域，可以为 '*' 表示搜索所有域，如 'apm'、'infrastructure' 等"
+                "*",
+                description="实体域，可以为 '*' 表示搜索所有域，如 'apm'、'infrastructure' 等",
             ),
             entity_set_name: str = Field(
-                "*", description="实体类型，可以为 '*' 表示搜索所有类型，如 'apm.service'、'host.instance' 等"
+                "*",
+                description="实体类型，可以为 '*' 表示搜索所有类型，如 'apm.service'、'host.instance' 等",
             ),
             time_range: Optional[str] = Field(
-                "last_1h",
-                description=TIME_RANGE_DESCRIPTION
+                "last_1h", description=TIME_RANGE_DESCRIPTION
             ),
             limit: int = Field(
                 10, description="返回多少个详细搜索结果，默认10个", ge=1, le=1000
@@ -384,7 +391,7 @@ class PaaSEntityToolkit:
             ## 功能概述
 
             该工具用于在指定的实体集合中根据关键词进行全文搜索，查找名称或属性
-            包含搜索关键词的实体。返回 'statistics'（按类型统计匹配数量）和 
+            包含搜索关键词的实体。返回 'statistics'（按类型统计匹配数量）和
             'detail'（匹配的实体详情）两部分数据。
 
             ## 功能特点
@@ -473,8 +480,8 @@ class PaaSEntityToolkit:
 
             # 统计查询 - 按域和实体类型分组统计匹配数量
             query_stats = (
-                query_basic + 
-                " | stats __arbitrary_entity_id__ = arbitrary(__entity_id__), match_count = count(1) by __domain__, __entity_type__"
+                query_basic
+                + " | stats __arbitrary_entity_id__ = arbitrary(__entity_id__), match_count = count(1) by __domain__, __entity_type__"
                 " | project __arbitrary_entity_id__ = __arbitrary_entity_id__, __domain__ = __domain__, __name__ = __entity_type__, match_count"
                 " | sort match_count desc | limit 100"
             )
@@ -493,14 +500,19 @@ class PaaSEntityToolkit:
             )
 
             # 提取数据
-            statistics_data = stats_result.get("data") if isinstance(stats_result, dict) else stats_result
-            detail_data = detail_result.get("data") if isinstance(detail_result, dict) else detail_result
+            statistics_data = (
+                stats_result.get("data")
+                if isinstance(stats_result, dict)
+                else stats_result
+            )
+            detail_data = (
+                detail_result.get("data")
+                if isinstance(detail_result, dict)
+                else detail_result
+            )
 
             # 构建组合数据
-            combined_data = {
-                "statistics": statistics_data,
-                "detail": detail_data
-            }
+            combined_data = {"statistics": statistics_data, "detail": detail_data}
 
             # 构建标准响应
             return self._build_standard_response(
@@ -509,13 +521,10 @@ class PaaSEntityToolkit:
                 time_range=(from_ts, to_ts),
                 error=False,
                 message="",
-                time_range_expression=time_range if time_range else "last_1h"
+                time_range_expression=time_range if time_range else "last_1h",
             )
 
-    def _parse_time_range(
-        self,
-        time_range: Optional[str] = None
-    ) -> Tuple[int, int]:
+    def _parse_time_range(self, time_range: Optional[str] = None) -> Tuple[int, int]:
         """使用 compute_time_range 解析时间范围参数。
 
         Args:
@@ -556,7 +565,7 @@ class PaaSEntityToolkit:
         time_range: Tuple[int, int],
         error: bool = False,
         message: str = "",
-        time_range_expression: Optional[str] = None
+        time_range_expression: Optional[str] = None,
     ) -> Dict[str, Any]:
         """构建标准化响应格式。
 
@@ -591,7 +600,7 @@ class PaaSEntityToolkit:
             "to": to_ts,
             "from_readable": from_readable,
             "to_readable": to_readable,
-            "expression": time_range_expression if time_range_expression else ""
+            "expression": time_range_expression if time_range_expression else "",
         }
 
         # 如果没有提供 message，根据 error 和 data 生成默认消息
@@ -608,13 +617,11 @@ class PaaSEntityToolkit:
             "data": data,
             "message": message,
             "query": query,
-            "time_range": time_range_info
+            "time_range": time_range_info,
         }
 
     def _validate_required_params(
-        self,
-        params: Dict[str, Any],
-        required: List[str]
+        self, params: Dict[str, Any], required: List[str]
     ) -> None:
         """验证必填参数，不允许为 '*' 或空值。
 
@@ -641,13 +648,21 @@ class PaaSEntityToolkit:
                 continue
 
             # 检查 domain 参数是否为通配符 '*'
-            if param_name == "domain" and isinstance(value, str) and value.strip() == "*":
+            if (
+                param_name == "domain"
+                and isinstance(value, str)
+                and value.strip() == "*"
+            ):
                 raise ValueError(
                     "domain 不能为 '*'，请使用 umodel_search_entity_set 获取有效的 domain 值"
                 )
 
             # 检查 entity_set_name 参数是否为通配符 '*'
-            if param_name == "entity_set_name" and isinstance(value, str) and value.strip() == "*":
+            if (
+                param_name == "entity_set_name"
+                and isinstance(value, str)
+                and value.strip() == "*"
+            ):
                 raise ValueError(
                     "entity_set_name 不能为 '*'，请使用 umodel_search_entity_set 获取有效值"
                 )
@@ -655,9 +670,7 @@ class PaaSEntityToolkit:
         # 如果有缺失的参数，抛出异常
         if missing_params:
             param_names = ", ".join(missing_params)
-            raise ValueError(
-                f"缺少必填参数: {param_names}，请提供有效值"
-            )
+            raise ValueError(f"缺少必填参数: {param_names}，请提供有效值")
 
     def _build_entity_filter_param(self, entity_filter: Optional[str]) -> str:
         """Build entity filter parameter for SPL queries"""
@@ -702,10 +715,10 @@ class PaaSEntityToolkit:
 
     def _parse_entity_ids_to_spl_param(self, entity_ids: str) -> str:
         """Parse comma-separated entity IDs to SPL array format.
-        
+
         Args:
             entity_ids: Comma-separated entity IDs string
-            
+
         Returns:
             SPL array format string, e.g., "['id1','id2']"
         """
@@ -715,10 +728,10 @@ class PaaSEntityToolkit:
 
     def _parse_string_to_spl_param(self, value: Optional[str]) -> str:
         """Parse optional string to SPL parameter format.
-        
+
         Args:
             value: Optional string value
-            
+
         Returns:
             SPL string format "'value'" or "''" if None/empty
         """
@@ -728,10 +741,10 @@ class PaaSEntityToolkit:
 
     def _parse_direction_to_spl_param(self, direction: Optional[str]) -> str:
         """Parse direction to SPL parameter format.
-        
+
         Args:
             direction: Direction string ("in", "out", "both")
-            
+
         Returns:
             SPL string format, defaults to "'both'"
         """

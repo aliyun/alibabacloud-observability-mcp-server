@@ -359,8 +359,6 @@ func TestTextToSQLOld_DeprecatedDescription(t *testing.T) {
 	t.Error("sls_text_to_sql_old tool not found")
 }
 
-
-
 func TestSOP_Success(t *testing.T) {
 	mock := &mockSLSClient{}
 	cmsMock := &mockCMSClient{
@@ -394,7 +392,6 @@ func TestSOP_Success(t *testing.T) {
 		t.Error("expected non-empty answer")
 	}
 }
-
 
 func TestIsMetricStoreNotFoundError(t *testing.T) {
 	tests := []struct {

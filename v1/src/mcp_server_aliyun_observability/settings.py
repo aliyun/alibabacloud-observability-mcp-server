@@ -4,17 +4,18 @@ Global settings holder for the MCP server.
 This module centralizes process-wide configuration such as service endpoint
 overrides, providing a single place to resolve endpoints for SLS/ARMS clients.
 """
+
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass, field
 from threading import RLock
 from typing import Dict, Iterable, Optional
-import re
-
 
 # ----------------------
 # Helpers & parsing
 # ----------------------
+
 
 def normalize_host(val: str) -> str:
     """Normalize an endpoint host: strip scheme and trailing slash."""
@@ -54,7 +55,7 @@ def build_endpoint_mapping(
         mapping.update(_parse_pairs_str(combined.strip()))
 
     # Repeated CLI pairs (override)
-    for pair in (cli_pairs or []):
+    for pair in cli_pairs or []:
         mapping.update(_parse_pairs_str(pair))
 
     # Normalize hosts
