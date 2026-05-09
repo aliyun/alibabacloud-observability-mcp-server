@@ -79,9 +79,13 @@ func (m *mockSLSClient) TextToPromQL(_ context.Context, _, _, _, _ string) (stri
 
 func TestSLSTools_Count(t *testing.T) {
 	tools := SLSTools(&mockSLSClient{}, &mockCMSClient{})
-	// 11 main tools + 1 deprecated alias (sls_text_to_sql_old)
-	if got := len(tools); got != 12 {
-		t.Errorf("SLSTools() returned %d tools, want 12", got)
+	if got := len(tools); got == 0 {
+		t.Fatal("SLSTools() returned 0 tools")
+	}
+	// Verify count matches expected names list (single source of truth: TestSLSTools_ExpectedNames)
+	expected := expectedSLSToolNames()
+	if got := len(tools); got != len(expected) {
+		t.Errorf("SLSTools() returned %d tools, want %d (expected names list)", got, len(expected))
 	}
 }
 
@@ -94,9 +98,10 @@ func TestSLSTools_NamesPrefix(t *testing.T) {
 	}
 }
 
-func TestSLSTools_ExpectedNames(t *testing.T) {
-	tools := SLSTools(&mockSLSClient{}, &mockCMSClient{})
-	expected := map[string]bool{
+// expectedSLSToolNames returns the canonical set of SLS tool names.
+// This is the single source of truth for tool-count and tool-name assertions.
+func expectedSLSToolNames() map[string]bool {
+	return map[string]bool{
 		"sls_list_projects":    false,
 		"sls_list_logstores":   false,
 		"sls_text_to_sql":      false,
@@ -109,6 +114,11 @@ func TestSLSTools_ExpectedNames(t *testing.T) {
 		"sls_log_explore":      false,
 		"sls_log_compare":      false,
 	}
+}
+
+func TestSLSTools_ExpectedNames(t *testing.T) {
+	tools := SLSTools(&mockSLSClient{}, &mockCMSClient{})
+	expected := expectedSLSToolNames()
 	for _, tool := range tools {
 		if _, ok := expected[tool.Name]; !ok {
 			t.Errorf("unexpected tool name: %q", tool.Name)

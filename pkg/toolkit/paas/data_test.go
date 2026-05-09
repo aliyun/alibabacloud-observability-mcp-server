@@ -11,17 +11,9 @@ import (
 // DataTools returns correct number of tools
 // ---------------------------------------------------------------------------
 
-func TestDataTools_Count(t *testing.T) {
-	tools := DataTools(&mockCMSClient{})
-	// 8 tools
-	if got := len(tools); got != 8 {
-		t.Fatalf("DataTools() returned %d tools, want 8", got)
-	}
-}
-
-func TestDataTools_Names(t *testing.T) {
-	tools := DataTools(&mockCMSClient{})
-	expected := []string{
+// expectedDataToolNames returns the canonical ordered list of data tool names.
+func expectedDataToolNames() []string {
+	return []string{
 		"umodel_get_metrics",
 		"umodel_get_golden_metrics",
 		"umodel_get_relation_metrics",
@@ -31,6 +23,18 @@ func TestDataTools_Names(t *testing.T) {
 		"umodel_search_traces",
 		"umodel_get_profiles",
 	}
+}
+
+func TestDataTools_Count(t *testing.T) {
+	tools := DataTools(&mockCMSClient{})
+	if got := len(tools); got != len(expectedDataToolNames()) {
+		t.Fatalf("DataTools() returned %d tools, want %d", got, len(expectedDataToolNames()))
+	}
+}
+
+func TestDataTools_Names(t *testing.T) {
+	tools := DataTools(&mockCMSClient{})
+	expected := expectedDataToolNames()
 	for i, tool := range tools {
 		if tool.Name != expected[i] {
 			t.Errorf("tool[%d].Name = %q, want %q", i, tool.Name, expected[i])

@@ -13,11 +13,17 @@ import (
 // DataAgentTools returns correct number of tools
 // ---------------------------------------------------------------------------
 
+// expectedDataAgentToolNames returns the canonical ordered list of data agent tool names.
+func expectedDataAgentToolNames() []string {
+	return []string{
+		"cms_natural_language_query",
+	}
+}
+
 func TestDataAgentTools_Count(t *testing.T) {
 	tools := DataAgentTools(&mockCMSClient{})
-	// 1 tool: cms_natural_language_query
-	if got := len(tools); got != 1 {
-		t.Fatalf("DataAgentTools() returned %d tools, want 1", got)
+	if got := len(tools); got != len(expectedDataAgentToolNames()) {
+		t.Fatalf("DataAgentTools() returned %d tools, want %d", got, len(expectedDataAgentToolNames()))
 	}
 }
 

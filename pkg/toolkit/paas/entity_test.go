@@ -48,20 +48,25 @@ func (m *mockCMSClient) DataAgentQuery(ctx context.Context, region, workspace, q
 // EntityTools returns correct number of tools
 // ---------------------------------------------------------------------------
 
+// expectedEntityToolNames returns the canonical ordered list of entity tool names.
+func expectedEntityToolNames() []string {
+	return []string{
+		"umodel_get_entities",
+		"umodel_get_neighbor_entities",
+		"umodel_search_entities",
+	}
+}
+
 func TestEntityTools_Count(t *testing.T) {
 	tools := EntityTools(&mockCMSClient{})
-	if got := len(tools); got != 3 {
-		t.Fatalf("EntityTools() returned %d tools, want 3", got)
+	if got := len(tools); got != len(expectedEntityToolNames()) {
+		t.Fatalf("EntityTools() returned %d tools, want %d", got, len(expectedEntityToolNames()))
 	}
 }
 
 func TestEntityTools_Names(t *testing.T) {
 	tools := EntityTools(&mockCMSClient{})
-	expected := []string{
-		"umodel_get_entities",
-		"umodel_get_neighbor_entities",
-		"umodel_search_entities",
-	}
+	expected := expectedEntityToolNames()
 	for i, tool := range tools {
 		if tool.Name != expected[i] {
 			t.Errorf("tool[%d].Name = %q, want %q", i, tool.Name, expected[i])
