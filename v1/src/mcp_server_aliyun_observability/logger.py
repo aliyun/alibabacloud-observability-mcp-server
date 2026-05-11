@@ -1,10 +1,9 @@
 import logging
 import logging.handlers
-import os
 from datetime import datetime
 from os import getenv
 from pathlib import Path
-from typing import Any, Literal, Optional, Union
+from typing import Any, Literal, Optional
 
 from rich.console import Console
 from rich.logging import RichHandler
@@ -65,13 +64,13 @@ def setup_file_handler(logger_instance: logging.Logger) -> None:
     log_file = log_dir / f"mcp_server_{today}.log"
 
     # 创建文件处理器
-    file_handler = logging.FileHandler(log_file, encoding='utf-8')
+    file_handler = logging.FileHandler(log_file, encoding="utf-8")
     file_handler.setLevel(logging.DEBUG)
 
     # 设置文件日志格式
     file_formatter = logging.Formatter(
-        fmt='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-        datefmt='%Y-%m-%d %H:%M:%S'
+        fmt="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+        datefmt="%Y-%m-%d %H:%M:%S",
     )
     file_handler.setFormatter(file_formatter)
 
@@ -145,7 +144,9 @@ debug_level: Literal[1, 2] = 1
 
 def set_log_level_to_debug(source_type: Optional[str] = None, level: Literal[1, 2] = 1):
     """设置日志级别为DEBUG"""
-    _logger = logging.getLogger(LOGGER_NAME if source_type is None else f"{LOGGER_NAME}-{source_type}")
+    _logger = logging.getLogger(
+        LOGGER_NAME if source_type is None else f"{LOGGER_NAME}-{source_type}"
+    )
     _logger.setLevel(logging.DEBUG)
 
     global debug_on
@@ -157,7 +158,9 @@ def set_log_level_to_debug(source_type: Optional[str] = None, level: Literal[1, 
 
 def set_log_level_to_info(source_type: Optional[str] = None):
     """设置日志级别为INFO"""
-    _logger = logging.getLogger(LOGGER_NAME if source_type is None else f"{LOGGER_NAME}-{source_type}")
+    _logger = logging.getLogger(
+        LOGGER_NAME if source_type is None else f"{LOGGER_NAME}-{source_type}"
+    )
     _logger.setLevel(logging.INFO)
 
     global debug_on
@@ -177,7 +180,14 @@ def center_header(message: str, symbol: str = "*") -> str:
     return f"{header.center(terminal_width - 20, symbol)}"
 
 
-def log_debug(msg, center: bool = False, symbol: str = "*", log_level: Literal[1, 2] = 1, *args, **kwargs):
+def log_debug(
+    msg,
+    center: bool = False,
+    symbol: str = "*",
+    log_level: Literal[1, 2] = 1,
+    *args,
+    **kwargs,
+):
     """记录DEBUG级别日志"""
     global logger
     global debug_on

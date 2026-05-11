@@ -11,9 +11,8 @@ import os
 import time
 from typing import Any, Dict
 
-import yaml
-from alibabacloud_cms20240330 import models as cms_model
-from alibabacloud_cms20240330.client import Client as CmsClient
+from alibabacloud_starops20260428 import models as cms_model
+from alibabacloud_starops20260428.client import Client as CmsClient
 from alibabacloud_tea_util import models as util_models
 from mcp.server.fastmcp import Context, FastMCP
 from pydantic import Field
@@ -28,7 +27,7 @@ logger = get_logger()
 
 class DataAgentToolkit:
     """Data Agent Pro Toolkit - 自然语言数据查询工具包
-    
+
     通过调用 CMS SDK 的对话接口，提供自然语言数据查询功能。
     支持对可观测数据进行自然语言查询，包括指标、日志、链路等数据类型。
     """
@@ -52,42 +51,40 @@ class DataAgentToolkit:
             ctx: Context,
             query: str = Field(
                 ...,
-                description="自然语言查询文本，描述你想要查询的可观测数据。示例：'查询请求量最高的10个服务'、'哪些服务的错误率超过1%'、'查询响应时间超过1秒的服务'"
+                description="自然语言查询文本，描述你想要查询的可观测数据。示例：'查询请求量最高的10个服务'、'哪些服务的错误率超过1%'、'查询响应时间超过1秒的服务'",
             ),
             workspace: str = Field(
-                ...,
-                description="CMS workspace name, obtainable via list_workspace"
+                ..., description="CMS workspace name, obtainable via list_workspace"
             ),
             regionId: str = Field(
-                ...,
-                description="Alibaba Cloud region ID, e.g. 'cn-hongkong'"
+                ..., description="Alibaba Cloud region ID, e.g. 'cn-hongkong'"
             ),
             time_range: str = Field(
                 default="last_15m",
-                description="Time range expression, e.g. 'last_15m', 'last_1h', 'last_1d'"
+                description="Time range expression, e.g. 'last_15m', 'last_1h', 'last_1d'",
             ),
         ) -> Dict[str, Any]:
             """使用自然语言查询可观测数据。
 
             ## 功能概述
-            
+
             用户可以使用自然语言描述想要查询的数据，系统会自动理解意图并返回相应的数据结果。
 
             ## 使用场景
-            
+
             - 当需要快速查询可观测数据但不熟悉具体 API 时
             - 当需要进行复杂的数据分析但不想编写复杂查询语句时
             - 当需要获取服务性能概览、错误分析、慢请求统计等信息时
 
             ## 支持的查询类型
-            
+
             - 指标查询：如"查询服务A的CPU使用率"、"获取内存使用最高的Pod"
             - 日志查询：如"统计错误日志数量"、"查找包含Exception的日志"
             - 链路查询：如"查询延迟超过1秒的请求"、"获取服务调用拓扑"
             - 聚合统计：如"按服务分组统计请求数量"、"计算平均响应时间"
 
             ## 返回数据结构
-            
+
             返回的数据包含：
             - data: 查询结果数据，包含 query_results（实体列表、指标数据等）
             - message: AI 生成的解释说明文本
@@ -96,7 +93,7 @@ class DataAgentToolkit:
             - time_range: 查询的时间范围
 
             ## 查询示例
-            
+
             - "查询请求量最高的10个服务"
             - "哪些服务的错误率超过1%"
             - "查询响应时间超过1秒的服务"
@@ -117,22 +114,22 @@ class DataAgentToolkit:
             # Use tool parameters, fall back to env vars
             ws = workspace or os.getenv("ALIBABA_CLOUD_WORKSPACE", "")
             region = regionId or os.getenv("ALIBABA_CLOUD_REGION", "")
-            
+
             if not ws:
                 return {
                     "data": None,
                     "message": "workspace is required (pass as parameter or set ALIBABA_CLOUD_WORKSPACE)",
                     "request_id": "",
-                    "error": True
+                    "error": True,
                 }
             if not region:
                 return {
                     "data": None,
                     "message": "regionId is required (pass as parameter or set ALIBABA_CLOUD_REGION)",
                     "request_id": "",
-                    "error": True
+                    "error": True,
                 }
-            
+
             return _data_agent_query(
                 ctx=ctx,
                 query=query,
@@ -179,7 +176,9 @@ def _data_agent_query(
         thread_variables.workspace = workspace
         thread_request.variables = thread_variables
 
-        thread_response = cms_client.create_thread(digital_employee_name, thread_request)
+        thread_response = cms_client.create_thread(
+            digital_employee_name, thread_request
+        )
         if not thread_response.body or not thread_response.body.thread_id:
             raise Exception("Failed to create thread: missing thread_id")
 
@@ -200,15 +199,19 @@ def _data_agent_query(
         message.contents = [content]
         chat_request.messages = [message]
 
-        user_context = json.dumps([{
-            "type": "metadata",
-            "data": {
-                "from_time": from_time,
-                "to_time": to_time,
-                "fromTime": from_time,
-                "toTime": to_time,
-            }
-        }])
+        user_context = json.dumps(
+            [
+                {
+                    "type": "metadata",
+                    "data": {
+                        "from_time": from_time,
+                        "to_time": to_time,
+                        "fromTime": from_time,
+                        "toTime": to_time,
+                    },
+                }
+            ]
+        )
 
         chat_request.variables = {
             "region": region_id,
@@ -233,13 +236,17 @@ def _data_agent_query(
         trace_id = None
 
         for response in cms_client.create_chat_with_sse(chat_request, {}, runtime):
-            if response.body and hasattr(response.body, 'trace_id') and response.body.trace_id:
+            if (
+                response.body
+                and hasattr(response.body, "trace_id")
+                and response.body.trace_id
+            ):
                 trace_id = response.body.trace_id
 
             if response.body and response.body.messages:
                 for msg in response.body.messages:
                     # Extract text from artifacts[].parts[kind=text].text (matching Go)
-                    msg_artifacts = getattr(msg, 'artifacts', None)
+                    msg_artifacts = getattr(msg, "artifacts", None)
                     if msg_artifacts:
                         for artifact in msg_artifacts:
                             if not isinstance(artifact, dict):
@@ -254,7 +261,9 @@ def _data_agent_query(
                                     collected_text.append(part["text"])
 
         explanation = "".join(collected_text)
-        logger.info(f"Data agent query complete, trace_id: {trace_id}, text_length: {len(explanation)}")
+        logger.info(
+            f"Data agent query complete, trace_id: {trace_id}, text_length: {len(explanation)}"
+        )
 
         return {
             "message": explanation if explanation else "查询完成",
@@ -272,4 +281,3 @@ def _data_agent_query(
             "error": True,
             "timestamp": int(time.time()),
         }
-

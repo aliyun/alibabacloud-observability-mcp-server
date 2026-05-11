@@ -2,8 +2,8 @@ import os
 from contextlib import asynccontextmanager
 from typing import AsyncIterator, Optional
 
-from alibabacloud_credentials.client import Client as CredClient
 from mcp.server import FastMCP
+
 from mcp_server_aliyun_observability.toolkits.iaas.toolkit import register_iaas_tools
 from mcp_server_aliyun_observability.toolkits.paas.toolkit import register_paas_tools
 from mcp_server_aliyun_observability.toolkits.shared.toolkit import (

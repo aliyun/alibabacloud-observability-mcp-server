@@ -55,11 +55,20 @@ func (m *mockCMSClient) DataAgentQuery(_ context.Context, _, _, _ string, _, _ i
 // Tests
 // ---------------------------------------------------------------------------
 
+// expectedCMSToolNames returns the canonical set of CMS tool names.
+// This is the single source of truth for tool-count and tool-name assertions.
+func expectedCMSToolNames() map[string]bool {
+	return map[string]bool{
+		"cms_execute_promql": false,
+		"cms_text_to_promql": false,
+	}
+}
+
 func TestCMSTools_Count(t *testing.T) {
 	tools := CMSTools(&mockCMSClient{}, &mockSLSClient{})
-	// 2 tools: cms_execute_promql + cms_text_to_promql
-	if got := len(tools); got != 2 {
-		t.Errorf("CMSTools() returned %d tools, want 6", got)
+	expected := expectedCMSToolNames()
+	if got := len(tools); got != len(expected) {
+		t.Errorf("CMSTools() returned %d tools, want %d (expected names list)", got, len(expected))
 	}
 }
 
@@ -74,10 +83,7 @@ func TestCMSTools_NamesPrefix(t *testing.T) {
 
 func TestCMSTools_ExpectedNames(t *testing.T) {
 	tools := CMSTools(&mockCMSClient{}, &mockSLSClient{})
-	expected := map[string]bool{
-		"cms_execute_promql": false,
-		"cms_text_to_promql": false,
-	}
+	expected := expectedCMSToolNames()
 	for _, tool := range tools {
 		if _, ok := expected[tool.Name]; !ok {
 			t.Errorf("unexpected tool name: %q", tool.Name)

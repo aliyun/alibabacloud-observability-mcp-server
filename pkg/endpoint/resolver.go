@@ -9,8 +9,10 @@ import (
 const (
 	// slsTemplate is the default SLS endpoint template.
 	slsTemplate = "{region}.log.aliyuncs.com"
-	// cmsTemplate is the default CMS endpoint template.
+	// cmsTemplate is the default CMS endpoint template for workspace/SPL APIs.
 	cmsTemplate = "cms.{region}.aliyuncs.com"
+	// staropsTemplate is the default StarOps endpoint template for chat/thread APIs.
+	staropsTemplate = "starops.{region}.aliyuncs.com"
 )
 
 // Resolver resolves service endpoints for a given region.
@@ -27,10 +29,18 @@ func NewSLSResolver(overrides map[string]string) *Resolver {
 	}
 }
 
-// NewCMSResolver creates a new Resolver for CMS endpoints.
+// NewCMSResolver creates a new Resolver for CMS endpoints (workspace/SPL APIs).
 func NewCMSResolver(overrides map[string]string) *Resolver {
 	return &Resolver{
 		template:  cmsTemplate,
+		overrides: overrides,
+	}
+}
+
+// NewStarOpsResolver creates a new Resolver for StarOps endpoints (chat/thread APIs).
+func NewStarOpsResolver(overrides map[string]string) *Resolver {
+	return &Resolver{
+		template:  staropsTemplate,
 		overrides: overrides,
 	}
 }

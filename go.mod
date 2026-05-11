@@ -3,11 +3,12 @@ module github.com/alibabacloud-observability-mcp-server-go
 go 1.23
 
 require (
-	github.com/alibabacloud-go/cms-20240330/v6 v6.1.0
 	github.com/alibabacloud-go/darabonba-openapi/v2 v2.1.15
 	github.com/alibabacloud-go/sls-20201230/v6 v6.11.0
+	github.com/alibabacloud-go/starops-20260428 v1.0.0
 	github.com/alibabacloud-go/tea v1.4.0
 	github.com/alibabacloud-go/tea-utils/v2 v2.0.9
+	github.com/aliyun/credentials-go v1.4.5
 	github.com/leanovate/gopter v0.2.11
 	github.com/mark3labs/mcp-go v0.32.0
 	github.com/spf13/cobra v1.9.1
@@ -25,7 +26,6 @@ require (
 	github.com/alibabacloud-go/darabonba-string v1.0.2 // indirect
 	github.com/alibabacloud-go/debug v1.0.1 // indirect
 	github.com/alibabacloud-go/openapi-util v0.1.1 // indirect
-	github.com/aliyun/credentials-go v1.4.5 // indirect
 	github.com/clbanning/mxj/v2 v2.7.0 // indirect
 	github.com/fsnotify/fsnotify v1.8.0 // indirect
 	github.com/go-viper/mapstructure/v2 v2.2.1 // indirect

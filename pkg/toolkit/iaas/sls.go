@@ -457,7 +457,6 @@ This tool uses the legacy SLS CallAiTools API to convert natural language descri
 	}
 }
 
-
 // ===========================================================================
 // Tool 8: sls_sop
 // ===========================================================================

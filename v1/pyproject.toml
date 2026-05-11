@@ -19,6 +19,7 @@ dependencies = [
     "aiohttp>=3.13.0",
     "requests>=2.32.0",
     "alibabacloud-cms20240330>=6.0.1",
+    "alibabacloud-starops20260428>=1.0.0",
     "alibabacloud-sts20150401>=1.1.6",
 ]
 

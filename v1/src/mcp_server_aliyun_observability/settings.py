@@ -4,17 +4,18 @@ Global settings holder for the MCP server.
 This module centralizes process-wide configuration such as service endpoint
 overrides, providing a single place to resolve endpoints for SLS/ARMS clients.
 """
+
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass, field
 from threading import RLock
 from typing import Dict, Iterable, Optional
-import re
-
 
 # ----------------------
 # Helpers & parsing
 # ----------------------
+
 
 def normalize_host(val: str) -> str:
     """Normalize an endpoint host: strip scheme and trailing slash."""
@@ -54,7 +55,7 @@ def build_endpoint_mapping(
         mapping.update(_parse_pairs_str(combined.strip()))
 
     # Repeated CLI pairs (override)
-    for pair in (cli_pairs or []):
+    for pair in cli_pairs or []:
         mapping.update(_parse_pairs_str(pair))
 
     # Normalize hosts
@@ -107,11 +108,32 @@ class CMSSettings:
 
 
 @dataclass(frozen=True)
+class StarOpsSettings:
+    """Settings for StarOps (chat/thread/digital-employee APIs) related configuration."""
+
+    endpoints: Dict[str, str] = field(default_factory=dict)
+    template: str = "starops.{region}.aliyuncs.com"
+
+    def __post_init__(self):
+        normalized = {k: normalize_host(v) for k, v in (self.endpoints or {}).items()}
+        object.__setattr__(self, "endpoints", normalized)
+
+    def resolve(self, region: str) -> str:
+        if not region:
+            raise ValueError("region is required")
+        host = self.endpoints.get(region)
+        if host:
+            return host
+        return self.template.format(region=region)
+
+
+@dataclass(frozen=True)
 class GlobalSettings:
     """Top-level settings container. Extend with more sections when needed."""
 
     sls: SLSSettings = field(default_factory=SLSSettings)
     cms: CMSSettings = field(default_factory=CMSSettings)
+    starops: StarOpsSettings = field(default_factory=StarOpsSettings)
 
 
 # ----------------------

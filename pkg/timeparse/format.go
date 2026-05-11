@@ -2,16 +2,12 @@ package timeparse
 
 import (
 	"fmt"
-	"sync"
 	"time"
 )
 
 // location is the timezone used for formatting timestamps and parsing date-time strings.
 // Defaults to Asia/Shanghai. Set via SetLocation at startup.
-var (
-	location     *time.Location
-	locationOnce sync.Once
-)
+var location *time.Location
 
 func init() {
 	loc, err := time.LoadLocation("Asia/Shanghai")

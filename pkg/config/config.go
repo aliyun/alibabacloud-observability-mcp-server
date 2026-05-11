@@ -56,8 +56,9 @@ type LocaleConfig struct {
 
 // EndpointsConfig 端点覆盖配置
 type EndpointsConfig struct {
-	SLS map[string]string `mapstructure:"sls"`
-	CMS map[string]string `mapstructure:"cms"`
+	SLS     map[string]string `mapstructure:"sls"`
+	CMS     map[string]string `mapstructure:"cms"`
+	StarOps map[string]string `mapstructure:"starops"`
 }
 
 // CredentialsConfig 凭证配置（从 .env 加载）

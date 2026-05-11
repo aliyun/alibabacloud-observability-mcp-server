@@ -16,9 +16,9 @@ func TestPaaSToolkit_Name(t *testing.T) {
 
 func TestPaaSToolkit_ToolCount(t *testing.T) {
 	tk := NewPaaSToolkit(&mockCMSClient{})
-	// 3 entity + 8 data + 1 timeseries + 3 dataset + 1 data_agent = 16
-	if got := len(tk.Tools()); got != 16 {
-		t.Errorf("Tools() returned %d tools, want 16", got)
+	wantTotal := len(expectedEntityToolNames()) + len(expectedDataToolNames()) + len(expectedDatasetToolNames()) + len(expectedDataAgentToolNames())
+	if got := len(tk.Tools()); got != wantTotal {
+		t.Errorf("Tools() returned %d tools, want %d", got, wantTotal)
 	}
 }
 

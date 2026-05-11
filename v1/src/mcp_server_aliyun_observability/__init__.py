@@ -4,11 +4,11 @@ import click
 import dotenv
 
 from mcp_server_aliyun_observability.settings import (
+    CMSSettings,
     GlobalSettings,
     SLSSettings,
-    CMSSettings,
-    configure_settings,
     build_endpoint_mapping,
+    configure_settings,
 )
 
 dotenv.load_dotenv()
@@ -78,7 +78,7 @@ def main(
     has_ak = access_key_id is not None
     has_sk = access_key_secret is not None
     print(f"[Startup] has_access_key_id: {has_ak}, has_access_key_secret: {has_sk}")
-    
+
     # Lazy import heavy modules to keep package import light for library/test usage
     from mcp_server_aliyun_observability.server import server
     from mcp_server_aliyun_observability.utils import CredentialWrapper
@@ -101,9 +101,9 @@ def main(
         )
     else:
         credential = None
-    
+
     # 设置环境变量，传递给服务器
     if scope and scope != "all":
-        os.environ['MCP_TOOLKIT_SCOPE'] = scope
-    
+        os.environ["MCP_TOOLKIT_SCOPE"] = scope
+
     server(credential, transport, log_level, transport_port, host)

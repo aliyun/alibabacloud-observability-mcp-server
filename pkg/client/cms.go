@@ -19,8 +19,8 @@ import (
 	"strings"
 	"time"
 
-	cms "github.com/alibabacloud-go/cms-20240330/v6/client"
 	openapi "github.com/alibabacloud-go/darabonba-openapi/v2/client"
+	cms "github.com/alibabacloud-go/starops-20260428/client"
 	"github.com/alibabacloud-go/tea/dara"
 
 	"github.com/alibabacloud-observability-mcp-server-go/pkg/config"
@@ -55,15 +55,16 @@ type DataAgentResult struct {
 	TraceID      string                   // trace ID for debugging
 }
 
-// CMSClientImpl implements CMSClient using raw HTTP API calls.
-// The Go SDK (cms-20240330 v1.0.0) doesn't include ListWorkspaces and GetEntityStoreData APIs,
-// so we implement them using direct HTTP calls with Alibaba Cloud Signature V3.
+// CMSClientImpl implements CMSClient using raw HTTP API calls and StarOps SDK.
+// - ListWorkspaces and GetEntityStoreData use direct HTTP calls to CMS endpoint (cms.{region}.aliyuncs.com).
+// - Chat/Thread APIs use the StarOps SDK to StarOps endpoint (starops.{region}.aliyuncs.com).
 type CMSClientImpl struct {
-	credential CredentialProvider
-	resolver   *endpoint.Resolver
-	config     *config.Config
-	cb         *stability.CircuitBreaker
-	httpClient *http.Client
+	credential      CredentialProvider
+	resolver        *endpoint.Resolver // CMS endpoint for workspace/SPL APIs
+	staropsResolver *endpoint.Resolver // StarOps endpoint for chat/thread APIs
+	config          *config.Config
+	cb              *stability.CircuitBreaker
+	httpClient      *http.Client
 }
 
 // NewCMSClient creates a new CMSClientImpl with retry and circuit breaker support.
@@ -72,10 +73,11 @@ func NewCMSClient(cred CredentialProvider, cfg *config.Config) *CMSClientImpl {
 	cb := stability.NewCircuitBreaker("cms", 5, retryWait*5)
 
 	return &CMSClientImpl{
-		credential: cred,
-		resolver:   endpoint.NewCMSResolver(cfg.Endpoints.CMS),
-		config:     cfg,
-		cb:         cb,
+		credential:      cred,
+		resolver:        endpoint.NewCMSResolver(cfg.Endpoints.CMS),
+		staropsResolver: endpoint.NewStarOpsResolver(cfg.Endpoints.StarOps),
+		config:          cfg,
+		cb:              cb,
 		httpClient: &http.Client{
 			Timeout: cfg.GetReadTimeout(),
 		},
@@ -457,9 +459,10 @@ func (c *CMSClientImpl) QueryMetric(ctx context.Context, region, namespace, metr
 	return []map[string]interface{}{}, nil
 }
 
-// createCMSSDKClient creates a CMS SDK client for the given region.
+// createCMSSDKClient creates a StarOps SDK client for the given region.
+// Chat/Thread APIs are served by the StarOps endpoint.
 func (c *CMSClientImpl) createCMSSDKClient(region string) (*cms.Client, error) {
-	ep, err := c.resolver.Resolve(region)
+	ep, err := c.staropsResolver.Resolve(region)
 	if err != nil {
 		return nil, fmt.Errorf("cms: resolve endpoint: %w", err)
 	}
@@ -887,8 +890,8 @@ func (c *CMSClientImpl) DataAgentQuery(ctx context.Context, region, workspace, q
 					continue
 				}
 
-				for _, part := range parts { 
-					part, ok  := part.(map[string]interface{})
+				for _, part := range parts {
+					part, ok := part.(map[string]interface{})
 					if !ok {
 						continue
 					}
@@ -920,22 +923,4 @@ func (c *CMSClientImpl) DataAgentQuery(ctx context.Context, region, workspace, q
 		Message: collectedText.String(),
 		TraceID: traceID,
 	}, nil
-}
-
-// truncateStr truncates a string to maxLen characters, appending "..." if truncated.
-func truncateStr(s string, maxLen int) string {
-	if len(s) <= maxLen {
-		return s
-	}
-	return s[:maxLen] + "..."
-}
-
-// mapKeys returns the keys of a map[string]interface{} as a sorted slice.
-func mapKeys(m map[string]interface{}) []string {
-	keys := make([]string, 0, len(m))
-	for k := range m {
-		keys = append(keys, k)
-	}
-	sort.Strings(keys)
-	return keys
 }

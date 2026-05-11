@@ -11,21 +11,26 @@ import (
 // DatasetTools returns correct number of tools
 // ---------------------------------------------------------------------------
 
-func TestDatasetTools_Count(t *testing.T) {
-	tools := DatasetTools(&mockCMSClient{})
-	if got := len(tools); got != 4 {
-		t.Fatalf("DatasetTools() returned %d tools, want 4", got)
-	}
-}
-
-func TestDatasetTools_Names(t *testing.T) {
-	tools := DatasetTools(&mockCMSClient{})
-	expected := []string{
+// expectedDatasetToolNames returns the canonical ordered list of dataset tool names.
+func expectedDatasetToolNames() []string {
+	return []string{
 		"umodel_list_data_set",
 		"umodel_search_entity_set",
 		"umodel_get_entity_set",
 		"umodel_list_related_entity_set",
 	}
+}
+
+func TestDatasetTools_Count(t *testing.T) {
+	tools := DatasetTools(&mockCMSClient{})
+	if got := len(tools); got != len(expectedDatasetToolNames()) {
+		t.Fatalf("DatasetTools() returned %d tools, want %d", got, len(expectedDatasetToolNames()))
+	}
+}
+
+func TestDatasetTools_Names(t *testing.T) {
+	tools := DatasetTools(&mockCMSClient{})
+	expected := expectedDatasetToolNames()
 	for i, tool := range tools {
 		if tool.Name != expected[i] {
 			t.Errorf("tool[%d].Name = %q, want %q", i, tool.Name, expected[i])

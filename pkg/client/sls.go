@@ -130,7 +130,7 @@ func (c *SLSClientImpl) runtimeOptions() *util.RuntimeOptions {
 }
 
 // Query executes a log query against the specified logstore.
-func (c *SLSClientImpl) Query(ctx context.Context, region, project, logstore string, requestParams *sls.GetLogsRequest) ([]map[string]interface{}, error) { 
+func (c *SLSClientImpl) Query(ctx context.Context, region, project, logstore string, requestParams *sls.GetLogsRequest) ([]map[string]interface{}, error) {
 	client, err := c.createClient(region)
 	if err != nil {
 		return nil, err
@@ -146,7 +146,6 @@ func (c *SLSClientImpl) Query(ctx context.Context, region, project, logstore str
 			"from", requestParams.From,
 			"to", requestParams.To,
 		)
-
 
 		resp, err := client.GetLogsWithOptions(tea.String(project), tea.String(logstore), requestParams, map[string]*string{}, c.runtimeOptions())
 		if err != nil {
@@ -494,4 +493,3 @@ func (c *SLSClientImpl) TextToPromQL(ctx context.Context, region, project, metri
 
 	return result, nil
 }
-

@@ -74,8 +74,8 @@ func TestSLSClient_Query(t *testing.T) {
 	ctx := context.Background()
 	requestParams := &sls.GetLogsRequest{
 		Query: tea.String("* | SELECT count(*)"),
-		From: tea.Int32(1700000000),
-		To: tea.Int32(1700003600),
+		From:  tea.Int32(1700000000),
+		To:    tea.Int32(1700003600),
 	}
 	results, err := client.Query(ctx, "cn-hongkong", "my-project", "my-logstore", requestParams)
 	if err != nil {
@@ -162,11 +162,10 @@ func TestSLSClient_EmptyRegion(t *testing.T) {
 	client := NewSLSClient(testCredential(), cfg)
 	ctx := context.Background()
 
-	
 	_, err := client.Query(ctx, "", "proj", "store", &sls.GetLogsRequest{
 		Query: tea.String("*"),
 		From:  tea.Int32(0),
-		To:    tea.Int32(1),	
+		To:    tea.Int32(1),
 	})
 	if err == nil {
 		t.Fatal("Query() with empty region should return error")

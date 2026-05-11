@@ -136,12 +136,11 @@ func (h *dataAgentHandler) handleDataAgentQuery(ctx context.Context, params map[
 		return buildDataAgentErrorResponse(fmt.Sprintf("Query failed: %s", err), timeRange), nil
 	}
 
-
 	now := time.Now()
 	return map[string]interface{}{
-		"message":  result.Message,
-		"trace_id": result.TraceID,
-		"error":    false,
+		"message":   result.Message,
+		"trace_id":  result.TraceID,
+		"error":     false,
 		"timestamp": now.Unix(),
 	}, nil
 }
