@@ -25,7 +25,6 @@ func SLSTools(slsClient client.SLSClient, cmsClient client.CMSClient) []toolkit.
 		h.listProjectsTool(),
 		h.listLogstoresTool(),
 		h.textToSQLTool(),
-		h.textToSQLOldTool(), // Deprecated alias for Python compatibility
 		h.sopTool(),
 		h.executeSQLTool(),
 		h.executeSPLTool(),
@@ -419,42 +418,6 @@ func (h *slsHandler) handleTextToSQL(ctx context.Context, params map[string]inte
 	return buildResponse(map[string]interface{}{
 		"query": sql,
 	}, false, ""), nil
-}
-
-// ===========================================================================
-// Tool 6b: sls_text_to_sql_old (Deprecated alias for Python compatibility)
-// ===========================================================================
-
-func (h *slsHandler) textToSQLOldTool() toolkit.Tool {
-	// Get the base tool and modify its name and description
-	baseTool := h.textToSQLTool()
-	return toolkit.Tool{
-		Name: "sls_text_to_sql_old",
-		Description: `⚠️ [Deprecated] Convert natural language to an SLS query statement (legacy API).
-
-## Deprecation Notice
-
-This tool is deprecated. Please use sls_text_to_sql instead.
-
-The new sls_text_to_sql tool uses the CMS Chat API, providing smarter SQL generation
-with better context understanding, more accurate query generation, and more detailed explanations.
-
-## Overview
-
-This tool uses the legacy SLS CallAiTools API to convert natural language descriptions into valid SLS query statements.
-
-## Use Cases
-
-- Only as a fallback when the new sls_text_to_sql tool is unavailable
-
-## Limitations
-
-- Only supports generating SLS queries, not SQL for other databases
-- Generates a query statement, not query results; use with sls_query_logstore to execute
-- Requires the target logstore to have index configuration`,
-		InputSchema: baseTool.InputSchema,
-		Handler:     h.handleTextToSQL, // Reuse the same handler
-	}
 }
 
 // ===========================================================================

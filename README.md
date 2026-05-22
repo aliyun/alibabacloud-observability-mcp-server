@@ -258,7 +258,42 @@ toolkit:
 
 ## 工具集
 
-共 33 个工具，分为三个层级。
+### 💰 付费功能说明
+
+Observable MCP Server 中的部分 AI 智能工具后端调用了阿里云 STAROps（智能运维平台）的接口，这些工具在使用时会产生费用。
+
+#### 付费工具列表
+
+以下工具属于 AI 智能工具，每次调用均会创建一次 STAROps AI 对话会话并产生费用：
+
+| 工具 | 功能 | 说明 |
+|------|------|------|
+| `sls_text_to_sql` | 自然语言转 SQL 查询语句 | 将用户的自然语言问题转换为可直接执行的 SLS SQL |
+| `sls_text_to_spl` | 自然语言转 SPL 查询语句 | 将用户的自然语言问题转换为 SPL 语句并执行 |
+| `sls_sop` | SLS 智能运维助手 | 基于 AI 对话为用户提供日志服务的运维建议 |
+| `cms_text_to_promql` | 自然语言转 PromQL 查询语句 | 将用户的自然语言问题转换为 PromQL 查询 |
+| `cms_natural_language_query` | 自然语言数据查询 | 通过 DataAgent 以自然语言直接查询可观测数据 |
+
+#### 费用说明
+
+- 付费工具通过阿里云 STAROps 智能运维平台计费，具体计费详情查看 [STAROps 计费说明](https://www.aliyun.com/price/product#/starops/detail)。
+- 如不需要 AI 转换能力，可在 `config.yaml` 的 `enabled_tools` 中仅启用免费工具，避免产生意外费用。
+
+#### 如何避免意外扣费
+
+如不需要 AI 转换能力，可在 `config.yaml` 中通过 `enabled_tools` 精确控制启用的工具列表，仅保留免费工具：
+
+```yaml
+toolkit:
+  scope: all
+  enabled_tools:
+    - sls_list_projects
+    - sls_list_logstores
+    - sls_execute_sql
+    - sls_execute_spl
+    - cms_execute_promql
+    # ... 按需添加其他免费工具
+```
 
 ### PaaS 工具集（云监控 2.0，推荐）
 
@@ -297,7 +332,7 @@ toolkit:
 
 ### IaaS 工具集（SLS/CMS 直接访问）
 
-直接访问底层 API，工具名以 `sls_` 或 `cms_` 为前缀。共 14 个工具。
+直接访问底层 API，工具名以 `sls_` 或 `cms_` 为前缀。共 13 个工具。
 
 #### SLS 工具
 
@@ -306,7 +341,6 @@ toolkit:
 | `sls_list_projects` | 列出项目 | `regionId`（必需）；`project`（可选，模糊搜索） |
 | `sls_list_logstores` | 列出日志库 | `project`、`regionId`（必需） |
 | `sls_text_to_sql` | 自然语言转 SQL | `text`、`project`、`logStore`、`regionId`（必需） |
-| `sls_text_to_sql_old` | 自然语言转 SQL（旧版，兼容 Python 版本） | `text`、`project`、`logStore`、`regionId`（必需） |
 | `sls_text_to_spl` | 自然语言转 SPL | `text`、`project`、`logStore`、`data_sample`、`regionId`（必需） |
 | `sls_execute_sql` | 执行 SQL 查询 | `project`、`logStore`、`query`、`regionId`（必需）；`from_time`、`to_time`（可选） |
 | `sls_execute_spl` | 执行原生 SPL 查询 | `query`、`workspace`、`regionId`（必需）；`from_time`、`to_time`（可选） |

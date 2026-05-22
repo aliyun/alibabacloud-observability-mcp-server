@@ -258,7 +258,42 @@ Note: In stdio mode, if `config.yaml` does not exist, built-in defaults are used
 
 ## Toolkits
 
-33 tools in total, organized into three tiers.
+### 💰 Billing Notice
+
+Some AI-powered tools in Observable MCP Server call the Alibaba Cloud STAROps (Intelligent Operations Platform) API, and using these tools incurs fees.
+
+#### Paid Tools
+
+The following AI-powered tools create a STAROps AI conversation session on each invocation and incur fees:
+
+| Tool | Description | Details |
+|------|-------------|---------|
+| `sls_text_to_sql` | Natural language to SQL | Converts natural language questions into executable SLS SQL |
+| `sls_text_to_spl` | Natural language to SPL | Converts natural language questions into SPL statements |
+| `sls_sop` | SLS operations assistant | Provides AI-powered operations advice for Log Service |
+| `cms_text_to_promql` | Natural language to PromQL | Converts natural language questions into PromQL queries |
+| `cms_natural_language_query` | Natural language data query | Queries observability data using natural language via DataAgent |
+
+#### Pricing
+
+- Paid tools are billed through Alibaba Cloud STAROps. For pricing details, see [STAROps Pricing](https://www.aliyun.com/price/product#/starops/detail).
+- If you don't need AI conversion capabilities, enable only free tools in `config.yaml` under `enabled_tools` to avoid unexpected charges.
+
+#### How to Avoid Unexpected Charges
+
+If you don't need AI conversion capabilities, use `enabled_tools` in `config.yaml` to precisely control which tools are enabled, keeping only free tools:
+
+```yaml
+toolkit:
+  scope: all
+  enabled_tools:
+    - sls_list_projects
+    - sls_list_logstores
+    - sls_execute_sql
+    - sls_execute_spl
+    - cms_execute_promql
+    # ... add other free tools as needed
+```
 
 ### PaaS Toolkit (CloudMonitor 2.0, Recommended)
 
@@ -297,7 +332,7 @@ Based on a unified data model, tool names are prefixed with `umodel_` or `cms_`.
 
 ### IaaS Toolkit (SLS/CMS Direct Access)
 
-Direct access to underlying APIs, tool names are prefixed with `sls_` or `cms_`. 14 tools in total.
+Direct access to underlying APIs, tool names are prefixed with `sls_` or `cms_`. 13 tools in total.
 
 #### SLS Tools
 
@@ -306,7 +341,6 @@ Direct access to underlying APIs, tool names are prefixed with `sls_` or `cms_`.
 | `sls_list_projects` | List projects | `regionId` (required); `project` (optional, fuzzy search) |
 | `sls_list_logstores` | List logstores | `project`, `regionId` (required) |
 | `sls_text_to_sql` | Natural language to SQL | `text`, `project`, `logStore`, `regionId` (required) |
-| `sls_text_to_sql_old` | Natural language to SQL (legacy, compatible with Python version) | `text`, `project`, `logStore`, `regionId` (required) |
 | `sls_text_to_spl` | Natural language to SPL | `text`, `project`, `logStore`, `data_sample`, `regionId` (required) |
 | `sls_execute_sql` | Execute SQL query | `project`, `logStore`, `query`, `regionId` (required); `from_time`, `to_time` (optional) |
 | `sls_execute_spl` | Execute native SPL query | `query`, `workspace`, `regionId` (required); `from_time`, `to_time` (optional) |
