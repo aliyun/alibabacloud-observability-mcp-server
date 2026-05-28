@@ -271,7 +271,6 @@ The following AI-powered tools create a STAROps AI conversation session on each 
 | `sls_text_to_sql` | Natural language to SQL | Converts natural language questions into executable SLS SQL |
 | `sls_text_to_spl` | Natural language to SPL | Converts natural language questions into SPL statements |
 | `sls_sop` | SLS operations assistant | Provides AI-powered operations advice for Log Service |
-| `cms_text_to_promql` | Natural language to PromQL | Converts natural language questions into PromQL queries |
 | `cms_natural_language_query` | Natural language data query | Queries observability data using natural language via DataAgent |
 
 #### Pricing
