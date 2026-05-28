@@ -112,7 +112,7 @@ class StarOpsSettings:
     """Settings for StarOps (chat/thread/digital-employee APIs) related configuration."""
 
     endpoints: Dict[str, str] = field(default_factory=dict)
-    template: str = "starops.{region}.aliyuncs.com"
+    template: str = "starops.cn-beijing.aliyuncs.com"
 
     def __post_init__(self):
         normalized = {k: normalize_host(v) for k, v in (self.endpoints or {}).items()}

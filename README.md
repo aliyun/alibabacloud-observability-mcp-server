@@ -271,7 +271,6 @@ Observable MCP Server 中的部分 AI 智能工具后端调用了阿里云 STARO
 | `sls_text_to_sql` | 自然语言转 SQL 查询语句 | 将用户的自然语言问题转换为可直接执行的 SLS SQL |
 | `sls_text_to_spl` | 自然语言转 SPL 查询语句 | 将用户的自然语言问题转换为 SPL 语句并执行 |
 | `sls_sop` | SLS 智能运维助手 | 基于 AI 对话为用户提供日志服务的运维建议 |
-| `cms_text_to_promql` | 自然语言转 PromQL 查询语句 | 将用户的自然语言问题转换为 PromQL 查询 |
 | `cms_natural_language_query` | 自然语言数据查询 | 通过 DataAgent 以自然语言直接查询可观测数据 |
 
 #### 费用说明
