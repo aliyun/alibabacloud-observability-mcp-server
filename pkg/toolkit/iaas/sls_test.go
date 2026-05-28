@@ -8,7 +8,6 @@ import (
 
 	sls "github.com/alibabacloud-go/sls-20201230/v6/client"
 	"github.com/alibabacloud-observability-mcp-server-go/pkg/client"
-	"github.com/alibabacloud-observability-mcp-server-go/pkg/toolkit"
 )
 
 // ---------------------------------------------------------------------------
@@ -105,7 +104,6 @@ func expectedSLSToolNames() map[string]bool {
 		"sls_list_projects":    false,
 		"sls_list_logstores":   false,
 		"sls_text_to_sql":      false,
-		"sls_text_to_sql_old":  false, // Deprecated alias for Python compatibility
 		"sls_sop":              false,
 		"sls_execute_sql":      false,
 		"sls_execute_spl":      false,
@@ -265,108 +263,6 @@ func TestTextToSQL_Success(t *testing.T) {
 	if query == "" {
 		t.Error("expected non-empty query")
 	}
-}
-
-// ---------------------------------------------------------------------------
-// sls_text_to_sql_old (Deprecated alias) Tests
-// ---------------------------------------------------------------------------
-
-func TestTextToSQLOld_Name(t *testing.T) {
-	tools := SLSTools(&mockSLSClient{}, &mockCMSClient{})
-	var found bool
-	for _, tool := range tools {
-		if tool.Name == "sls_text_to_sql_old" {
-			found = true
-			break
-		}
-	}
-	if !found {
-		t.Error("sls_text_to_sql_old tool not found")
-	}
-}
-
-func TestTextToSQLOld_SameInputSchema(t *testing.T) {
-	tools := SLSTools(&mockSLSClient{}, &mockCMSClient{})
-	var textToSQL, textToSQLOld toolkit.Tool
-	for _, tool := range tools {
-		if tool.Name == "sls_text_to_sql" {
-			textToSQL = tool
-		}
-		if tool.Name == "sls_text_to_sql_old" {
-			textToSQLOld = tool
-		}
-	}
-
-	// Both tools should have the same input schema
-	sqlSchema := textToSQL.InputSchema["properties"].(map[string]interface{})
-	oldSchema := textToSQLOld.InputSchema["properties"].(map[string]interface{})
-
-	// Check that both have the same required fields
-	for key := range sqlSchema {
-		if _, ok := oldSchema[key]; !ok {
-			t.Errorf("sls_text_to_sql_old missing field %q from sls_text_to_sql", key)
-		}
-	}
-}
-
-func TestTextToSQLOld_SameHandlerBehavior(t *testing.T) {
-	mock := &mockSLSClient{
-		textToSQLResult: "SELECT * FROM log WHERE level = 'ERROR' LIMIT 10",
-	}
-	tools := SLSTools(mock, &mockCMSClient{})
-	ctx := context.Background()
-
-	var textToSQLHandler, textToSQLOldHandler func(context.Context, map[string]interface{}) (interface{}, error)
-	for _, tt := range tools {
-		if tt.Name == "sls_text_to_sql" {
-			textToSQLHandler = tt.Handler
-		}
-		if tt.Name == "sls_text_to_sql_old" {
-			textToSQLOldHandler = tt.Handler
-		}
-	}
-
-	params := map[string]interface{}{
-		"text":     "查找错误日志",
-		"project":  "my-project",
-		"logStore": "my-logstore",
-		"regionId": "cn-hongkong",
-	}
-
-	// Both handlers should produce the same result
-	result1, err1 := textToSQLHandler(ctx, params)
-	result2, err2 := textToSQLOldHandler(ctx, params)
-
-	if err1 != nil || err2 != nil {
-		t.Fatalf("unexpected errors: err1=%v, err2=%v", err1, err2)
-	}
-
-	resp1 := result1.(map[string]interface{})
-	resp2 := result2.(map[string]interface{})
-
-	if resp1["error"] != resp2["error"] {
-		t.Errorf("error mismatch: sls_text_to_sql=%v, sls_text_to_sql_old=%v", resp1["error"], resp2["error"])
-	}
-
-	data1 := resp1["data"].(map[string]interface{})
-	data2 := resp2["data"].(map[string]interface{})
-
-	if data1["query"] != data2["query"] {
-		t.Errorf("query mismatch: sls_text_to_sql=%v, sls_text_to_sql_old=%v", data1["query"], data2["query"])
-	}
-}
-
-func TestTextToSQLOld_DeprecatedDescription(t *testing.T) {
-	tools := SLSTools(&mockSLSClient{}, &mockCMSClient{})
-	for _, tool := range tools {
-		if tool.Name == "sls_text_to_sql_old" {
-			if !strings.Contains(tool.Description, "废弃") && !strings.Contains(tool.Description, "Deprecated") {
-				t.Error("sls_text_to_sql_old description should mention deprecation")
-			}
-			return
-		}
-	}
-	t.Error("sls_text_to_sql_old tool not found")
 }
 
 func TestSOP_Success(t *testing.T) {

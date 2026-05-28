@@ -12,7 +12,7 @@ const (
 	// cmsTemplate is the default CMS endpoint template for workspace/SPL APIs.
 	cmsTemplate = "cms.{region}.aliyuncs.com"
 	// staropsTemplate is the default StarOps endpoint template for chat/thread APIs.
-	staropsTemplate = "starops.{region}.aliyuncs.com"
+	staropsTemplate = "starops.cn-beijing.aliyuncs.com"
 )
 
 // Resolver resolves service endpoints for a given region.
