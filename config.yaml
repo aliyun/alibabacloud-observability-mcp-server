@@ -78,7 +78,7 @@ toolkit:
 # 网络配置
 network:
   # 最大重试次数
-  max_retry: 1
+  max_retry: 3
 
   # 重试等待时间（秒）
   retry_wait_seconds: 1

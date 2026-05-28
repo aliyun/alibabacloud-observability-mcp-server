@@ -94,10 +94,12 @@ func (c *CMSClientImpl) retryConfig() stability.RetryConfig {
 	}
 }
 
-// executeWithResilience wraps fn with retry and circuit breaker.
+// executeWithResilience wraps fn with circuit breaker (outer) and retry (inner).
+// Retry handles transient errors (e.g. EOF from stale connections) internally;
+// the circuit breaker only sees the final outcome after all retries are exhausted.
 func (c *CMSClientImpl) executeWithResilience(ctx context.Context, fn func(ctx context.Context) error) error {
-	return stability.Retry(ctx, c.retryConfig(), func(ctx context.Context) error {
-		return c.cb.Execute(ctx, fn)
+	return c.cb.Execute(ctx, func(ctx context.Context) error {
+		return stability.Retry(ctx, c.retryConfig(), fn)
 	})
 }
 
