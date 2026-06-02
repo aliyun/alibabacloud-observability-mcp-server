@@ -353,7 +353,6 @@ Direct access to underlying APIs, tool names are prefixed with `sls_` or `cms_`.
 | Tool | Description | Key Parameters |
 |------|-------------|----------------|
 | `cms_execute_promql` | Execute PromQL query | `project`, `metricStore`, `query`, `regionId` (required); `from_time`, `to_time` (optional) |
-| `cms_text_to_promql` | Natural language to PromQL | `text`, `project`, `metricStore`, `regionId` (required) |
 
 ### Shared Toolkit
 
@@ -425,7 +424,7 @@ The response includes:
 │   ├── timeparse/       # Time expression parsing
 │   └── toolkit/         # Toolkit interface and registry
 │       ├── paas/        # PaaS toolkit (umodel_*, cms_natural_language_query)
-│       ├── iaas/        # IaaS toolkit (sls_*, cms_execute_promql, cms_text_to_promql)
+│       ├── iaas/        # IaaS toolkit (sls_*, cms_execute_promql)
 │       └── shared/      # Shared toolkit (list_workspace, list_domains, introduction)
 ├── v1/                  # Python version (historical reference)
 ├── Makefile

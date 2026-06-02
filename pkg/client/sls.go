@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
-	"strings"
 	"time"
 
 	openapi "github.com/alibabacloud-go/darabonba-openapi/v2/client"
@@ -35,8 +34,6 @@ type SLSClient interface {
 	ListMetricStores(ctx context.Context, region, project string) ([]string, error)
 	// TextToSQL converts a natural language question into an SQL query for the given logstore.
 	TextToSQL(ctx context.Context, region, project, logstore, question string) (string, error)
-	// TextToPromQL converts a natural language question into a PromQL query using SLS CallAiTools API.
-	TextToPromQL(ctx context.Context, region, project, metricStore, text string) (string, error)
 }
 
 // SLSClientImpl implements SLSClient with connection pooling, retry, and circuit breaker.
@@ -443,55 +440,4 @@ func (c *SLSClientImpl) TextToSQL(ctx context.Context, region, project, logstore
 	)
 
 	return c.cmsClient.TextToSQL(ctx, region, project, logstore, question)
-}
-
-// TextToPromQL converts a natural language question into a PromQL query using SLS CallAiTools API.
-// The SLS client connects to cn-shanghai (the only region supporting CallAiTools /ml/tool/call),
-// while the regionId in the request body uses the user-provided value.
-func (c *SLSClientImpl) TextToPromQL(ctx context.Context, region, project, metricStore, text string) (string, error) {
-	slsSDKClient, err := c.createClient("cn-shanghai")
-	if err != nil {
-		return "", fmt.Errorf("sls: text to promql: create client: %w", err)
-	}
-
-	slog.DebugContext(ctx, "sls: text to promql (CallAiTools)",
-		"region", region,
-		"project", project,
-		"metricStore", metricStore,
-		"text", text,
-	)
-
-	request := &sls.CallAiToolsRequest{
-		ToolName: tea.String("text_to_promql"),
-		RegionId: tea.String(region),
-		Params: map[string]*string{
-			"project":     tea.String(project),
-			"metricstore": tea.String(metricStore),
-			"sys.query":   tea.String(text),
-		},
-	}
-
-	runtime := &util.RuntimeOptions{
-		ReadTimeout:    tea.Int(60000),
-		ConnectTimeout: tea.Int(60000),
-	}
-
-	var result string
-	err = c.executeWithResilience(ctx, func(ctx context.Context) error {
-		resp, callErr := slsSDKClient.CallAiToolsWithOptions(request, make(map[string]*string), runtime)
-		if callErr != nil {
-			return callErr
-		}
-		data := tea.StringValue(resp.Body)
-		if idx := strings.Index(data, "------answer------\n"); idx >= 0 {
-			data = data[idx+len("------answer------\n"):]
-		}
-		result = data
-		return nil
-	})
-	if err != nil {
-		return "", fmt.Errorf("sls: text to promql: %w", err)
-	}
-
-	return result, nil
 }

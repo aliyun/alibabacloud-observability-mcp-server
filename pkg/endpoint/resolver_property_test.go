@@ -48,6 +48,19 @@ func TestProperty_EndpointTemplateResolution(t *testing.T) {
 		genNonEmptyRegion,
 	))
 
+	properties.Property("StarOps template resolves to static endpoint", prop.ForAll(
+		func(region string) bool {
+			r := NewStarOpsResolver(nil)
+			got, err := r.Resolve(region)
+			if err != nil {
+				return false
+			}
+			// StarOps uses a static endpoint (not region-aware)
+			return got == staropsTemplate
+		},
+		genNonEmptyRegion,
+	))
+
 	properties.TestingRun(t)
 }
 
@@ -90,6 +103,20 @@ func TestProperty_EndpointOverridePriority(t *testing.T) {
 			expected := NormalizeHost(override)
 			templateResult := "cms." + region + ".aliyuncs.com"
 			return got == expected && got != templateResult
+		},
+		genNonEmptyRegion,
+		genOverrideHost,
+	))
+
+	properties.Property("override takes precedence over StarOps template", prop.ForAll(
+		func(region, override string) bool {
+			r := NewStarOpsResolver(map[string]string{region: override})
+			got, err := r.Resolve(region)
+			if err != nil {
+				return false
+			}
+			expected := NormalizeHost(override)
+			return got == expected && got != staropsTemplate
 		},
 		genNonEmptyRegion,
 		genOverrideHost,
