@@ -3,6 +3,7 @@ package stability
 import (
 	"context"
 	"errors"
+	"io"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -11,6 +12,18 @@ import (
 	"github.com/leanovate/gopter/gen"
 	"github.com/leanovate/gopter/prop"
 )
+
+// retryableError is a test error that should trigger retry logic
+type retryableError struct {
+	msg string
+}
+
+func (e *retryableError) Error() string { return e.msg }
+
+// newRetryableError creates a retryable error for testing
+func newRetryableError(msg string) error {
+	return &retryableError{msg: msg}
+}
 
 // TestProperty_ContextCancellationPropagation verifies that for any operation,
 // when the passed-in context is cancelled, the operation returns promptly with
@@ -38,7 +51,7 @@ func TestProperty_ContextCancellationPropagation(t *testing.T) {
 
 			fn := func(ctx context.Context) error {
 				atomic.AddInt64(&callCount, 1)
-				return errors.New("fail")
+				return io.EOF // Use retryable error
 			}
 
 			start := time.Now()
@@ -101,7 +114,7 @@ func TestProperty_ContextCancellationPropagation(t *testing.T) {
 						cancel()
 					}()
 				}
-				return errors.New("fail")
+				return io.EOF // Use retryable error
 			}
 
 			start := time.Now()
@@ -151,7 +164,7 @@ func TestProperty_ContextCancellationPropagation(t *testing.T) {
 
 			fn := func(ctx context.Context) error {
 				atomic.AddInt64(&callCount, 1)
-				return errors.New("fail")
+				return io.EOF // Use retryable error
 			}
 
 			start := time.Now()
@@ -232,7 +245,7 @@ func TestProperty_ContextCancellationPropagation(t *testing.T) {
 							cancel()
 						}()
 					}
-					return errors.New("api error")
+					return io.EOF // Use retryable error
 				})
 			}
 

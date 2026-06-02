@@ -2,8 +2,55 @@ package stability
 
 import (
 	"context"
+	"io"
+	"net"
+	"strings"
 	"time"
 )
+
+// isRetryableError determines whether an error is transient and should be retried.
+// Returns true for network-related errors (EOF, timeout, connection reset, etc.)
+// and false for permanent errors (auth, not found, invalid request, etc.).
+func isRetryableError(err error) bool {
+	if err == nil {
+		return false
+	}
+
+	// EOF is a common transient error when connections are closed unexpectedly
+	if err == io.EOF {
+		return true
+	}
+
+	errMsg := err.Error()
+
+	// Check for common network error patterns
+	retryablePatterns := []string{
+		"EOF",
+		"connection reset",
+		"connection refused",
+		"broken pipe",
+		"timeout",
+		"i/o timeout",
+		"context deadline exceeded",
+		"connection timed out",
+		"network is unreachable",
+		"temporary failure",
+	}
+
+	lowerMsg := strings.ToLower(errMsg)
+	for _, pattern := range retryablePatterns {
+		if strings.Contains(lowerMsg, pattern) {
+			return true
+		}
+	}
+
+	// Check for net.Error interface (timeout/temporary errors)
+	if netErr, ok := err.(net.Error); ok {
+		return netErr.Timeout() || netErr.Temporary()
+	}
+
+	return false
+}
 
 // RetryConfig 重试配置
 type RetryConfig struct {
@@ -23,9 +70,11 @@ func DefaultBackoff(waitTime time.Duration) func(attempt int) time.Duration {
 	}
 }
 
-// Retry 执行带重试的操作。
-// fn 最多被调用 cfg.MaxAttempts 次。如果所有尝试均失败，返回最后一次的错误。
-// 在重试等待期间会响应 context 取消。
+// Retry executes an operation with retry logic.
+// fn is called up to cfg.MaxAttempts times.
+// Only retryable errors (network/timeout issues) trigger a retry.
+// Permanent errors (auth, not found, invalid request) are returned immediately.
+// During retry waits, context cancellation is respected.
 func Retry(ctx context.Context, cfg RetryConfig, fn func(ctx context.Context) error) error {
 	if cfg.MaxAttempts <= 0 {
 		cfg.MaxAttempts = 1
@@ -41,6 +90,11 @@ func Retry(ctx context.Context, cfg RetryConfig, fn func(ctx context.Context) er
 		lastErr = fn(ctx)
 		if lastErr == nil {
 			return nil
+		}
+
+		// Don't retry for permanent errors (auth, not found, etc.)
+		if !isRetryableError(lastErr) {
+			return lastErr
 		}
 
 		// Don't wait after the last attempt
