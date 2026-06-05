@@ -60,8 +60,8 @@ func TestRetry_AllAttemptsFail(t *testing.T) {
 func TestRetry_ReturnsLastError(t *testing.T) {
 	attempt := 0
 	errs := []error{
-		io.EOF, // retryable
-		io.EOF, // retryable
+		io.EOF,                // retryable
+		io.EOF,                // retryable
 		errors.New("error 3"), // non-retryable, returned immediately
 	}
 	err := Retry(context.Background(), RetryConfig{MaxAttempts: 3, WaitTime: time.Millisecond}, func(ctx context.Context) error {

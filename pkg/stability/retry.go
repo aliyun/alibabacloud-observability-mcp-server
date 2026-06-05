@@ -44,9 +44,9 @@ func isRetryableError(err error) bool {
 		}
 	}
 
-	// Check for net.Error interface (timeout/temporary errors)
+	// Check for net.Error interface (timeout errors)
 	if netErr, ok := err.(net.Error); ok {
-		return netErr.Timeout() || netErr.Temporary()
+		return netErr.Timeout()
 	}
 
 	return false
