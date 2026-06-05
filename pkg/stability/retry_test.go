@@ -3,12 +3,14 @@ package stability
 import (
 	"context"
 	"errors"
+	"io"
 	"sync/atomic"
 	"testing"
 	"time"
 )
 
 var errTest = errors.New("test error")
+var errRetryable = io.EOF // Use EOF as a retryable error for testing
 
 func TestRetry_SuccessOnFirstAttempt(t *testing.T) {
 	var calls int32
@@ -29,7 +31,7 @@ func TestRetry_SuccessOnSecondAttempt(t *testing.T) {
 	err := Retry(context.Background(), RetryConfig{MaxAttempts: 3, WaitTime: time.Millisecond}, func(ctx context.Context) error {
 		n := atomic.AddInt32(&calls, 1)
 		if n < 2 {
-			return errTest
+			return errRetryable // Use retryable error
 		}
 		return nil
 	})
@@ -45,10 +47,10 @@ func TestRetry_AllAttemptsFail(t *testing.T) {
 	var calls int32
 	err := Retry(context.Background(), RetryConfig{MaxAttempts: 3, WaitTime: time.Millisecond}, func(ctx context.Context) error {
 		atomic.AddInt32(&calls, 1)
-		return errTest
+		return errRetryable // Use retryable error
 	})
-	if !errors.Is(err, errTest) {
-		t.Fatalf("expected errTest, got %v", err)
+	if !errors.Is(err, errRetryable) {
+		t.Fatalf("expected errRetryable, got %v", err)
 	}
 	if got := atomic.LoadInt32(&calls); got != 3 {
 		t.Fatalf("expected 3 calls, got %d", got)
@@ -58,9 +60,9 @@ func TestRetry_AllAttemptsFail(t *testing.T) {
 func TestRetry_ReturnsLastError(t *testing.T) {
 	attempt := 0
 	errs := []error{
-		errors.New("error 1"),
-		errors.New("error 2"),
-		errors.New("error 3"),
+		io.EOF,                // retryable
+		io.EOF,                // retryable
+		errors.New("error 3"), // non-retryable, returned immediately
 	}
 	err := Retry(context.Background(), RetryConfig{MaxAttempts: 3, WaitTime: time.Millisecond}, func(ctx context.Context) error {
 		e := errs[attempt]
@@ -85,7 +87,7 @@ func TestRetry_ContextCancelledDuringWait(t *testing.T) {
 	start := time.Now()
 	err := Retry(ctx, RetryConfig{MaxAttempts: 5, WaitTime: 5 * time.Second}, func(ctx context.Context) error {
 		atomic.AddInt32(&calls, 1)
-		return errTest
+		return errRetryable // Use retryable error
 	})
 	elapsed := time.Since(start)
 
@@ -108,7 +110,7 @@ func TestRetry_ContextAlreadyCancelled(t *testing.T) {
 	var calls int32
 	err := Retry(ctx, RetryConfig{MaxAttempts: 3, WaitTime: time.Second}, func(ctx context.Context) error {
 		atomic.AddInt32(&calls, 1)
-		return errTest
+		return errRetryable // Use retryable error
 	})
 
 	// The first call still happens (fn is called), but after it fails,
@@ -125,7 +127,7 @@ func TestRetry_ContextDeadlineExceeded(t *testing.T) {
 	var calls int32
 	err := Retry(ctx, RetryConfig{MaxAttempts: 100, WaitTime: time.Second}, func(ctx context.Context) error {
 		atomic.AddInt32(&calls, 1)
-		return errTest
+		return errRetryable // Use retryable error
 	})
 
 	if !errors.Is(err, context.DeadlineExceeded) {
@@ -178,11 +180,11 @@ func TestRetry_CustomBackoffFunc(t *testing.T) {
 		BackoffFunc: customBackoff,
 	}, func(ctx context.Context) error {
 		atomic.AddInt32(&calls, 1)
-		return errTest
+		return errRetryable // Use retryable error
 	})
 
-	if !errors.Is(err, errTest) {
-		t.Fatalf("expected errTest, got %v", err)
+	if !errors.Is(err, errRetryable) {
+		t.Fatalf("expected errRetryable, got %v", err)
 	}
 	if got := atomic.LoadInt32(&calls); got != 4 {
 		t.Fatalf("expected 4 calls, got %d", got)

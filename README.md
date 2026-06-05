@@ -353,7 +353,6 @@ toolkit:
 | 工具 | 说明 | 关键参数 |
 |------|------|---------|
 | `cms_execute_promql` | 执行 PromQL 查询 | `project`、`metricStore`、`query`、`regionId`（必需）；`from_time`、`to_time`（可选） |
-| `cms_text_to_promql` | 自然语言转 PromQL | `text`、`project`、`metricStore`、`regionId`（必需） |
 
 ### Shared 工具集
 
@@ -425,7 +424,7 @@ umodel_get_metrics(
 │   ├── timeparse/       # 时间表达式解析
 │   └── toolkit/         # 工具集接口与注册中心
 │       ├── paas/        # PaaS 工具集（umodel_*、cms_natural_language_query）
-│       ├── iaas/        # IaaS 工具集（sls_*、cms_execute_promql、cms_text_to_promql）
+│       ├── iaas/        # IaaS 工具集（sls_*、cms_execute_promql）
 │       └── shared/      # Shared 工具集（list_workspace、list_domains、introduction）
 ├── v1/                  # Python 版本（历史参考）
 ├── Makefile

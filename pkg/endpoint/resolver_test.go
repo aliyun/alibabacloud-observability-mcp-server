@@ -18,6 +18,13 @@ func TestNewCMSResolver(t *testing.T) {
 	}
 }
 
+func TestNewStarOpsResolver(t *testing.T) {
+	r := NewStarOpsResolver(nil)
+	if r.template != staropsTemplate {
+		t.Errorf("expected template %q, got %q", staropsTemplate, r.template)
+	}
+}
+
 func TestResolve(t *testing.T) {
 	tests := []struct {
 		name     string
@@ -49,6 +56,24 @@ func TestResolve(t *testing.T) {
 			resolver: NewCMSResolver(nil),
 			region:   "us-west-1",
 			want:     "cms.us-west-1.aliyuncs.com",
+		},
+		{
+			name:     "StarOps default endpoint",
+			resolver: NewStarOpsResolver(nil),
+			region:   "cn-hangzhou",
+			want:     "starops.cn-beijing.aliyuncs.com",
+		},
+		{
+			name:     "StarOps override takes precedence",
+			resolver: NewStarOpsResolver(map[string]string{"cn-hangzhou": "custom-starops.example.com"}),
+			region:   "cn-hangzhou",
+			want:     "custom-starops.example.com",
+		},
+		{
+			name:     "StarOps empty region",
+			resolver: NewStarOpsResolver(nil),
+			region:   "",
+			wantErr:  true,
 		},
 		{
 			name:     "SLS empty region",

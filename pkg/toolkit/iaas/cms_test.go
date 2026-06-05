@@ -60,7 +60,6 @@ func (m *mockCMSClient) DataAgentQuery(_ context.Context, _, _, _ string, _, _ i
 func expectedCMSToolNames() map[string]bool {
 	return map[string]bool{
 		"cms_execute_promql": false,
-		"cms_text_to_promql": false,
 	}
 }
 

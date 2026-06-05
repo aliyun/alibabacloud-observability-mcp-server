@@ -3,6 +3,7 @@ package stability
 import (
 	"context"
 	"errors"
+	"io"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -38,7 +39,7 @@ func TestProperty_ContextCancellationPropagation(t *testing.T) {
 
 			fn := func(ctx context.Context) error {
 				atomic.AddInt64(&callCount, 1)
-				return errors.New("fail")
+				return io.EOF // Use retryable error
 			}
 
 			start := time.Now()
@@ -101,7 +102,7 @@ func TestProperty_ContextCancellationPropagation(t *testing.T) {
 						cancel()
 					}()
 				}
-				return errors.New("fail")
+				return io.EOF // Use retryable error
 			}
 
 			start := time.Now()
@@ -151,7 +152,7 @@ func TestProperty_ContextCancellationPropagation(t *testing.T) {
 
 			fn := func(ctx context.Context) error {
 				atomic.AddInt64(&callCount, 1)
-				return errors.New("fail")
+				return io.EOF // Use retryable error
 			}
 
 			start := time.Now()
@@ -232,7 +233,7 @@ func TestProperty_ContextCancellationPropagation(t *testing.T) {
 							cancel()
 						}()
 					}
-					return errors.New("api error")
+					return io.EOF // Use retryable error
 				})
 			}
 

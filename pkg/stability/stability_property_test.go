@@ -3,6 +3,7 @@ package stability
 import (
 	"context"
 	"errors"
+	"io"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -29,7 +30,7 @@ func TestProperty_RetryExecutionCount(t *testing.T) {
 	properties.Property("always-failing operation is executed exactly MaxAttempts times", prop.ForAll(
 		func(maxAttempts int) bool {
 			var callCount int64
-			expectedErr := errors.New("always fails")
+			expectedErr := io.EOF // Use retryable error
 
 			cfg := RetryConfig{
 				MaxAttempts: maxAttempts,
@@ -74,7 +75,7 @@ func TestProperty_RetryExecutionCount(t *testing.T) {
 				if int(n) >= succeedOn {
 					return nil
 				}
-				return errors.New("not yet")
+				return io.EOF // Use retryable error
 			}
 
 			err := Retry(context.Background(), cfg, fn)

@@ -2,7 +2,7 @@ package client
 
 import (
 	"context"
-	"errors"
+	"io"
 	"testing"
 	"time"
 )
@@ -197,7 +197,7 @@ func TestCMSClient_ExecuteWithResilience_RetryOnFailure(t *testing.T) {
 	client := NewCMSClient(testCredential(), cfg)
 
 	calls := 0
-	testErr := errors.New("transient error")
+	testErr := io.EOF // Use a retryable error
 	err := client.executeWithResilience(context.Background(), func(ctx context.Context) error {
 		calls++
 		return testErr
