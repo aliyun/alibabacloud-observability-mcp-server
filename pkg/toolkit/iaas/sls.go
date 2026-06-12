@@ -605,6 +605,8 @@ func (h *slsHandler) handleExecuteSQL(ctx context.Context, params map[string]int
 		From:  tea.Int32(int32(fromTS)),
 		To:    tea.Int32(int32(toTS)),
 		Line:  tea.Int64(int64(limit)),
+		Offset: tea.Int64(int64(offset)),
+		Reverse: tea.Bool(reverse),
 	})
 	if err != nil {
 		slog.ErrorContext(ctx, "sls_execute_sql failed", "error", err)
