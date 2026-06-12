@@ -13,7 +13,7 @@ server:
   host: "0.0.0.0"
 
   # 监听端口（仅 sse/streamable-http 模式）
-  port: 8180
+  port: 8181
 
 # 日志配置
 logging:
