@@ -133,7 +133,7 @@ func newStreamableHTTPTransport(cfg *config.Config, mcpSrv *mcpserver.MCPServer)
 	}
 
 	srv := mcpserver.NewStreamableHTTPServer(mcpSrv,
-		mcpserver.WithEndpointPath("/streamhttp"),
+		mcpserver.WithEndpointPath("/mcp"),
 		mcpserver.WithStreamableHTTPServer(httpSrv),
 	)
 
@@ -148,7 +148,7 @@ func (t *streamableHTTPTransport) Start(_ context.Context) error {
 	slog.Info("========================================")
 	slog.Info("  MCP Server started successfully!")
 	slog.Info("  Transport: streamable-http")
-	slog.Info("  Endpoint", "url", fmt.Sprintf("http://%s/streamhttp", t.addr))
+	slog.Info("  Endpoint", "url", fmt.Sprintf("http://%s/mcp", t.addr))
 	slog.Info("========================================")
 	return t.srv.Start(t.addr)
 }
