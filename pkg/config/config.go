@@ -387,11 +387,13 @@ func (c *LocaleConfig) Validate() error {
 }
 
 // Validate 验证凭证配置
+// Returns nil when either static AK/SK are configured or the SDK default
+// credential chain can provide credentials.
 func (c *CredentialsConfig) Validate() error {
-	if c.AccessKeyID == "" || c.AccessKeySecret == "" {
-		return fmt.Errorf("credentials not configured: set ALIBABA_CLOUD_ACCESS_KEY_ID and ALIBABA_CLOUD_ACCESS_KEY_SECRET")
+	if c.AccessKeyID != "" && c.AccessKeySecret != "" {
+		return nil
 	}
-	return nil
+	return fmt.Errorf("credentials not configured: set ALIBABA_CLOUD_ACCESS_KEY_ID and ALIBABA_CLOUD_ACCESS_KEY_SECRET, or configure the Alibaba Cloud SDK default credential chain (~/.alibabacloud/credentials, ECS RAM Role, etc.)")
 }
 
 // Validator 配置验证接口
