@@ -10,6 +10,11 @@ import (
 	"os"
 	"text/tabwriter"
 
+	// Embed the IANA time zone database so that time.LoadLocation works on
+	// platforms without a system tz database (notably Windows).
+	// See: https://github.com/aliyun/alibabacloud-observability-mcp-server/issues/76
+	_ "time/tzdata"
+
 	"github.com/alibabacloud-observability-mcp-server-go/pkg/client"
 	"github.com/alibabacloud-observability-mcp-server-go/pkg/config"
 	"github.com/alibabacloud-observability-mcp-server-go/pkg/logger"
