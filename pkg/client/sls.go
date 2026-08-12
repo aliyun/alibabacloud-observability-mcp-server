@@ -90,26 +90,27 @@ func (c *SLSClientImpl) createClient(region string) (*sls.Client, error) {
 		return nil, fmt.Errorf("sls: resolve endpoint: %w", err)
 	}
 
-	accessKeyID, err := c.credential.GetAccessKeyID()
-	if err != nil {
-		return nil, fmt.Errorf("sls: get access key id: %w", err)
-	}
-
-	accessKeySecret, err := c.credential.GetAccessKeySecret()
-	if err != nil {
-		return nil, fmt.Errorf("sls: get access key secret: %w", err)
-	}
-
 	cfg := &openapi.Config{
-		AccessKeyId:     tea.String(accessKeyID),
-		AccessKeySecret: tea.String(accessKeySecret),
-		Endpoint:        tea.String(ep),
+		Endpoint: tea.String(ep),
 	}
 
-	// Add security token if available (for STS)
-	token, _ := c.credential.GetSecurityToken()
-	if token != "" {
-		cfg.SecurityToken = tea.String(token)
+	if cred := c.credential.GetCredential(); cred != nil {
+		cfg.Credential = cred
+	} else {
+		accessKeyID, err := c.credential.GetAccessKeyID()
+		if err != nil {
+			return nil, fmt.Errorf("sls: get access key id: %w", err)
+		}
+		accessKeySecret, err := c.credential.GetAccessKeySecret()
+		if err != nil {
+			return nil, fmt.Errorf("sls: get access key secret: %w", err)
+		}
+		cfg.AccessKeyId = tea.String(accessKeyID)
+		cfg.AccessKeySecret = tea.String(accessKeySecret)
+		token, _ := c.credential.GetSecurityToken()
+		if token != "" {
+			cfg.SecurityToken = tea.String(token)
+		}
 	}
 
 	client, err := sls.NewClient(cfg)

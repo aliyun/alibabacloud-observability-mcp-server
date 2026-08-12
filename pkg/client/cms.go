@@ -469,26 +469,27 @@ func (c *CMSClientImpl) createCMSSDKClient(region string) (*cms.Client, error) {
 		return nil, fmt.Errorf("cms: resolve endpoint: %w", err)
 	}
 
-	accessKeyID, err := c.credential.GetAccessKeyID()
-	if err != nil {
-		return nil, fmt.Errorf("cms: get access key id: %w", err)
-	}
-
-	accessKeySecret, err := c.credential.GetAccessKeySecret()
-	if err != nil {
-		return nil, fmt.Errorf("cms: get access key secret: %w", err)
-	}
-
 	cfg := &openapi.Config{
-		AccessKeyId:     dara.String(accessKeyID),
-		AccessKeySecret: dara.String(accessKeySecret),
-		Endpoint:        dara.String(ep),
+		Endpoint: dara.String(ep),
 	}
 
-	// Add security token if available (for STS)
-	token, _ := c.credential.GetSecurityToken()
-	if token != "" {
-		cfg.SecurityToken = dara.String(token)
+	if cred := c.credential.GetCredential(); cred != nil {
+		cfg.Credential = cred
+	} else {
+		accessKeyID, err := c.credential.GetAccessKeyID()
+		if err != nil {
+			return nil, fmt.Errorf("cms: get access key id: %w", err)
+		}
+		accessKeySecret, err := c.credential.GetAccessKeySecret()
+		if err != nil {
+			return nil, fmt.Errorf("cms: get access key secret: %w", err)
+		}
+		cfg.AccessKeyId = dara.String(accessKeyID)
+		cfg.AccessKeySecret = dara.String(accessKeySecret)
+		token, _ := c.credential.GetSecurityToken()
+		if token != "" {
+			cfg.SecurityToken = dara.String(token)
+		}
 	}
 
 	client, err := cms.NewClient(cfg)

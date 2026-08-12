@@ -51,7 +51,12 @@ The query must use valid PromQL syntax.
 ## Time Range
 
 - from_time: Start time, supports Unix timestamp (seconds/milliseconds) or relative time expressions
-- to_time: End time, supports Unix timestamp (seconds/milliseconds) or relative time expressions`,
+- to_time: End time, supports Unix timestamp (seconds/milliseconds) or relative time expressions
+
+## Range Query
+
+- range_query: When set to true, returns all data points in the time window (one per minute).
+  When false or omitted, only returns the latest instant value. Use true when analyzing trends over time.`,
 		InputSchema: map[string]any{
 			"type": "object",
 			"properties": map[string]any{
@@ -81,6 +86,11 @@ The query must use valid PromQL syntax.
 					"type":        "string",
 					"description": "Alibaba Cloud region ID, e.g. 'cn-hongkong'",
 				},
+				"range_query": map[string]any{
+					"type":        "boolean",
+					"description": "When true, returns all data points in the time window. When false/omitted, only returns the latest value.",
+					"default":     false,
+				},
 			},
 			"required": []string{"project", "metricStore", "query", "regionId"},
 		},
@@ -93,6 +103,7 @@ func (h *cmsHandler) handleExecutePromQL(ctx context.Context, params map[string]
 	metricStore := paramString(params, "metricStore", "")
 	query := paramString(params, "query", "")
 	regionID := paramString(params, "regionId", "")
+	rangeQuery := paramBool(params, "range_query", false)
 
 	if project == "" || metricStore == "" || query == "" || regionID == "" {
 		return buildResponse(nil, true, "project, metricStore, query and regionId are required"), nil
@@ -109,12 +120,16 @@ func (h *cmsHandler) handleExecutePromQL(ctx context.Context, params map[string]
 
 	slog.InfoContext(ctx, "cms_execute_promql",
 		"project", project, "metricStore", metricStore, "region", regionID,
-		"from", fromTS, "to", toTS)
+		"from", fromTS, "to", toTS, "range_query", rangeQuery)
 
 	// Wrap PromQL in SPL template for execution via SLS.
 	// The SPL keyword is always ".metricstore" (literal), not the actual store name.
 	// The store name is passed as the logstore parameter to the API.
 	// Includes .set directives required by the SLS PromQL engine.
+	projection := "title_agg, cnt, latest_ts, latest_val"
+	if rangeQuery {
+		projection = "title_agg, cnt, arr_ts, arr_val"
+	}
 	splQuery := fmt.Sprintf(`.set "sql.session.velox_support_row_constructor_enabled" = 'true';
 .set "sql.session.presto_velox_mix_run_not_check_linked_agg_enabled" = 'true';
 .set "sql.session.presto_velox_mix_run_support_complex_type_enabled" = 'true';
@@ -128,7 +143,7 @@ func (h *cmsHandler) handleExecutePromQL(ctx context.Context, params map[string]
         cnt = count(*),
         latest_ts = array_agg(latest_ts),
         latest_val = array_agg(latest_val)
-| project title_agg, cnt, latest_ts, latest_val`, query)
+| project %s`, query, projection)
 
 	results, err := h.slsClient.Query(ctx, regionID, project, metricStore, &sls.GetLogsRequest{
 		Query: tea.String(splQuery),

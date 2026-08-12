@@ -24,6 +24,9 @@ type CredentialProvider interface {
 	// GetSecurityToken returns the STS security token. Providers that do
 	// not support STS return an empty string with no error.
 	GetSecurityToken() (string, error)
+	// GetCredential returns the underlying credentials.Credential for direct
+	// use with Alibaba Cloud SDK clients. Returns nil if unavailable.
+	GetCredential() credentials.Credential
 }
 
 // --- StaticCredentialProvider ---
@@ -59,6 +62,25 @@ func (p *StaticCredentialProvider) IsValid() bool {
 	return p.AccessKeyID != "" && p.AccessKeySecret != ""
 }
 
+func (p *StaticCredentialProvider) GetCredential() credentials.Credential {
+	credType := "access_key"
+	if p.SecurityToken != "" {
+		credType = "sts"
+	}
+	cfg := new(credentials.Config).
+		SetType(credType).
+		SetAccessKeyId(p.AccessKeyID).
+		SetAccessKeySecret(p.AccessKeySecret)
+	if p.SecurityToken != "" {
+		cfg.SetSecurityToken(p.SecurityToken)
+	}
+	cred, err := credentials.NewCredential(cfg)
+	if err != nil {
+		return nil
+	}
+	return cred
+}
+
 // --- EnvCredentialProvider ---
 
 // EnvCredentialProvider reads credentials from environment variables
@@ -89,6 +111,31 @@ func (p *EnvCredentialProvider) GetSecurityToken() (string, error) {
 func (p *EnvCredentialProvider) IsValid() bool {
 	return os.Getenv("ALIBABA_CLOUD_ACCESS_KEY_ID") != "" &&
 		os.Getenv("ALIBABA_CLOUD_ACCESS_KEY_SECRET") != ""
+}
+
+func (p *EnvCredentialProvider) GetCredential() credentials.Credential {
+	akID := os.Getenv("ALIBABA_CLOUD_ACCESS_KEY_ID")
+	akSecret := os.Getenv("ALIBABA_CLOUD_ACCESS_KEY_SECRET")
+	if akID == "" || akSecret == "" {
+		return nil
+	}
+	token := os.Getenv("ALIBABA_CLOUD_SECURITY_TOKEN")
+	credType := "access_key"
+	if token != "" {
+		credType = "sts"
+	}
+	cfg := new(credentials.Config).
+		SetType(credType).
+		SetAccessKeyId(akID).
+		SetAccessKeySecret(akSecret)
+	if token != "" {
+		cfg.SetSecurityToken(token)
+	}
+	cred, err := credentials.NewCredential(cfg)
+	if err != nil {
+		return nil
+	}
+	return cred
 }
 
 // --- ChainCredentialProvider ---
@@ -130,6 +177,16 @@ func (p *ChainCredentialProvider) GetSecurityToken() (string, error) {
 		}
 	}
 	return "", nil
+}
+
+func (p *ChainCredentialProvider) GetCredential() credentials.Credential {
+	for _, provider := range p.Providers {
+		id, err := provider.GetAccessKeyID()
+		if err == nil && id != "" {
+			return provider.GetCredential()
+		}
+	}
+	return nil
 }
 
 // --- SDKCredentialProvider ---
@@ -189,6 +246,10 @@ func (p *SDKCredentialProvider) GetSecurityToken() (string, error) {
 		return "", nil
 	}
 	return *model.SecurityToken, nil
+}
+
+func (p *SDKCredentialProvider) GetCredential() credentials.Credential {
+	return p.cred
 }
 
 // --- Factory ---

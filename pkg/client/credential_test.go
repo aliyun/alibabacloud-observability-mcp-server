@@ -167,7 +167,13 @@ func TestChainCredentialProvider_NoCredentials(t *testing.T) {
 	t.Setenv("ALIBABA_CLOUD_ACCESS_KEY_ID", "")
 	t.Setenv("ALIBABA_CLOUD_ACCESS_KEY_SECRET", "")
 
-	chain := NewCredentialProvider("", "", "")
+	// Build chain without SDK provider to test pure static+env fallback.
+	chain := &ChainCredentialProvider{
+		Providers: []CredentialProvider{
+			&StaticCredentialProvider{},
+			&EnvCredentialProvider{},
+		},
+	}
 
 	_, err := chain.GetAccessKeyID()
 	if err != ErrNoCredentials {
