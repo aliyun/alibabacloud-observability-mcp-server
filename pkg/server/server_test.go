@@ -19,6 +19,9 @@ type stubSLSClient struct{}
 func (s *stubSLSClient) Query(_ context.Context, _, _, _ string, _ *sls.GetLogsRequest) ([]map[string]interface{}, error) {
 	return nil, nil
 }
+func (s *stubSLSClient) QueryWithMeta(_ context.Context, _, _, _ string, _ *sls.GetLogsRequest) (client.QueryResult, error) {
+	return client.QueryResult{}, nil
+}
 func (s *stubSLSClient) GetContextLogs(_ context.Context, _, _, _, _, _ string, _, _ int) (map[string]interface{}, error) {
 	return nil, nil
 }

@@ -19,6 +19,7 @@ var _ client.SLSClient = (*mockSLSClient)(nil)
 
 type mockSLSClient struct {
 	queryResult                   []map[string]interface{}
+	queryMeta                     map[string]interface{}
 	queryErr                      error
 	getContextLogsResult          map[string]interface{}
 	getContextLogsErr             error
@@ -36,8 +37,16 @@ type mockSLSClient struct {
 	textToSQLErr                  error
 }
 
-func (m *mockSLSClient) Query(_ context.Context, _, _, _ string, _ *sls.GetLogsRequest) ([]map[string]interface{}, error) {
-	return m.queryResult, m.queryErr
+func (m *mockSLSClient) Query(ctx context.Context, region, project, logstore string, req *sls.GetLogsRequest) ([]map[string]interface{}, error) {
+	result, err := m.QueryWithMeta(ctx, region, project, logstore, req)
+	return result.Data, err
+}
+
+func (m *mockSLSClient) QueryWithMeta(_ context.Context, _, _, _ string, _ *sls.GetLogsRequest) (client.QueryResult, error) {
+	if m.queryErr != nil {
+		return client.QueryResult{}, m.queryErr
+	}
+	return client.QueryResult{Data: m.queryResult, Meta: m.queryMeta}, nil
 }
 
 func (m *mockSLSClient) GetContextLogs(_ context.Context, _, _, _, _, _ string, _, _ int) (map[string]interface{}, error) {
@@ -358,6 +367,60 @@ func TestExecuteSQL_Success(t *testing.T) {
 	data := resp["data"].([]map[string]interface{})
 	if len(data) != 2 {
 		t.Errorf("expected 2 results, got %d", len(data))
+	}
+}
+
+func TestExecuteSQL_IncludesQueryMeta(t *testing.T) {
+	mock := &mockSLSClient{
+		queryResult: []map[string]interface{}{
+			{"cnt": "12"},
+		},
+		queryMeta: map[string]interface{}{
+			"isAccurate":    true,
+			"progress":      "Complete",
+			"hasSQL":        true,
+			"count":         int32(1),
+			"processedRows": int64(10000),
+		},
+	}
+	tools := SLSTools(mock, &mockCMSClient{})
+	ctx := context.Background()
+
+	var tool func(context.Context, map[string]interface{}) (interface{}, error)
+	for _, tt := range tools {
+		if tt.Name == "sls_execute_sql" {
+			tool = tt.Handler
+			break
+		}
+	}
+	if tool == nil {
+		t.Fatal("sls_execute_sql tool not found")
+	}
+
+	result, err := tool(ctx, map[string]interface{}{
+		"project":   "my-project",
+		"logStore":  "my-logstore",
+		"query":     "* | select count(*) as cnt",
+		"regionId":  "cn-hongkong",
+		"from_time": "now-1h",
+		"to_time":   "now",
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	resp := result.(map[string]interface{})
+	if resp["error"].(bool) {
+		t.Fatalf("expected error=false, got true: %s", resp["message"])
+	}
+	meta, ok := resp["meta"].(map[string]interface{})
+	if !ok {
+		t.Fatal("expected meta in sls_execute_sql response")
+	}
+	if meta["isAccurate"] != true {
+		t.Errorf("meta.isAccurate = %v, want true", meta["isAccurate"])
+	}
+	if meta["progress"] != "Complete" {
+		t.Errorf("meta.progress = %v, want Complete", meta["progress"])
 	}
 }
 
