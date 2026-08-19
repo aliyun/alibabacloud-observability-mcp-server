@@ -103,6 +103,15 @@ func buildResponse(data interface{}, isError bool, message string) map[string]in
 	}
 }
 
+func buildQueryResponse(data interface{}, meta map[string]interface{}) map[string]interface{} {
+	resp := buildResponse(data, false, "")
+	if meta == nil {
+		meta = map[string]interface{}{}
+	}
+	resp["meta"] = meta
+	return resp
+}
+
 // parseTimeParam parses a time parameter (string or numeric) into a Unix timestamp.
 // parseTimeParamAt 与 parseTimeParam 相同，但使用调用方提供的 now 时刻，
 // 避免多次调用之间因 time.Now() 不同导致的时间漂移。
@@ -519,6 +528,8 @@ Executes a query on a specified SLS project and logstore, and returns the result
 
 Queries must use valid SLS query syntax, not natural language. If you are unfamiliar with the logstore schema, use sls_list_logstores first to retrieve index information.
 
+The response includes data (log rows) and meta from GetLogsV2 (isAccurate, progress, hasSQL, count, processedRows). Callers should check meta.progress (Complete / Incomplete) and meta.isAccurate before treating aggregation counts as final.
+
 ## Time Range
 
 - from_time: Start time. Supports Unix timestamps (seconds/milliseconds) or relative expressions (e.g. 'now-1h')
@@ -600,7 +611,7 @@ func (h *slsHandler) handleExecuteSQL(ctx context.Context, params map[string]int
 		"project", project, "logStore", logStore, "region", regionID,
 		"limit", limit, "offset", offset, "reverse", reverse)
 
-	results, err := h.slsClient.Query(ctx, regionID, project, logStore, &sls.GetLogsRequest{
+	results, err := h.slsClient.QueryWithMeta(ctx, regionID, project, logStore, &sls.GetLogsRequest{
 		Query:   tea.String(query),
 		From:    tea.Int32(int32(fromTS)),
 		To:      tea.Int32(int32(toTS)),
@@ -613,7 +624,7 @@ func (h *slsHandler) handleExecuteSQL(ctx context.Context, params map[string]int
 		return buildResponse(nil, true, fmt.Sprintf("Query failed: %s", err)), nil
 	}
 
-	return buildResponse(results, false, ""), nil
+	return buildQueryResponse(results.Data, results.Meta), nil
 }
 
 // ===========================================================================

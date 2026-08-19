@@ -16,10 +16,18 @@ import (
 	"github.com/alibabacloud-observability-mcp-server-go/pkg/stability"
 )
 
+// QueryResult is a GetLogsV2-style response: log rows plus query metadata.
+type QueryResult struct {
+	Data []map[string]interface{}
+	Meta map[string]interface{}
+}
+
 // SLSClient is the interface for interacting with Alibaba Cloud Simple Log Service.
 type SLSClient interface {
 	// Query executes a log query against the specified logstore.
 	Query(ctx context.Context, region, project, logstore string, requestParams *sls.GetLogsRequest) ([]map[string]interface{}, error)
+	// QueryWithMeta is Query plus GetLogsV2 meta (isAccurate, progress, hasSQL, ...).
+	QueryWithMeta(ctx context.Context, region, project, logstore string, requestParams *sls.GetLogsRequest) (QueryResult, error)
 	// GetContextLogs retrieves context logs around an anchor log identified by pack_id and pack_meta.
 	GetContextLogs(ctx context.Context, region, project, logstore, packID, packMeta string, backLines, forwardLines int) (map[string]interface{}, error)
 	// ListProjects returns all SLS project names in the given region.
@@ -131,12 +139,21 @@ func (c *SLSClientImpl) runtimeOptions() *util.RuntimeOptions {
 
 // Query executes a log query against the specified logstore.
 func (c *SLSClientImpl) Query(ctx context.Context, region, project, logstore string, requestParams *sls.GetLogsRequest) ([]map[string]interface{}, error) {
-	client, err := c.createClient(region)
+	result, err := c.QueryWithMeta(ctx, region, project, logstore, requestParams)
 	if err != nil {
 		return nil, err
 	}
+	return result.Data, nil
+}
 
-	var results []map[string]interface{}
+// QueryWithMeta executes a log query via GetLogsV2 and returns rows plus meta.
+func (c *SLSClientImpl) QueryWithMeta(ctx context.Context, region, project, logstore string, requestParams *sls.GetLogsRequest) (QueryResult, error) {
+	sdkClient, err := c.createClient(region)
+	if err != nil {
+		return QueryResult{}, err
+	}
+
+	var result QueryResult
 
 	err = c.executeWithResilience(ctx, func(ctx context.Context) error {
 		slog.DebugContext(ctx, "sls: query",
@@ -147,35 +164,97 @@ func (c *SLSClientImpl) Query(ctx context.Context, region, project, logstore str
 			"to", requestParams.To,
 		)
 
-		resp, err := client.GetLogsWithOptions(tea.String(project), tea.String(logstore), requestParams, map[string]*string{}, c.runtimeOptions())
+		resp, err := sdkClient.GetLogsV2WithOptions(
+			tea.String(project),
+			tea.String(logstore),
+			toGetLogsV2Request(requestParams),
+			&sls.GetLogsV2Headers{},
+			c.runtimeOptions(),
+		)
 		if err != nil {
 			return fmt.Errorf("sls api error: %w", err)
 		}
 
 		if resp.Body == nil {
-			results = []map[string]interface{}{}
+			result = QueryResult{
+				Data: []map[string]interface{}{},
+				Meta: map[string]interface{}{},
+			}
 			return nil
 		}
 
-		results = make([]map[string]interface{}, 0, len(resp.Body))
-		for _, log := range resp.Body {
+		data := make([]map[string]interface{}, 0, len(resp.Body.Data))
+		for _, log := range resp.Body.Data {
 			logMap := make(map[string]interface{})
 			for k, v := range log {
-				if strPtr, ok := v.(*string); ok && strPtr != nil {
-					logMap[k] = tea.StringValue(strPtr)
-				} else if v != nil {
-					logMap[k] = v
+				if v != nil {
+					logMap[k] = tea.StringValue(v)
 				}
 			}
-			results = append(results, logMap)
+			data = append(data, logMap)
+		}
+		result = QueryResult{
+			Data: data,
+			Meta: logsV2MetaToMap(resp.Body.Meta),
 		}
 		return nil
 	})
 
 	if err != nil {
-		return nil, fmt.Errorf("sls: query %s/%s: %w", project, logstore, err)
+		return QueryResult{}, fmt.Errorf("sls: query %s/%s: %w", project, logstore, err)
 	}
-	return results, nil
+	return result, nil
+}
+
+func toGetLogsV2Request(req *sls.GetLogsRequest) *sls.GetLogsV2Request {
+	if req == nil {
+		return &sls.GetLogsV2Request{}
+	}
+	return &sls.GetLogsV2Request{
+		From:     req.From,
+		To:       req.To,
+		Line:     req.Line,
+		Offset:   req.Offset,
+		Query:    req.Query,
+		Reverse:  req.Reverse,
+		PowerSql: req.PowerSql,
+		Topic:    req.Topic,
+	}
+}
+
+func logsV2MetaToMap(meta *sls.GetLogsV2ResponseBodyMeta) map[string]interface{} {
+	out := map[string]interface{}{}
+	if meta == nil {
+		return out
+	}
+	if meta.IsAccurate != nil {
+		out["isAccurate"] = tea.BoolValue(meta.IsAccurate)
+	}
+	if meta.Progress != nil {
+		out["progress"] = tea.StringValue(meta.Progress)
+	}
+	if meta.HasSQL != nil {
+		out["hasSQL"] = tea.BoolValue(meta.HasSQL)
+	}
+	if meta.Count != nil {
+		out["count"] = tea.Int32Value(meta.Count)
+	}
+	if meta.ProcessedRows != nil {
+		out["processedRows"] = tea.Int64Value(meta.ProcessedRows)
+	}
+	if meta.ProcessedBytes != nil {
+		out["processedBytes"] = tea.Int64Value(meta.ProcessedBytes)
+	}
+	if meta.ElapsedMillisecond != nil {
+		out["elapsedMillisecond"] = tea.Int64Value(meta.ElapsedMillisecond)
+	}
+	if meta.WhereQuery != nil {
+		out["whereQuery"] = tea.StringValue(meta.WhereQuery)
+	}
+	if meta.AggQuery != nil {
+		out["aggQuery"] = tea.StringValue(meta.AggQuery)
+	}
+	return out
 }
 
 // GetContextLogs retrieves context logs around an anchor log identified by pack_id and pack_meta.

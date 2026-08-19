@@ -3,6 +3,7 @@ package client
 import (
 	"context"
 	"io"
+	"os"
 	"testing"
 	"time"
 
@@ -61,6 +62,77 @@ func TestNewSLSClient(t *testing.T) {
 // TestSLSClient_InterfaceCompliance verifies SLSClientImpl satisfies SLSClient.
 func TestSLSClient_InterfaceCompliance(t *testing.T) {
 	var _ SLSClient = (*SLSClientImpl)(nil)
+}
+
+func TestLogsV2MetaToMap(t *testing.T) {
+	if got := logsV2MetaToMap(nil); len(got) != 0 {
+		t.Fatalf("logsV2MetaToMap(nil) = %v, want empty map", got)
+	}
+
+	meta := &sls.GetLogsV2ResponseBodyMeta{
+		IsAccurate:         tea.Bool(true),
+		Progress:           tea.String("Complete"),
+		HasSQL:             tea.Bool(true),
+		Count:              tea.Int32(1),
+		ProcessedRows:      tea.Int64(10000),
+		ProcessedBytes:     tea.Int64(2048),
+		ElapsedMillisecond: tea.Int64(5),
+		WhereQuery:         tea.String("*"),
+		AggQuery:           tea.String("select count(*) as cnt"),
+	}
+	got := logsV2MetaToMap(meta)
+	if got["isAccurate"] != true {
+		t.Errorf("isAccurate = %v, want true", got["isAccurate"])
+	}
+	if got["progress"] != "Complete" {
+		t.Errorf("progress = %v, want Complete", got["progress"])
+	}
+	if got["hasSQL"] != true {
+		t.Errorf("hasSQL = %v, want true", got["hasSQL"])
+	}
+	if got["count"] != int32(1) {
+		t.Errorf("count = %v, want 1", got["count"])
+	}
+	if got["processedRows"] != int64(10000) {
+		t.Errorf("processedRows = %v, want 10000", got["processedRows"])
+	}
+}
+
+func TestQueryWithMeta_Integration(t *testing.T) {
+	if os.Getenv("SLS_IT") != "1" {
+		t.Skip("set SLS_IT=1 SLS_IT_REGION SLS_IT_PROJECT SLS_IT_LOGSTORE")
+	}
+	region := os.Getenv("SLS_IT_REGION")
+	project := os.Getenv("SLS_IT_PROJECT")
+	logstore := os.Getenv("SLS_IT_LOGSTORE")
+	if region == "" || project == "" || logstore == "" {
+		t.Fatal("SLS_IT_REGION, SLS_IT_PROJECT and SLS_IT_LOGSTORE are required")
+	}
+
+	cfg := testConfig()
+	cfg.Network.ReadTimeoutMs = 30000
+	slsClient := NewSLSClient(NewCredentialProvider("", "", ""), cfg)
+	now := time.Now().Unix()
+	result, err := slsClient.QueryWithMeta(context.Background(), region, project, logstore, &sls.GetLogsRequest{
+		Query: tea.String("* | select count(*) as cnt"),
+		From:  tea.Int32(int32(now - 300)),
+		To:    tea.Int32(int32(now)),
+		Line:  tea.Int64(1),
+	})
+	if err != nil {
+		t.Fatalf("QueryWithMeta: %v", err)
+	}
+	if result.Meta["progress"] == nil && result.Meta["isAccurate"] == nil {
+		t.Fatalf("GetLogsV2 meta missing progress/isAccurate, keys=%v", mapsKeys(result.Meta))
+	}
+}
+
+func mapsKeys(m map[string]interface{}) []string {
+	keys := make([]string, 0, len(m))
+	for k := range m {
+		keys = append(keys, k)
+	}
+	return keys
 }
 
 func TestSLSClient_Query(t *testing.T) {
