@@ -127,7 +127,7 @@ func TestParseTimeExpression_DateTimeString(t *testing.T) {
 		{
 			"ISO 8601 with Z",
 			"2024-01-01T00:00:00Z",
-			time.Date(2024, 1, 1, 0, 0, 0, 0, loc).Unix(),
+			time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC).Unix(),
 		},
 		{
 			"ISO 8601 without Z",
