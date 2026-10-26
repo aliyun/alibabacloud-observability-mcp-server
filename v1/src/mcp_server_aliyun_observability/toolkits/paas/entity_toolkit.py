@@ -367,7 +367,7 @@ class PaaSEntityToolkit:
             workspace: str = Field(
                 ..., description="CMS工作空间名称，可通过list_workspace获取"
             ),
-            search_text: str = Field(
+            search_text: Optional[str] = Field(
                 None, description="搜索关键词（全文搜索），支持关键词、IP、服务名等"
             ),
             domain: str = Field(

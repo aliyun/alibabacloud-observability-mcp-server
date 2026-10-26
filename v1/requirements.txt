@@ -1,4 +1,4 @@
-mcp>=1.12.0
+mcp>=1.12.0,<2
 pydantic>=2.10.0
 alibabacloud_arms20190808>=8.0.0
 alibabacloud_credentials>=1.0.1
